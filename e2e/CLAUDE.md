@@ -10,7 +10,7 @@
 | a flow that fails locally but passes in CI | `README.md` — the freshly-seeded-DB precondition |
 | the runner, its conventions, or `{BASE}` substitution | `run.ts` and `agent-browser.json` |
 | what these flows are meant to cover at all | `../TESTING.md` |
-| a failure that smells familiar | `INSIGHTS.md` — and **append** to it when you hit a new one |
+| a failure that smells familiar | `INSIGHTS.md` — and **append** to it through the `engineering-insights` skill |
 
 If nothing matches, proceed.
 

@@ -1,9 +1,12 @@
 # Insights — `@devdigest/api`
 
 Traps we have already hit in the server. Append-only. See the root
-[`INSIGHTS.md`](../INSIGHTS.md) for the entry format and for cross-package traps.
+[`INSIGHTS.md`](../INSIGHTS.md) for the section list and the entry format, and the
+`engineering-insights` skill for what is worth capturing.
 
 ---
+
+## Recurring Errors & Fixes
 
 ### `No file …_<name>.sql found` on a fresh database, while CI's migrated lane is green
 **Date:** 2026-08-05
@@ -16,6 +19,8 @@ columns that `src/db/schema/runs.ts` still declares.
 agree — same count, tags in order, each snapshot's `prevId` pointing at the previous one.
 Never hand-merge them: renumber your own migrations to sit *after* upstream's and keep
 the snapshot chain relinked. Verify against a fresh testcontainer, not your dev DB.
+**See also:** the root `INSIGHTS.md` — the general rule this is one instance of: never resolve
+a generated artefact by taking one side of a merge.
 
 ### A dependency type-checks locally and fails CI with `TS2307`
 **Date:** 2026-08-05

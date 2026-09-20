@@ -1,7 +1,8 @@
 # Insights — `@devdigest/reviewer-core`
 
 Traps we have already hit in the engine. Append-only. See the root
-[`INSIGHTS.md`](../INSIGHTS.md) for the entry format and for cross-package traps.
+[`INSIGHTS.md`](../INSIGHTS.md) for the section list and the entry format, and the
+`engineering-insights` skill for what is worth capturing.
 
 ---
 

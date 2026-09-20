@@ -1,7 +1,8 @@
 # Insights — `@devdigest/web`
 
 Traps we have already hit in the web app. Append-only. See the root
-[`INSIGHTS.md`](../INSIGHTS.md) for the entry format and for cross-package traps.
+[`INSIGHTS.md`](../INSIGHTS.md) for the section list and the entry format, and the
+`engineering-insights` skill for what is worth capturing.
 
 ---
 

@@ -12,7 +12,7 @@
 | a shape that crosses the API boundary | `src/vendor/shared` — contracts live there, never redeclared locally |
 | any test | `../TESTING.md` |
 | a whole browser journey rather than one component | `../e2e/CLAUDE.md` |
-| a failure that smells familiar | `INSIGHTS.md` — and **append** to it when you hit a new one |
+| a failure that smells familiar | `INSIGHTS.md` — and **append** to it through the `engineering-insights` skill |
 
 If nothing matches, proceed.
 

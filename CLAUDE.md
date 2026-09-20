@@ -16,11 +16,15 @@ The table below is a routing map, not a substitute for reading the file.
 | any test, or deciding where a test belongs | `TESTING.md` |
 | a reviewer system prompt, or choosing a model | `docs/agent-prompts/README.md` |
 | a course-lesson feature (L01–L08) | `specs/` — see its README for the index |
-| a bug that smells like one we've seen | `INSIGHTS.md` |
+| a bug that smells like one we've seen | the module's `INSIGHTS.md`, then the root one |
 
 Subdirectory auto-load is unreliable in the VS Code extension
 (anthropics/claude-code#24987) — **open the module `CLAUDE.md` explicitly.**
 If nothing in the table matches, proceed without reading.
+
+**Before the session ends**, if it hit a problem, made a decision or turned up anything
+non-obvious, run the `engineering-insights` skill to append it to the owning module's
+`INSIGHTS.md`. Do not skip this — an uncaptured session is one the next session repeats.
 
 ## Stack
 
