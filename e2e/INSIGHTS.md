@@ -1,9 +1,12 @@
 # Insights — `@devdigest/e2e`
 
 Traps we have already hit in the browser suite. Append-only. See the root
-[`INSIGHTS.md`](../INSIGHTS.md) for the entry format and for cross-package traps.
+[`INSIGHTS.md`](../INSIGHTS.md) for the section list and the entry format, and the
+`engineering-insights` skill for what is worth capturing.
 
 ---
+
+## Recurring Errors & Fixes
 
 ### Flows `02`, `04` and `05` fail locally but pass in CI
 **Date:** starter

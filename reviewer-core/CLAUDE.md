@@ -11,7 +11,7 @@
 | what this package exposes | `src/index.ts` — the public API is that file and nothing else |
 | how the server consumes the engine | `../server/README.md` |
 | any test | `../TESTING.md` |
-| a failure that smells familiar | `INSIGHTS.md` — and **append** to it when you hit a new one |
+| a failure that smells familiar | `INSIGHTS.md` — and **append** to it through the `engineering-insights` skill |
 
 If nothing matches, proceed.
 
