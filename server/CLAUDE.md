@@ -55,4 +55,6 @@ Split the suite: `pnpm exec vitest run --exclude '**/*.it.test.ts'` (hermetic) /
 - `LocalSecretsProvider` (`src/adapters/secrets/local.ts`) is the single read chokepoint
   for secrets. `GITHUB_TOKEN` is canonical, `GITHUB_PAT` is accepted as a fallback.
 - The engine reaps orphaned `running` runs on boot — do not add a second reaper.
-- **Do not touch** `src/vendor/**` or `src/db/migrations/**` (including `meta/`).
+- **Do not touch** `src/db/migrations/**` (including `meta/`). `src/vendor/shared` is the
+  opposite case: it is the authored `@devdigest/shared`, so a contract change belongs there —
+  the client's copy is synced separately and will not pick it up on its own.

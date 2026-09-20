@@ -6,6 +6,23 @@ Traps we have already hit in the server. Append-only. See the root
 
 ---
 
+## Codebase Patterns
+
+- **2026-09-20** — `src/vendor/shared` is the **authored** `@devdigest/shared`: both
+  `server/tsconfig.json` and `reviewer-core/tsconfig.json` alias the package to it, and feature
+  commits edit it (`93119a5` added `agent_runs.cost_usd` to the contracts this way).
+  `client/src/vendor/shared` is a second, already-drifted copy — `diff -rq` shows `adapters.ts`,
+  `contracts/trace.ts` and three others differ — so a contract change here does not reach the
+  client until that copy is synced, and the client keeps type-checking meanwhile. Adding a field
+  to a contract is therefore a server-side change the client picks up separately.
+  **See also:** `client/INSIGHTS.md` is where the consumer side of a contract change belongs.
+
+- **2026-09-20** — routes in `src/modules/reviews/routes.ts` declare `schema: { params }` only,
+  with no response schema, so handler return values are **not** serialization-filtered. A new
+  field on a shared response contract (e.g. `RunSummary`) reaches the wire as soon as the
+  repository maps it; there is no second place to register it. The contract is documentation and
+  a client type, not a runtime filter.
+
 ## Recurring Errors & Fixes
 
 ### `No file …_<name>.sql found` on a fresh database, while CI's migrated lane is green

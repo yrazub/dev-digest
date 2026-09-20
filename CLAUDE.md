@@ -70,5 +70,9 @@ Node ≥22 · TypeScript · Fastify 5 · Drizzle + Postgres/pgvector · Next.js 
 
 ## Do not touch
 
-`*/src/vendor/**` (vendored copies) · `server/src/db/migrations/**` including the journal
+`client/src/vendor/**` (vendored copies) · `server/src/db/migrations/**` including the journal
 (generate with `pnpm db:generate`, never hand-edit) · `skills-lock.json`
+
+Deliberately **not** on that list: `server/src/vendor/shared` is the *authored*
+`@devdigest/shared`, aliased by `server` and `reviewer-core`. Contract changes belong there;
+`client/src/vendor/shared` is a copy and is synced separately.

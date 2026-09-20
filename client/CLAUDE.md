@@ -49,4 +49,5 @@ If nothing matches, proceed.
   real server, it needs an `e2e` flow, not a component test.
 - Watch the RSC boundary: a hook or a browser API pulls the file into a client component,
   and `'use client'` cascades to everything it imports.
-- **Do not touch** `src/vendor/**` — it is a vendored copy, edits get overwritten.
+- **Do not touch** `src/vendor/**` — copies, edits get overwritten. `src/vendor/shared`
+  mirrors the authored `@devdigest/shared` in `server/`: change a contract there, then re-sync.

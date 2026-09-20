@@ -96,12 +96,28 @@ first. The file must never carry an unresolved contradiction.
 4. **Say so in your reply.** A contradiction is the one case worth a human spot-check while
    the session is still fresh.
 
+### When a finding contradicts an instruction elsewhere
+
+Instructions live in `CLAUDE.md`, in skills, in `README.md`, `TESTING.md` and `specs/`.
+`INSIGHTS.md` outranks none of them — it is read only when something routes the agent here,
+while `CLAUDE.md` is loaded into every session. A dissenting entry is not a correction; it is a
+quieter second instruction that the next session will not see.
+
+Write the entry if it is worth keeping, but **stop and tell the user**: name the document and
+the rule, the evidence against it, and the edit you would make there. Until that edit lands the
+rule still stands — looking wrong is not authority to act against it mid-task.
+
 ### The same finding in two files
 
 The root file holding a general rule while a module file holds the mechanics is a legitimate
 split, not a duplicate — but each side must name the other with `**See also:** <path>`, or a
 session that reads one never learns the other exists. If neither side is the more general one,
 it is a plain duplicate: keep the module's, and supersede the root's.
+
+The same applies **between two module files**. One change that lands on both sides of a
+boundary — a producer and its consumer, an engine and the server that calls it — becomes one
+entry per module, and each must carry a `**See also:** <path>` to the other. Two halves of one
+decision, filed in separate files with nothing linking them, read as two unrelated decisions.
 
 ## 4. Classify
 

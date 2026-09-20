@@ -85,6 +85,21 @@ one side wholesale. Check the fresh-install lane before trusting a green run.
 **See also:** `server/INSIGHTS.md` — the Drizzle journal and snapshot mechanics behind this
 rule, and how to relink the chain.
 
+### A `pnpm` script run against `server/` installed `reviewer-core`'s dependencies instead
+**Date:** 2026-09-20
+**Cause:** two things at once. Parallel Bash calls share one shell, so its working directory is
+shared mutable state — `cd server && pnpm typecheck` issued alongside
+`cd reviewer-core && npm run typecheck` ran with the *other* call's cwd. And pnpm ≥10 (here
+12.4.2) verifies dependencies before running a script and installs when they do not match, so it
+did not just fail: it wrote `pnpm-lock.yaml` + `pnpm-workspace.yaml` into `reviewer-core/` and
+replaced its npm `node_modules` with a pnpm tree — breaking the repo's per-package package-manager
+rule silently, with a green type-check as the only visible output.
+**Fix / rule:** run per-package commands **one at a time**, never two `cd <pkg> && …` calls in
+the same parallel batch. If they must be batched, use the package-manager's own directory flag
+(`pnpm -C <dir> …`, `npm --prefix <dir> …`) so no `cd` is involved. Recovery is
+`rm pnpm-lock.yaml pnpm-workspace.yaml && rm -rf node_modules && npm ci` in the package that was
+clobbered; check `git status --untracked-files=all` for a stray lockfile before trusting a run.
+
 ## Session Notes
 
 - **2026-09-20** — added the `engineering-insights` skill and restructured all five
