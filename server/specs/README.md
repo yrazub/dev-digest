@@ -8,7 +8,7 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 
 | Spec | Module | Status |
 |---|---|---|
-| _(none yet)_ | | |
+| [`L01-run-cost.md`](L01-run-cost.md) | `reviews`, `pulls` | draft |
 
 Use [`../src/modules/repo-intel`](../src/modules/repo-intel/README.md) as the reference
 for what a finished module looks like.

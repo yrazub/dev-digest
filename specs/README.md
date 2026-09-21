@@ -9,7 +9,14 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 
 | Spec | Status |
 |---|---|
-| _(none yet)_ | |
+| [`L01-run-cost.md`](L01-run-cost.md) | draft |
 
 The lesson roadmap (L01–L08) is in the root [`README.md`](../README.md).
 When you add a spec, add a row above.
+
+A spec here stays one level above the code: it states what the feature is, how it flows
+end to end and which package owns which part, then hands off to the per-module specs for
+the implementable detail — [`server/specs`](../server/specs/README.md) ·
+[`client/specs`](../client/specs/README.md) ·
+[`reviewer-core/specs`](../reviewer-core/specs/README.md) ·
+[`e2e/specs`](../e2e/specs/README.md).

@@ -135,4 +135,64 @@ describe('reviewPullRequest (engine)', () => {
     expect(seen.length).toBeGreaterThan(0);
     expect(seen.every((s) => s === 'sess-abc')).toBe(true);
   });
+
+  describe('costUsd accumulation across map-reduce chunks', () => {
+    const file = (name: string) =>
+      `diff --git a/src/${name}.ts b/src/${name}.ts\n--- a/src/${name}.ts\n+++ b/src/${name}.ts\n@@ -1,1 +1,2 @@\n a\n+b`;
+    const THREE_FILES = ['a', 'b', 'c'].map(file).join('\n');
+
+    /** A provider whose Nth call reports `costs[N]` — null models an unpriced call. */
+    const pricedAs = (costs: (number | null)[]): LLMProvider => {
+      let call = 0;
+      return {
+        id: 'openrouter',
+        async completeStructured<T>(req): Promise<StructuredResult<T>> {
+          return {
+            data: { verdict: 'approve', summary: 'ok', score: 100, findings: [] } as unknown as T,
+            model: req.model,
+            tokensIn: 10,
+            tokensOut: 5,
+            costUsd: costs[call++] ?? null,
+            raw: '',
+            attempts: 1,
+          };
+        },
+        async listModels() {
+          return [];
+        },
+        async complete() {
+          throw new Error('not used');
+        },
+        async embed() {
+          return [];
+        },
+      };
+    };
+
+    const run = async (costs: (number | null)[]) =>
+      reviewPullRequest({
+        systemPrompt: 's',
+        model: 'm',
+        diff: await new MockGitClient({ diff: THREE_FILES }).diff(),
+        llm: pricedAs(costs),
+        strategy: 'map-reduce',
+      });
+
+    it('sums the priced chunks', async () => {
+      const outcome = await run([0.001, 0.002, 0.003]);
+      expect(outcome.mode).toBe('map-reduce');
+      expect(outcome.chunks).toHaveLength(3);
+      expect(outcome.costUsd).toBeCloseTo(0.006, 10);
+    });
+
+    it('is null — not 0, not a partial sum — when any one chunk is unpriced', async () => {
+      const outcome = await run([0.001, null, 0.003]);
+      expect(outcome.chunks).toHaveLength(3);
+      expect(outcome.costUsd).toBeNull();
+    });
+
+    it('stays null once unknown, even if the last chunk is priced', async () => {
+      expect((await run([null, 0.002, 0.003])).costUsd).toBeNull();
+    });
+  });
 });

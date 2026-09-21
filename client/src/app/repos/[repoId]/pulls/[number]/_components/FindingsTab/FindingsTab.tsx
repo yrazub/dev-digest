@@ -71,6 +71,9 @@ export function FindingsTab({
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
 
+  // A review is not a run: pair each review with its run's cost by run_id.
+  const costByRunId = new Map((prRuns ?? []).map((r) => [r.run_id, r.cost_usd]));
+
   return (
     <section>
       {liveRunIds.length > 0 && (
@@ -164,6 +167,7 @@ export function FindingsTab({
             headSha={headSha}
             targetRunId={target?.runId ?? null}
             targetNonce={target?.n ?? 0}
+            costUsd={review.run_id ? (costByRunId.get(review.run_id) ?? null) : null}
           />
         ))
       )}
