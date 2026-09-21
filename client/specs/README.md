@@ -8,6 +8,6 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 
 | Spec | Route | Status |
 |---|---|---|
-| _(none yet)_ | | |
+| [`L01-run-cost.md`](L01-run-cost.md) | `/repos/:repoId/pulls` · `/repos/:repoId/pulls/:number` | draft |
 
 Browser-level acceptance for a finished screen belongs in [`../e2e/specs`](../../e2e/specs).

@@ -209,6 +209,14 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     expect(run!.findingsCount).toBe(1);
     expect(run!.grounding).toBe('1/2 passed');
 
+    // L01: the engine's ReviewOutcome.costUsd is persisted, not dropped.
+    // MockLLMProvider prices each structured call at 0.001; single-pass over a
+    // one-file diff is exactly one call.
+    expect(run!.costUsd).toBe(0.001);
+    expect(trace.stats.cost_usd).toBe(0.001);
+    const history = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/runs` })).json();
+    expect(history[0].cost_usd).toBe(0.001);
+
     await app.close();
   });
 

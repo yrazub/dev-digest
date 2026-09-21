@@ -11,6 +11,7 @@ import type { ReviewRecord, Verdict } from "@devdigest/shared";
 import { FindingsPanel } from "../FindingsPanel";
 import { VerdictBanner } from "../VerdictBanner";
 import { useDeleteReview } from "../../../../../../../lib/hooks/reviews";
+import { formatCostUsd } from "@/lib/format-cost";
 
 const VERDICT_COLOR: Record<string, string> = {
   request_changes: "var(--crit)",
@@ -31,6 +32,7 @@ export function ReviewRunAccordion({
   headSha,
   targetRunId = null,
   targetNonce = 0,
+  costUsd = null,
 }: {
   review: ReviewRecord;
   prId: string;
@@ -41,6 +43,10 @@ export function ReviewRunAccordion({
    *  (driven from the Timeline: clicking an agent name navigates here). */
   targetRunId?: string | null;
   targetNonce?: number;
+  /** USD cost of the run that produced this review, matched by the parent from the
+   *  run history (a review is not a run, so ReviewRecord carries no cost). Null
+   *  when no run matches or the cost is unknown — then nothing renders. */
+  costUsd?: number | null;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
@@ -102,6 +108,11 @@ export function ReviewRunAccordion({
           <Badge mono color="var(--text-secondary)">
             {review.score}
           </Badge>
+        )}
+        {costUsd != null && (
+          <span className="mono tnum" style={{ fontSize: 12, color: "var(--text-muted)" }}>
+            {formatCostUsd(costUsd)}
+          </span>
         )}
         <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
           {formatWhen(review.created_at)}

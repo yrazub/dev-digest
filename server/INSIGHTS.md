@@ -47,3 +47,27 @@ the lockfile. It resolved locally only because a stray copy was sitting in
 **Fix / rule:** after adding an import, confirm the package is declared —
 `pnpm install --frozen-lockfile` reproduces what CI sees. A clean install is the only
 honest check; a working local build proves nothing about the dependency graph.
+
+### `pnpm exec vitest run .it.test` reports "Docker not available" and skips, with Docker running
+**Date:** 2026-09-20
+**Cause:** `dockerAvailable()` in `test/helpers/pg.ts` runs `docker info` with a 5000 ms
+timeout and treats any failure as "no Docker", and each test file probes it from its own
+worker. Measured here: one `docker info` takes 0.5–1.2 s, but 8 started at once take ~3.5 s of
+wall time before vitest's own transform load is added, so under a parallel run some files
+plausibly exceed the timeout. (Inferred, not proven by instrumenting the helper.) The
+symptom is worse than a failure: every skipped file counts as green, so a new `*.it.test.ts`
+can look like it passed when it never ran. In that run only `repo-intel-symbol-clamp.it.test.ts`
+executed; the other six files, including the new one, skipped.
+**Fix / rule:** run the integration lane with `pnpm exec vitest run .it.test --no-file-parallelism`
+(all seven files ran and passed, ~97 s) and read the summary for "skipped" — a passing
+`.it` run that says `↓ … skipped` proves nothing. For one file, name it:
+`pnpm exec vitest run test/<name>.it.test.ts`.
+**See also:** `../TESTING.md` lists the plain `vitest run .it.test` command for the
+integration lane; it does not mention this.
+
+## Session Notes
+
+- **2026-09-20** — L01 run cost: persisted `ReviewOutcome.costUsd` into the new
+  `agent_runs.cost_usd` (migration `0010`), surfaced on the three endpoints, and added
+  `test/pulls-cost.it.test.ts` for the latest-completed-run selection. Found the silent
+  `.it` skip above.
