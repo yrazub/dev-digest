@@ -1,6 +1,7 @@
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { Finding, Intent, RunSummary, RunTrace } from '@devdigest/shared';
+import type { SeverityCounts } from '../pulls/status.js';
 
 /**
  * A2 — review data-access. The ONLY layer touching the DB for the review
@@ -158,6 +159,8 @@ export class ReviewRepository {
       /** USD cost of the run; null when the model is unpriced and on failed/cancelled runs. */
       costUsd?: number | null;
       findingsCount: number;
+      /** Per-severity breakdown of findingsCount; null on failed/cancelled runs. */
+      findingsBySeverity?: SeverityCounts | null;
       grounding: string;
       /** Review score (0-100); null on failed/cancelled runs. */
       score?: number | null;

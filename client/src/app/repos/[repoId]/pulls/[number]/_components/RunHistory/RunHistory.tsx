@@ -2,9 +2,10 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
+import { Badge, Icon, CircularScore, SeverityBadge, type IconName } from "@devdigest/ui";
 import type { RunSummary, PrCommit } from "@devdigest/shared";
 import { formatCostUsd } from "@/lib/format-cost";
+import { severityCounts } from "../FindingsPanel/helpers";
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
@@ -199,8 +200,14 @@ export function RunHistory({
                 </div>
               )}
               {settled && (
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {t("runStatus.findings", { count: r.findings_count ?? 0 })}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-muted)" }}>
+                  {r.findings_by_severity ? (
+                    severityCounts(r.findings_by_severity).map(([sev, n]) => (
+                      <SeverityBadge key={sev} severity={sev} count={n} compact />
+                    ))
+                  ) : (
+                    <span>{t("runStatus.findings", { count: r.findings_count ?? 0 })}</span>
+                  )}
                   {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
                 </div>
               )}

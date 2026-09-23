@@ -27,6 +27,7 @@ function run(o: Partial<RunSummary>): RunSummary {
     tokens_out: 50,
     cost_usd: null,
     findings_count: 0,
+    findings_by_severity: null,
     grounding: "0/0 passed",
     ran_at: "2026-06-11T18:44:34.000Z",
     score: null,
@@ -96,5 +97,26 @@ describe("RunHistory — token + cost line", () => {
     renderRuns([run({ tokens_in: 0, tokens_out: 0, cost_usd: 0.0013 })]);
     expect(screen.queryByText(/tok/)).not.toBeInTheDocument();
     expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+  });
+});
+
+describe("RunHistory — per-severity findings badges", () => {
+  it("renders a non-interactive badge per non-zero severity when findings_by_severity is present", () => {
+    renderRuns([
+      run({ findings_by_severity: { CRITICAL: 2, WARNING: 1, SUGGESTION: 0 }, blockers: 2, score: 38 }),
+    ]);
+    // compact SeverityBadge renders icon + count only (no label); the counts are
+    // the observable signal that both non-zero severities rendered, and SUGGESTION
+    // (count 0) contributed no third badge.
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    // Read-only: the badges are spans, not buttons (unlike the Review-runs filter
+    // chips) — the only button in a row is the unrelated "go to review" agent-name link.
+    expect(screen.queryAllByRole("button", { name: /Critical|Warning|Suggestion/ })).toHaveLength(0);
+  });
+
+  it("falls back to the flat findings-count string when findings_by_severity is absent (pre-lesson trace rows)", () => {
+    renderRuns([run({ findings_by_severity: null, findings_count: 3, blockers: 0, score: 72 })]);
+    expect(screen.getByText("reviewed")).toBeInTheDocument();
   });
 });

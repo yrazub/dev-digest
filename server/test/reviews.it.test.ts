@@ -217,6 +217,12 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     const history = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/runs` })).json();
     expect(history[0].cost_usd).toBe(0.001);
 
+    // Findings counter: grounding kept only the one CRITICAL finding, so the
+    // per-severity breakdown on the run row (and the timeline) reflects that,
+    // not the model's original 2-finding output.
+    expect(run!.findingsBySeverity).toEqual({ CRITICAL: 1, WARNING: 0, SUGGESTION: 0 });
+    expect(history[0].findings_by_severity).toEqual({ CRITICAL: 1, WARNING: 0, SUGGESTION: 0 });
+
     await app.close();
   });
 

@@ -106,6 +106,14 @@ export const RunSummary = z.object({
   // USD cost of the run; null when unpriced, failed, cancelled or still running.
   cost_usd: z.number().nullable(),
   findings_count: z.number().int().nullable(),
+  // Per-severity breakdown of findings_count; null on failed/cancelled runs.
+  findings_by_severity: z
+    .object({
+      CRITICAL: z.number().int(),
+      WARNING: z.number().int(),
+      SUGGESTION: z.number().int(),
+    })
+    .nullable(),
   grounding: z.string().nullable(),
   ran_at: z.string().nullable(),
   // Review outcome, denormalized onto the run row at completion (the timeline

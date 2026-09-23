@@ -96,7 +96,30 @@ be obvious to anyone reading the code, it does not belong here.
   navigation, or `wait_for` a text that only the destination page has, before clicking.
   **See also:** `client/INSIGHTS.md` — the `<main>`-scrolls-not-the-document rule that governs
   screenshots of this app.
-
+- **2026-09-22** — `docs/DevDigest Design (standalone).html` is not readable as text: it is a
+  self-executing bundled React app, and `grep`/`Read` against the raw file finds nothing (0
+  matches for terms confirmed present in the design, e.g. `CRITICAL`, `finding`). The real
+  source lives inside `<script type="__bundler/manifest">` as a JSON map of
+  `{mime, compressed, data}` entries, where `data` is base64 gzip (`H4sI…`). Decode it:
+  base64-decode `data`, `gzip.decompress` when `compressed: true`, write out the `.js`/`.txt`
+  results, then grep those. Each decoded `.js` file opens with a `/* filename.jsx —
+  description */` comment naming the screen/module it mocks (e.g. `screen_dashboard.jsx`,
+  `findings.jsx`, `primitives.jsx`) — the fastest way to map mockup back to app screen.
+- **2026-09-22** — the `chrome-devtools` MCP server's Chrome profile is a persistent
+  singleton across sessions and days: `ps aux` showed roughly 8 orphaned
+  `chrome-devtools-mcp` + `npm exec chrome-devtools-mcp@1.9.0` process pairs still alive
+  from days earlier, none belonging to the current session. Any later session's first
+  `new_page`/`list_pages` call then fails outright with "The browser is already running
+  for `<profile dir>`. Use --isolated to run multiple browser instances." — not transient,
+  and not fixable from inside a tool call: `new_page`'s `isolatedContext` param only
+  creates an isolated *browser context* inside an already-running browser, so it can't
+  help when the failure happens at browser-launch time before any context exists. Real
+  fixes are (a) killing the stale process pair holding the profile lock, or (b) passing
+  `--isolated` to the `chrome-devtools-mcp` CLI in `.mcp.json` — both outside any single
+  tool call. Different failure mode than the pageId-routing trap already recorded below.
+  When it happens, verify server-side behavior via curl/API calls and component/
+  integration tests instead of blocking on browser automation, and say so rather than
+  silently skipping browser verification.
 
 ## Decisions
 
@@ -168,3 +191,14 @@ exists to keep concurrent agent sessions from stealing each other's tab.
 - **2026-09-20** — verified the `chrome-devtools` server by driving the real click-through
   (root → PR #482 → Agent runs) and screenshotting it; captured the `wait_for` array/casing trap,
   the post-redirect click trap, and the `<main>`-scroller rule in `client/INSIGHTS.md`.
+- **2026-09-22** — scoped and speced the findings-counter feature (`specs/L01-findings-counter.md`
+  + module specs); decoded the bundled design mockup to find the CRITICAL/WARNING/SUGGESTION
+  badge pattern and confirmed a ready-made `SeverityBadge` primitive already supports `count`.
+- **2026-09-22** — implemented the findings-counter feature end to end (server: `agent_runs`
+  migration 0011, `rollupSeverities` casing fix, `PrMeta`/`RunSummary` contract additions,
+  the PR-list query, seed-data backfill; client: `FindingsPanel` counter+filter,
+  `RunHistory` per-severity badges, the new `FindingsPopover`); server (104 hermetic + 30
+  integration) and client (55) tests green, both typecheck clean, and the live dev server
+  verified end-to-end via curl against real backfilled data. Browser-based interaction
+  verification (hover popover, filter clicks) was skipped due to the chrome-devtools
+  profile-lock issue recorded above.

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Provider } from './knowledge.js';
+import { Finding } from './findings.js';
 
 /**
  * Platform / scaffolding DTOs owned by F1:
@@ -173,6 +174,18 @@ export const PrMeta = z.object({
   // Cost (USD) of the PR's latest completed run (list endpoint only; null/absent
   // until a run completes, or when its model is unpriced).
   cost_usd: z.number().nullish(),
+  // Per-severity findings breakdown of the PR's latest completed run (list
+  // endpoint only; null/absent until a run completes).
+  findings_by_severity: z
+    .object({
+      CRITICAL: z.number().int(),
+      WARNING: z.number().int(),
+      SUGGESTION: z.number().int(),
+    })
+    .nullish(),
+  // Read-only preview of that same run's findings, for the PR-list hover
+  // popover (list endpoint only; null/absent until a run completes).
+  findings_preview: z.array(Finding).nullish(),
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 

@@ -1,0 +1,1 @@
+ALTER TABLE "agent_runs" ADD COLUMN "findings_by_severity" jsonb;
