@@ -8,6 +8,8 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
+import type { SeverityCounts } from './status.js';
+import { findingRowToDto } from '../reviews/helpers.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -113,8 +115,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
 
     // Latest-review SCORE per PR for the list's score ring. Computed on read
     // from reviews (no FK denorm); the list is small, so one IN-query + JS
-    // grouping is cheap. (The per-severity FINDINGS breakdown is intentionally
-    // not surfaced on the list — findings live on the PR detail page.)
+    // grouping is cheap.
     const prIds = rows.map((r) => r.id);
     const latestReviewByPr = new Map<string, { score: number | null }>();
     if (prIds.length > 0) {
@@ -129,26 +130,70 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
-    // Cost of each PR's latest COMPLETED run for the list's COST column. Same
-    // shape as the score lookup above; a newer running/failed run must not
-    // displace it, so only status='done' rows are considered. The stored value
-    // may itself be null (unpriced model) and stays null — never coerced to 0.
-    const latestCostByPr = new Map<string, number | null>();
+    // One pass over each PR's COMPLETED runs (status='done'; running/failed/
+    // cancelled runs cost nothing here) feeds two columns:
+    //  - COST: the TOTAL spent on the PR — the sum over every completed run. An
+    //    unpriced run (costUsd null) makes the total unknown (null), never a
+    //    partial sum that reads as complete — same sticky-null rule the engine
+    //    applies across chunks.
+    //  - FINDINGS: the latest completed run only (the popover says "in this run").
+    const latestRunByPr = new Map<
+      string,
+      { runId: string; findingsBySeverity: SeverityCounts | null }
+    >();
+    const totalCostByPr = new Map<string, number | null>();
     if (prIds.length > 0) {
       const runRows = await container.db
-        .select({ prId: t.agentRuns.prId, costUsd: t.agentRuns.costUsd })
+        .select({
+          prId: t.agentRuns.prId,
+          runId: t.agentRuns.id,
+          costUsd: t.agentRuns.costUsd,
+          findingsBySeverity: t.agentRuns.findingsBySeverity,
+        })
         .from(t.agentRuns)
         .where(and(inArray(t.agentRuns.prId, prIds), eq(t.agentRuns.status, 'done')))
         .orderBy(desc(t.agentRuns.ranAt));
       // Rows are newest-first → first seen per PR is the latest completed run.
       for (const run of runRows) {
-        if (run.prId && !latestCostByPr.has(run.prId)) latestCostByPr.set(run.prId, run.costUsd);
+        if (!run.prId) continue;
+        if (!latestRunByPr.has(run.prId)) {
+          latestRunByPr.set(run.prId, {
+            runId: run.runId,
+            findingsBySeverity: run.findingsBySeverity ?? null,
+          });
+        }
+        const sofar = totalCostByPr.has(run.prId) ? totalCostByPr.get(run.prId)! : 0;
+        totalCostByPr.set(
+          run.prId,
+          sofar == null || run.costUsd == null ? null : sofar + run.costUsd,
+        );
+      }
+    }
+
+    // Read-only findings preview for the PR-list hover popover: the actual
+    // finding rows behind each PR's latest completed run (via its review),
+    // grouped by run id. Small list, one extra IN-query — same cost shape as
+    // the two lookups above.
+    const runIds = [...latestRunByPr.values()].map((r) => r.runId);
+    const previewByRunId = new Map<string, (typeof t.findings.$inferSelect)[]>();
+    if (runIds.length > 0) {
+      const previewRows = await container.db
+        .select({ runId: t.reviews.runId, finding: t.findings })
+        .from(t.reviews)
+        .innerJoin(t.findings, eq(t.findings.reviewId, t.reviews.id))
+        .where(inArray(t.reviews.runId, runIds));
+      for (const row of previewRows) {
+        if (!row.runId) continue;
+        const list = previewByRunId.get(row.runId) ?? [];
+        list.push(row.finding);
+        previewByRunId.set(row.runId, list);
       }
     }
 
     const now = Date.now();
     return rows.map((r) => {
       const review = latestReviewByPr.get(r.id);
+      const latestRun = latestRunByPr.get(r.id);
       return {
         id: r.id,
         number: r.number,
@@ -170,7 +215,11 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         opened_at: r.openedAt?.toISOString() ?? null,
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
-        cost_usd: latestCostByPr.get(r.id) ?? null,
+        cost_usd: totalCostByPr.get(r.id) ?? null,
+        findings_by_severity: latestRun?.findingsBySeverity ?? null,
+        findings_preview: latestRun
+          ? (previewByRunId.get(latestRun.runId) ?? []).map((f) => findingRowToDto(f))
+          : [],
       };
     });
   });

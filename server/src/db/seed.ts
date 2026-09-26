@@ -132,12 +132,35 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       author: 'marisa.koch',
     });
 
+    // a completed run backing the sample review, so the PR list FINDINGS column,
+    // its hover popover, and the Agent-runs Timeline all have something to show
+    // before the first real review (agent_runs, not just reviews/findings).
+    const [run] = await db
+      .insert(t.agentRuns)
+      .values({
+        workspaceId,
+        prId: pr!.id,
+        provider: DEFAULT_PROVIDER,
+        model: DEFAULT_MODEL,
+        status: 'done',
+        durationMs: 4200,
+        tokensIn: 9119,
+        tokensOut: 1240,
+        findingsCount: 2,
+        findingsBySeverity: { CRITICAL: 1, WARNING: 1, SUGGESTION: 0 },
+        grounding: '2/2 passed',
+        score: 61,
+        blockers: 1,
+      })
+      .returning();
+
     // a sample review + findings so the PR shows results before the first run
     const [review] = await db
       .insert(t.reviews)
       .values({
         workspaceId,
         prId: pr!.id,
+        runId: run!.id,
         kind: 'review',
         verdict: 'request_changes',
         summary:

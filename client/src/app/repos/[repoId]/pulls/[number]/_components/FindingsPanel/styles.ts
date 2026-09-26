@@ -2,6 +2,20 @@ import type { CSSProperties } from "react";
 
 /** Co-located styles for FindingsPanel (extracted from inline styles). */
 export const s = {
+  countRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+    flexWrap: "wrap",
+  } satisfies CSSProperties,
+  filterRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 14,
+    flexWrap: "wrap",
+  } satisfies CSSProperties,
   toolbar: {
     display: "flex",
     alignItems: "center",

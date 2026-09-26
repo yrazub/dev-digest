@@ -8,6 +8,7 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
+import { rollupSeverities } from '../pulls/status.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -247,6 +248,7 @@ export class ReviewRunExecutor {
         tokensOut,
         costUsd,
         findingsCount: findingRows.length,
+        findingsBySeverity: rollupSeverities(keptFindings),
         grounding,
         score: outcome.review.score,
         blockers,

@@ -9,7 +9,9 @@
 | a route, its Zod schema, or the error envelope | `README.md` — API map |
 | adapters, DI wiring, or mocking the outside world | `README.md` — "Request & DI flow" |
 | the DB schema, a migration, or seeds | `docs/schema.md` |
+| the container, a review run's lifecycle, SSE/cancellation, or which module owns a table | `docs/architecture.md` |
 | adding a `modules/<name>/` plugin | `specs/` for the feature, and `src/modules/repo-intel/README.md` as the reference module |
+| run cost, or the findings counter/popover data | `specs/L01-run-cost.md` · `specs/L01-findings-counter.md` |
 | repo indexing, symbols, the import graph, or the repo map | `src/modules/repo-intel/README.md` |
 | any test | `../TESTING.md` |
 | a failure that smells familiar | `INSIGHTS.md` — and **append** to it through the `engineering-insights` skill |
@@ -46,6 +48,14 @@ Split the suite: `pnpm exec vitest run --exclude '**/*.it.test.ts'` (hermetic) /
 - `*.it.test.ts` is DB-backed. Any other test file must be hermetic and key-free.
 - Rate limiting is global 120/min (off under `NODE_ENV=test`), tighter on expensive
   routes like `POST /pulls/:id/review`; SSE and `/health*` are exempt.
+
+## Naming
+
+- A module is `src/modules/<name>/` with `routes.ts` · `service.ts` · `repository.ts`; a
+  repository split by aggregate lives in `repository/<aggregate>.repo.ts` (`run.repo.ts`).
+- Tests are `test/<module>-<topic>.test.ts` (`pulls-status.test.ts`); a DB-backed test ends
+  in `.it.test.ts` (`pulls-cost.it.test.ts`) — the suffix is what splits the two suites.
+- A migration keeps the name `pnpm db:generate` gives it (`0011_ambiguous_slyde.sql`).
 
 ## Gotchas & do not touch
 

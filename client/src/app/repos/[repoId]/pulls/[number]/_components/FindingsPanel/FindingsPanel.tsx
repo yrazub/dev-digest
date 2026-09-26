@@ -4,12 +4,12 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Toggle, EmptyState } from "@devdigest/ui";
-import type { FindingRecord } from "@devdigest/shared";
+import { Toggle, EmptyState, SeverityBadge, Chip, SEV } from "@devdigest/ui";
+import type { FindingRecord, Severity } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
 import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
-import { KEY_TO_ACTION } from "./constants";
-import { visibleFindings } from "./helpers";
+import { KEY_TO_ACTION, SEVERITIES } from "./constants";
+import { countBySeverity, severityCounts, visibleFindings } from "./helpers";
 import { s } from "./styles";
 
 export function FindingsPanel({
@@ -26,9 +26,17 @@ export function FindingsPanel({
   const t = useTranslations("prReview");
   const action = useFindingAction();
   const [hideLow, setHideLow] = React.useState(false);
+  const [sevFilter, setSevFilter] = React.useState<Severity | null>(null);
   const [focusIdx, setFocusIdx] = React.useState(0);
 
-  const shown = React.useMemo(() => visibleFindings(findings, hideLow), [findings, hideLow]);
+  // The counter row always reflects EVERY finding, never the filtered `shown`
+  // list — the pill numbers must stay put no matter which severity filter is
+  // active (hw1 criterion #17), only `shown` below narrows.
+  const counts = React.useMemo(() => severityCounts(countBySeverity(findings)), [findings]);
+  const shown = React.useMemo(
+    () => visibleFindings(findings, hideLow, sevFilter),
+    [findings, hideLow, sevFilter],
+  );
 
   // j/k navigation + a/d shortcuts on the focused finding (keyboard).
   React.useEffect(() => {
@@ -47,6 +55,27 @@ export function FindingsPanel({
 
   return (
     <div>
+      {counts.length > 0 && (
+        <div style={s.countRow}>
+          {counts.map(([sev, n]) => (
+            <SeverityBadge key={sev} severity={sev} count={n} />
+          ))}
+        </div>
+      )}
+
+      <div style={s.filterRow}>
+        {SEVERITIES.map((sev) => (
+          <Chip
+            key={sev}
+            icon={SEV[sev].icon}
+            active={sevFilter === sev}
+            onClick={() => setSevFilter((s2) => (s2 === sev ? null : sev))}
+          >
+            {t(`panel.filter.${sev}`)}
+          </Chip>
+        ))}
+      </div>
+
       <div style={s.toolbar}>
         <div style={s.toggleGroup}>
           {t("panel.hideLowConfidence")}
