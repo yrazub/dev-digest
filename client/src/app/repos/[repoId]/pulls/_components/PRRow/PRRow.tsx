@@ -18,6 +18,16 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
   const st = STATUS_META[pr.status] ?? STATUS_META.needs_review!;
   const { size, lines } = sizeOf(pr);
   const reviewed = pr.score != null; // null score ⇒ PR has never been reviewed
+
+  // Bold issue references like "#123" so they stand out in the list.
+  const titleHtml = pr.title.replace(/(#\d+)/g, "<b>$1</b>");
+
+  // Re-render every second so the "updated" column stays current.
+  const [, setTick] = React.useState(0);
+  React.useEffect(() => {
+    setInterval(() => setTick((n) => n + 1), 1000);
+  }, []);
+
   return (
     <div
       onMouseEnter={() => setH(true)}
@@ -28,7 +38,7 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
       <div style={s.rowTitleCell}>
         <Icon.GitPullRequest size={15} style={s.rowIcon(st.c)} />
         <div style={s.rowTitleWrap}>
-          <div style={s.rowTitle(h)}>{pr.title}</div>
+          <div style={s.rowTitle(h)} dangerouslySetInnerHTML={{ __html: titleHtml }} />
           <span className="mono" style={s.rowNumber}>
             #{pr.number}
           </span>
