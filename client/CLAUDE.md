@@ -7,7 +7,9 @@
 | If the task touches… | Read first |
 |---|---|
 | a route or page | `README.md` — UI route map |
-| data fetching, or calling the API | `src/lib/api.ts` and the existing hooks in `src/lib/hooks/` |
+| server vs client components, providers, URL state, or anything that floats (popover, tooltip, drawer) | `docs/ui-architecture.md` |
+| data fetching, calling the API, query keys, or what refreshes after a mutation | `docs/data-flow.md`, then the hooks in `src/lib/hooks/` |
+| a lesson feature on a screen (L01–L08) | `specs/` — that screen's spec, e.g. `specs/L01-findings-counter.md` |
 | a UI primitive | `src/vendor/ui/README.md` — vendored, do not edit |
 | a shape that crosses the API boundary | `src/vendor/shared` — contracts live there, never redeclared locally |
 | any test | `../TESTING.md` |
@@ -42,6 +44,16 @@ If nothing matches, proceed.
 - Server state is TanStack Query; do not mirror it into React state.
 - User-facing strings go through `next-intl`, never inlined in JSX.
 - Types for anything the API returns come from `@devdigest/shared`.
+
+## Naming
+
+- A component folder is `_components/<Name>/`: `<Name>.tsx`, an `index.ts` that re-exports it
+  (import the folder, not the file), and as needed `styles.ts` (exports `s`), `constants.ts`,
+  `helpers.ts`, `<Name>.test.tsx`.
+- Hooks: one file per API resource, `src/lib/hooks/<resource>.ts` (`reviews.ts`).
+- Strings: `messages/en/<namespace>.json`, where the file name is the namespace passed to
+  `useTranslations("<namespace>")`; keys are camelCase, nested by area (`list.columns.cost`).
+  A key that mirrors an enum uses the enum value (`panel.filter.CRITICAL`).
 
 ## Gotchas & do not touch
 
