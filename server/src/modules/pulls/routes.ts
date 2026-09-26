@@ -8,6 +8,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
+import { searchPullRequests } from './search.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -173,6 +174,14 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         cost_usd: latestCostByPr.get(r.id) ?? null,
       };
     });
+  });
+
+  // Search a repo's PRs by title/author: GET /repos/:id/pulls/search?q=…&sort=…
+  app.get('/repos/:id/pulls/search', async (req) => {
+    const { id } = req.params as { id: string };
+    const { q = '', sort } = req.query as { q?: string; sort?: string };
+    app.log.info({ q, sort, headers: req.headers }, 'pull request search');
+    return searchPullRequests(container.db, id, q, sort);
   });
 
   app.get('/pulls/:id', { schema: { params: IdParams } }, async (req): Promise<PrDetail> => {
