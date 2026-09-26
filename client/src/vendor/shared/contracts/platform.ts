@@ -171,8 +171,8 @@ export const PrMeta = z.object({
   updated_at: z.string().nullish(),
   // Latest-review score (list endpoint only; null/absent until reviewed).
   score: z.number().int().nullish(),
-  // Cost (USD) of the PR's latest completed run (list endpoint only; null/absent
-  // until a run completes, or when its model is unpriced).
+  // Total cost (USD) of all the PR's completed runs (list endpoint only; null/absent
+  // until a run completes, or when any of those runs' models is unpriced).
   cost_usd: z.number().nullish(),
   // Per-severity findings breakdown of the PR's latest completed run (list
   // endpoint only; null/absent until a run completes).

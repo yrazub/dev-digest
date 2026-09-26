@@ -130,14 +130,18 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
-    // Latest COMPLETED run per PR for the list's COST and FINDINGS columns. Same
-    // shape as the score lookup above; a newer running/failed run must not
-    // displace it, so only status='done' rows are considered. costUsd may itself
-    // be null (unpriced model) and stays null — never coerced to 0.
+    // One pass over each PR's COMPLETED runs (status='done'; running/failed/
+    // cancelled runs cost nothing here) feeds two columns:
+    //  - COST: the TOTAL spent on the PR — the sum over every completed run. An
+    //    unpriced run (costUsd null) makes the total unknown (null), never a
+    //    partial sum that reads as complete — same sticky-null rule the engine
+    //    applies across chunks.
+    //  - FINDINGS: the latest completed run only (the popover says "in this run").
     const latestRunByPr = new Map<
       string,
-      { runId: string; costUsd: number | null; findingsBySeverity: SeverityCounts | null }
+      { runId: string; findingsBySeverity: SeverityCounts | null }
     >();
+    const totalCostByPr = new Map<string, number | null>();
     if (prIds.length > 0) {
       const runRows = await container.db
         .select({
@@ -151,13 +155,18 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         .orderBy(desc(t.agentRuns.ranAt));
       // Rows are newest-first → first seen per PR is the latest completed run.
       for (const run of runRows) {
-        if (run.prId && !latestRunByPr.has(run.prId)) {
+        if (!run.prId) continue;
+        if (!latestRunByPr.has(run.prId)) {
           latestRunByPr.set(run.prId, {
             runId: run.runId,
-            costUsd: run.costUsd,
             findingsBySeverity: run.findingsBySeverity ?? null,
           });
         }
+        const sofar = totalCostByPr.has(run.prId) ? totalCostByPr.get(run.prId)! : 0;
+        totalCostByPr.set(
+          run.prId,
+          sofar == null || run.costUsd == null ? null : sofar + run.costUsd,
+        );
       }
     }
 
@@ -206,7 +215,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         opened_at: r.openedAt?.toISOString() ?? null,
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
-        cost_usd: latestRun?.costUsd ?? null,
+        cost_usd: totalCostByPr.get(r.id) ?? null,
         findings_by_severity: latestRun?.findingsBySeverity ?? null,
         findings_preview: latestRun
           ? (previewByRunId.get(latestRun.runId) ?? []).map((f) => findingRowToDto(f))

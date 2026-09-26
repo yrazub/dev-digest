@@ -1,5 +1,5 @@
 /**
- * PRRow — the COST cell shows the PR's latest completed run cost at four
+ * PRRow — the COST cell shows the PR's total cost (all completed runs) at four
  * decimals, and an em-dash (never $0.0000) when the cost is unknown.
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
@@ -44,7 +44,7 @@ function renderRow(p: PrMeta) {
 }
 
 describe("PRRow — cost cell", () => {
-  it("renders the latest completed run cost at four decimals", () => {
+  it("renders the PR's total cost at four decimals", () => {
     renderRow(pr({ cost_usd: 0.0013 }));
     expect(screen.getByText("$0.0013")).toBeInTheDocument();
   });

@@ -69,25 +69,35 @@ failure path record `cost_usd: null`.
 | `GET /runs/:id/trace` | `stats.cost_usd` |
 | `GET /repos/:id/pulls` | each `PrMeta` carries `cost_usd` — see below |
 
-### `GET /repos/:id/pulls` — which run's cost
+### `GET /repos/:id/pulls` — the PR's total cost
 
-The list column shows the cost of the PR's **latest completed** run: newest `ran_at` among
-rows with `status = 'done'`. A later `running` or `failed` run does not displace it. A PR
-with no completed run returns `null`.
+The list column shows the **total** spent on the PR: the sum of `cost_usd` over every run
+with `status = 'done'` (hw1 criterion #12). `running`, `failed` and `cancelled` runs add
+nothing. A PR with no completed run returns `null`.
+
+If any completed run is unpriced (`cost_usd` null), the total is `null`, not the sum of the
+priced ones. This is the same sticky-null rule `reviewer-core` applies across chunks: a
+partial sum would look like a complete figure and understate the spend without saying so.
 
 Compute it the way the endpoint already computes the latest review score — one `IN` query
-over all the PR ids on the page, ordered newest-first, first row seen per PR wins — rather
-than a subquery per row. `prIds` is already scoped to the repo, so no extra workspace
-filter is needed.
+over all the PR ids on the page, summed per PR in JS — rather than a subquery per row.
+`prIds` is already scoped to the repo, so no extra workspace filter is needed. The same query
+also yields the latest completed run per PR (newest `ran_at`, first row seen), which the
+findings column uses — see `L01-findings-counter.md`.
+
+> **Revised 2026-09-26.** The first version of this spec showed the *latest completed run's*
+> cost here. `docs/hw1-criteria.md` #12 requires the total across all successful runs, so the
+> list now answers "what has this PR cost in total".
 
 ## Acceptance criteria
 
 1. After a successful run, `agent_runs.cost_usd` equals `ReviewOutcome.costUsd`.
 2. A `failed` or `cancelled` run stores `null`, never `0`.
 3. An unpriced model yields `cost_usd: null` from all three endpoints — never `0`.
-4. `GET /repos/:id/pulls` returns the latest **completed** run's cost, unaffected by a
-   newer run that is still running or that failed.
-5. A PR with no runs returns `cost_usd: null`.
+4. `GET /repos/:id/pulls` returns the sum of all **completed** runs' costs; a run that is
+   still running or that failed adds nothing.
+5. A PR with no completed runs returns `cost_usd: null`, and so does a PR where any completed
+   run is unpriced.
 6. `agent_runs` rows that predate the migration have `cost_usd = NULL` and break no endpoint.
 7. Trace documents written before this lesson have no `stats.cost_usd`; `GET /runs/:id/trace`
    still serves them (the trace body is not re-validated on read).
@@ -98,8 +108,8 @@ filter is needed.
 - `test/reviews.it.test.ts` — assert the persisted `cost_usd` after a completed run.
   `MockLLMProvider` returns `costUsd: 0.001` per structured call, so a single-pass review
   over a one-file diff costs exactly `0.001`.
-- A test for the "latest completed run" selection used by the PR list, including the case
-  where a newer `failed` run must be ignored.
+- A test for the PR-list total (`test/pulls-cost.it.test.ts`): several completed runs sum;
+  a `failed` or `running` run adds nothing; one unpriced completed run makes the total `null`.
 
 Anything that is not `*.it.test.ts` must stay hermetic and key-free.
 

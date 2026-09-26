@@ -13,7 +13,7 @@ specified in
 
 | Screen | Granularity | Source |
 |---|---|---|
-| PR list badges + popover (A) | the PR's **latest completed run** | `agent_runs`, same lookup already used for `cost_usd` |
+| PR list badges + popover (A) | the PR's **latest completed run** | `agent_runs`, the same query that sums `cost_usd` |
 | Timeline tiles (C) | **every** run for the PR | `agent_runs`, one row per run, already fetched by `GET /pulls/:id/runs` |
 | Review-runs pill row + filter (B) | **one run's** findings | `review.findings`, already fetched client-side — no server change |
 
@@ -121,9 +121,9 @@ harmful to include.
 
 ## Query — `GET /repos/:id/pulls`
 
-The existing `latestCostByPr` lookup (`src/modules/pulls/routes.ts:132-147`) already finds,
-per PR, the newest `status = 'done'` row in `agent_runs`. Extend its `select` to also pull
-`id` and `findingsBySeverity`:
+The existing cost lookup in `src/modules/pulls/routes.ts` already reads every
+`status = 'done'` row in `agent_runs` for the PRs on the page, newest first. Extend its
+`select` to also pull `id` and `findingsBySeverity`:
 
 ```ts
 const runRows = await container.db
@@ -138,9 +138,11 @@ const runRows = await container.db
   .orderBy(desc(t.agentRuns.ranAt));
 ```
 
-first-seen-wins per PR, same as today — now populating a
-`latestRunByPr: Map<prId, { runId, costUsd, findingsBySeverity }>` instead of a bare cost
-map. `PrMeta.findings_by_severity` comes straight off that map.
+One pass over those rows fills two maps: `latestRunByPr: Map<prId, { runId,
+findingsBySeverity }>` (first row seen per PR — the latest completed run), and the per-PR
+cost total (every row summed; see `L01-run-cost.md`). `PrMeta.findings_by_severity` comes
+straight off the first map. So the findings column shows one run, while `cost_usd` covers
+all of them.
 
 For `findings_preview`, add one more query scoped to the run ids just collected:
 
@@ -161,7 +163,7 @@ row (should not happen in steady state, but a run predating the `reviews.run_id`
 possible on seeded/legacy data) gets `findings_preview: []`, not an error.
 
 `findings_by_severity` for a PR with **no** completed run is `null` (no entry in
-`latestRunByPr`), exactly like `cost_usd` is `null` for the same PRs today.
+`latestRunByPr`), exactly like `cost_usd` is `null` for the same PRs.
 
 ## Endpoints
 
@@ -179,14 +181,13 @@ Trace drawer (screen D) already renders full findings, not a count.
 1. A run with 2 CRITICAL, 1 WARNING, 0 SUGGESTION findings writes
    `agent_runs.findings_by_severity = {CRITICAL:2, WARNING:1, SUGGESTION:0}` on completion.
 2. A `failed`/`cancelled` run has `findings_by_severity = null`, never a zeroed object.
-3. `GET /repos/:id/pulls` returns `findings_by_severity` and `findings_preview` sourced from
-   the same run `cost_usd` is sourced from — the **latest completed** run, unaffected by a
-   later `running`/`failed` run (mirrors the existing cost acceptance criterion).
+3. `GET /repos/:id/pulls` returns `findings_by_severity` and `findings_preview` from the
+   **latest completed** run, unaffected by a later `running`/`failed` run. (`cost_usd`, by
+   contrast, is the total over all completed runs.)
 4. `findings_preview` for that PR contains exactly the findings of that run's review — no
    findings from an older review or a different run leak in.
 5. A PR with no completed run returns `findings_by_severity: null` and
-   `findings_preview: null` (or `[]` — pick one and keep it consistent; the client spec
-   treats both as "nothing to show").
+   `findings_preview: []`.
 6. `GET /pulls/:id/runs` returns `findings_by_severity` per run, independent of which run is
    "latest" — every settled run in the list carries its own breakdown.
 7. `rollupSeverities()` returns `{ CRITICAL, WARNING, SUGGESTION }` and its one call site
