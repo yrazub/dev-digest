@@ -3,7 +3,7 @@
  * badges always, and a finding preview only on hover, with no buttons.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { Finding } from "@devdigest/shared";
 import messages from "../../../../../../../messages/en/prReview.json";
@@ -44,20 +44,37 @@ describe("FindingsPopover", () => {
     expect(screen.queryByText(/FINDING/)).not.toBeInTheDocument();
   });
 
-  it("opens a read-only preview on hover and closes on mouse-leave", () => {
-    renderPopover({
+  it("opens a read-only preview on hover and closes on mouse-leave", async () => {
+    const { container } = renderPopover({
       findingsBySeverity: { CRITICAL: 0, WARNING: 1, SUGGESTION: 0 },
       findingsPreview: PREVIEW,
     });
     const trigger = screen.getByTestId("findings-popover-trigger");
 
     fireEvent.mouseEnter(trigger);
+    const popover = screen.getByRole("dialog");
     expect(screen.getByText("1 FINDING IN THIS RUN")).toBeInTheDocument();
     expect(screen.getByText("N+1 query in user list endpoint")).toBeInTheDocument();
     expect(screen.getByText("src/api/users.ts:45-52")).toBeInTheDocument();
     expect(screen.queryAllByRole("button")).toHaveLength(0);
+    // Portaled out of the cell, so an overflow:hidden ancestor can't clip it.
+    expect(container.contains(popover)).toBe(false);
 
     fireEvent.mouseLeave(trigger);
-    expect(screen.queryByText("N+1 query in user list endpoint")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText("N+1 query in user list endpoint")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("stays open while the pointer moves from the badges onto the popover", async () => {
+    renderPopover({
+      findingsBySeverity: { CRITICAL: 0, WARNING: 1, SUGGESTION: 0 },
+      findingsPreview: PREVIEW,
+    });
+    fireEvent.mouseEnter(screen.getByTestId("findings-popover-trigger"));
+    fireEvent.mouseLeave(screen.getByTestId("findings-popover-trigger"));
+    fireEvent.mouseEnter(screen.getByRole("dialog"));
+    await new Promise((r) => setTimeout(r, 200));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });

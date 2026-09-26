@@ -1,5 +1,8 @@
 import type { CSSProperties } from "react";
 
+export const POPOVER_WIDTH = 340;
+export const POPOVER_MAX_HEIGHT = 360;
+
 /** Co-located styles for FindingsPopover. */
 export const s = {
   muted: { color: "var(--text-muted)", fontSize: 12 } satisfies CSSProperties,
@@ -15,13 +18,10 @@ export const s = {
     gap: 6,
   } satisfies CSSProperties,
   popover: {
-    position: "absolute",
-    top: "100%",
-    left: 0,
-    marginTop: 6,
-    zIndex: 20,
-    width: 340,
-    maxHeight: 360,
+    position: "fixed",
+    zIndex: 1000,
+    width: POPOVER_WIDTH,
+    maxHeight: POPOVER_MAX_HEIGHT,
     overflowY: "auto",
     background: "var(--bg-elevated)",
     border: "1px solid var(--border)",
@@ -66,7 +66,8 @@ export const s = {
     color: "var(--text-muted)",
     marginBottom: 4,
   } satisfies CSSProperties,
-  previewConfidence: { marginLeft: "auto" } satisfies CSSProperties,
+  previewPath: { minWidth: 0, overflowWrap: "anywhere" } satisfies CSSProperties,
+  previewConfidence: { marginLeft: "auto", flexShrink: 0, whiteSpace: "nowrap" } satisfies CSSProperties,
   previewRationale: {
     fontSize: 12,
     color: "var(--text-secondary)",

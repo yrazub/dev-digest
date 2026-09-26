@@ -2,10 +2,11 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Badge, Icon, CircularScore, SeverityBadge, type IconName } from "@devdigest/ui";
-import type { RunSummary, PrCommit } from "@devdigest/shared";
+import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
+import type { RunSummary, PrCommit, FindingRecord } from "@devdigest/shared";
 import { formatCostUsd } from "@/lib/format-cost";
 import { severityCounts } from "../FindingsPanel/helpers";
+import { FindingsPopover } from "../../../_components/FindingsPopover";
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
@@ -92,6 +93,7 @@ export function RunHistory({
   onOpenTrace,
   onGoToReview,
   onDelete,
+  findingsByRunId,
 }: {
   runs: RunSummary[];
   commits?: PrCommit[];
@@ -100,6 +102,8 @@ export function RunHistory({
   /** Jump to this run's inline review accordion below (clicking the agent name). */
   onGoToReview?: (runId: string) => void;
   onDelete?: (runId: string) => void;
+  /** Each run's findings (from its review), for the hover preview on the severity badges. */
+  findingsByRunId?: ReadonlyMap<string, FindingRecord[]>;
 }) {
   const t = useTranslations("prReview");
   if (runs.length === 0 && commits.length === 0) return null;
@@ -202,9 +206,12 @@ export function RunHistory({
               {settled && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-muted)" }}>
                   {r.findings_by_severity ? (
-                    severityCounts(r.findings_by_severity).map(([sev, n]) => (
-                      <SeverityBadge key={sev} severity={sev} count={n} compact />
-                    ))
+                    severityCounts(r.findings_by_severity).length > 0 && (
+                      <FindingsPopover
+                        findingsBySeverity={r.findings_by_severity}
+                        findingsPreview={findingsByRunId?.get(r.run_id)}
+                      />
+                    )
                   ) : (
                     <span>{t("runStatus.findings", { count: r.findings_count ?? 0 })}</span>
                   )}

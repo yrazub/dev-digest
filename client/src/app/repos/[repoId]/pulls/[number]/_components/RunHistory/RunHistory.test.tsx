@@ -5,9 +5,9 @@
  * and shows the review score ring.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { RunSummary } from "@devdigest/shared";
+import type { FindingRecord, RunSummary } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
 import { RunHistory } from "./RunHistory";
 
@@ -113,6 +113,39 @@ describe("RunHistory — per-severity findings badges", () => {
     // Read-only: the badges are spans, not buttons (unlike the Review-runs filter
     // chips) — the only button in a row is the unrelated "go to review" agent-name link.
     expect(screen.queryAllByRole("button", { name: /Critical|Warning|Suggestion/ })).toHaveLength(0);
+  });
+
+  it("opens the same read-only findings popover on hover, fed by the run's review findings", () => {
+    const finding: FindingRecord = {
+      id: "f1",
+      severity: "WARNING",
+      category: "perf",
+      title: "N+1 query",
+      file: "src/api/users.ts",
+      start_line: 45,
+      end_line: 52,
+      rationale: "Loop issues one query per user.",
+      suggestion: null,
+      confidence: 0.86,
+      kind: "finding",
+      trifecta_components: null,
+      evidence: null,
+      review_id: "rv1",
+      accepted_at: null,
+      dismissed_at: null,
+    };
+    render(
+      <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
+        <RunHistory
+          runs={[run({ findings_count: 1, findings_by_severity: { CRITICAL: 0, WARNING: 1, SUGGESTION: 0 } })]}
+          onOpenTrace={() => {}}
+          findingsByRunId={new Map([["run-1", [finding]]])}
+        />
+      </NextIntlClientProvider>,
+    );
+    fireEvent.mouseEnter(screen.getByTestId("findings-popover-trigger"));
+    expect(screen.getByText("1 FINDING IN THIS RUN")).toBeInTheDocument();
+    expect(screen.getByText("N+1 query")).toBeInTheDocument();
   });
 
   it("falls back to the flat findings-count string when findings_by_severity is absent (pre-lesson trace rows)", () => {
