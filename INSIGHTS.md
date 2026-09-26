@@ -38,13 +38,21 @@ you could not have guessed, and the rule is the only part that helps next time:
 **Date:** YYYY-MM-DD
 **Cause:** what was really wrong (not what it looked like).
 **Fix / rule:** what to do instead, phrased so it applies next time.
+**Evidence:** `path:line` it was verified against (+ the exact error string, if any).
 ```
 
 Everywhere else — one line, dated, carrying its own evidence:
 
 ```markdown
-- **YYYY-MM-DD** — <claim, with the path, symbol, command or error string that proves it>
+- **YYYY-MM-DD** — <claim, with the symbol, command or error string that proves it> (`path:line`)
 ```
+
+**Every entry names at least one `path:line`** that you opened and that shows the claim. Pair it
+with the symbol name (`tableCard`, `dockerAvailable`): the line is where it was on the entry's
+date, and the symbol is how to find it after the code moves. When a finding is about an external
+tool rather than repo code, cite the line of the repo config that governs that tool
+(`.mcp.json:10`), say so if that file is local-only, and keep the exact error string. Never invent
+a line: if nothing in the repo shows it, say that instead.
 
 An entry is never reworded or deleted. Everything goes *beneath* it, dated:
 
@@ -53,6 +61,7 @@ An entry is never reworded or deleted. Everything goes *beneath* it, dated:
 | `**Superseded YYYY-MM-DD:** <what changed>` | it stopped being true |
 | `**Disputed YYYY-MM-DD:** <the other entry, and why>` | a later finding contradicts it and neither could be proved |
 | `**See also:** <path>` | the general rule lives at the root and the mechanics in a module file, or the reverse |
+| `**Evidence YYYY-MM-DD:** <path:line — what it shows>` | the entry was written without a `path:line`, or its anchor has moved |
 
 The file must never carry two entries that disagree without one of those lines. The next
 session believes whichever it reads first.
@@ -70,6 +79,7 @@ be obvious to anyone reading the code, it does not belong here.
   `navigate_page` followed by `take_screenshot` is the first step that would actually fail.
   Script the check by spawning `command` + `args` read out of `.mcp.json` itself, so it exercises
   exactly what the client will run rather than a hand-retyped command line.
+  **Evidence 2026-09-26:** `.mcp.json:4-11` — the `command` + `args` to spawn.
 
 ## Tool & Library Notes
 
@@ -77,11 +87,15 @@ be obvious to anyone reading the code, it does not belong here.
   returns nothing even though Claude Code is running. The bundled binary is at
   `~/.vscode/extensions/anthropic.claude-code-*-darwin-arm64/resources/native-binary/claude`.
   Use that path for `claude mcp ...` subcommands instead of concluding the CLI is absent.
+  **Evidence 2026-09-26:** nothing in the repo shows this — it is a fact about the extension install, and
+  `which claude` returning nothing is the proof. The config those subcommands manage is
+  `.mcp.json:3`.
 - **2026-09-20** — `chrome-devtools-mcp` opts *in* to telemetry by default: `--usageStatistics`
   defaults to `true` (usage data to Google), and its performance tools separately send trace URLs
   to the CrUX API unless `--no-performance-crux` is passed. Our `.mcp.json` sets
   `--usageStatistics=false`; the `CI` and `CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS` env vars
   disable it too.
+  **Evidence 2026-09-26:** `.mcp.json:10` — `--usageStatistics=false`.
 - **2026-09-20** — `chrome-devtools` `wait_for` takes `text` as an **array**
   (`{"type":"array","minItems":1}`); a bare string fails with
   `Expected array, received string at text`. It also matches the **DOM** text, while
@@ -89,6 +103,9 @@ be obvious to anyone reading the code, it does not belong here.
   uppercased in CSS, so the snapshot shows `StaticText "REVIEW RUNS"` while the DOM holds
   `Review runs` — copying the label out of the snapshot into `wait_for` times out after 10s for a
   reason that looks like a missing element. Match the DOM casing, or pass both variants.
+  **Evidence 2026-09-26:** `client/src/vendor/ui/primitives/SectionLabel.tsx:22` — `textTransform: "uppercase"`,
+  the reason snapshot text and DOM text differ. The array shape is the tool's own input schema,
+  not repo code.
 - **2026-09-20** — a `click` issued straight after `navigate_page` on the DevDigest root fails with
   `the element did not become interactive within the configured timeout`: `/` renders a
   "Taking you to your repository…" interstitial and client-side redirects to the repo's `/pulls`,
@@ -96,6 +113,8 @@ be obvious to anyone reading the code, it does not belong here.
   navigation, or `wait_for` a text that only the destination page has, before clicking.
   **See also:** `client/INSIGHTS.md` — the `<main>`-scrolls-not-the-document rule that governs
   screenshots of this app.
+  **Evidence 2026-09-26:** `client/src/app/page.tsx:40` — the "Taking you to your repository…" interstitial;
+  `e2e/specs/04-pr-findings.flow.json:6` waits for `/pulls` for the same reason.
 - **2026-09-22** — `docs/DevDigest Design (standalone).html` is not readable as text: it is a
   self-executing bundled React app, and `grep`/`Read` against the raw file finds nothing (0
   matches for terms confirmed present in the design, e.g. `CRITICAL`, `finding`). The real
@@ -105,6 +124,8 @@ be obvious to anyone reading the code, it does not belong here.
   results, then grep those. Each decoded `.js` file opens with a `/* filename.jsx —
   description */` comment naming the screen/module it mocks (e.g. `screen_dashboard.jsx`,
   `findings.jsx`, `primitives.jsx`) — the fastest way to map mockup back to app screen.
+  **Evidence 2026-09-26:** `docs/DevDigest Design (standalone).html:169` — `<script type="__bundler/manifest">`,
+  where the encoded source starts.
 - **2026-09-22** — the `chrome-devtools` MCP server's Chrome profile is a persistent
   singleton across sessions and days: `ps aux` showed roughly 8 orphaned
   `chrome-devtools-mcp` + `npm exec chrome-devtools-mcp@1.9.0` process pairs still alive
@@ -120,6 +141,19 @@ be obvious to anyone reading the code, it does not belong here.
   When it happens, verify server-side behavior via curl/API calls and component/
   integration tests instead of blocking on browser automation, and say so rather than
   silently skipping browser verification.
+  **2026-09-26:** a narrower, fixable cause of the same "already running" error. After a reboot
+  (no stale processes left), the first `new_page` launched Chrome but failed with
+  `Protocol error (Browser.setContentsSize): Restore window to normal state before setting
+  content size`; the MCP server then lost its handle on its own Chrome child, so every later
+  call hit the profile lock. Cause: `browser.window_placement` in the profile's
+  `Default/Preferences` spanned the whole screen work area (0–2560 × 30–1351), which macOS Chrome
+  treats as a zoomed window, so the server's `--viewport=1280x800` resize is refused. Fix: kill
+  the Chrome child (`pkill -f "user-data-dir=$HOME/.cache/chrome-devtools-mcp/chrome-profile"`),
+  shrink `window_placement` in `Default/Preferences` to a normal rect (e.g. left 40, top 60,
+  right 1360, bottom 960), retry `new_page`. Try this before falling back to curl-only checks.
+  **Evidence 2026-09-26:** `.mcp.json:5-11` — the `args` where `--isolated` would go. The
+  window-placement fix lives outside the repo, in
+  `~/.cache/chrome-devtools-mcp/chrome-profile/Default/Preferences` → `browser.window_placement`.
 
 ## Decisions
 
@@ -130,6 +164,9 @@ be obvious to anyone reading the code, it does not belong here.
   module means the agent must read both and guess which one owns a finding. The research doc's
   module paths (`apps/client`, `packages/reviewer-core`) are from a different layout — the real
   targets are `client/` `server/` `reviewer-core/` `e2e/` and the root.
+  **Evidence 2026-09-26:** `.claude/skills/engineering-insights/SKILL.md:43-49` — the routing table that sends
+  each finding to a module `INSIGHTS.md` or the root; `docs/engineering-insights-research.md:47`
+  — the `LEARNINGS.md` session protocol that was rejected.
 
 - **2026-09-20** — the `chrome-devtools` MCP server is configured in a project `.mcp.json`, not
   with `claude mcp add --scope local`. Local scope is stored inside `~/.claude.json`, which the
@@ -138,6 +175,11 @@ be obvious to anyone reading the code, it does not belong here.
   with `rm`. The cost is that it is a tracked project file — every clone is prompted to trust the
   server — so it is a team-wide choice, not a personal one; `--scope user` remains the right home
   for a browser server you want in unrelated projects.
+  **2026-09-26:** from commit `642ae2d` ("Update gitignore, new insights") until today, `.mcp.json`
+  was listed in `.gitignore`. That quietly undid this decision: other clones got no server and
+  were never prompted. The ignore rule has been removed and the file is tracked again, so the
+  decision stands. Keep `.mcp.json` free of secrets and machine paths — it ships to every clone.
+  **Evidence 2026-09-26:** `.mcp.json:1-14` — `npx chrome-devtools-mcp@1.9.0` and its flags only.
 
 ## Recurring Errors & Fixes
 
@@ -151,6 +193,9 @@ snapshots, lockfiles), resolve them by regenerating or by appending — never by
 one side wholesale. Check the fresh-install lane before trusting a green run.
 **See also:** `server/INSIGHTS.md` — the Drizzle journal and snapshot mechanics behind this
 rule, and how to relink the chain.
+**Evidence 2026-09-26:** `.github/workflows/server-integration.yml:3-5` — every test file starts a fresh
+testcontainer Postgres and migrates from zero, the lane that catches a broken history; the
+history itself is `server/src/db/migrations/meta/_journal.json:4`.
 
 ### A `pnpm` script run against `server/` installed `reviewer-core`'s dependencies instead
 **Date:** 2026-09-20
@@ -166,6 +211,8 @@ the same parallel batch. If they must be batched, use the package-manager's own 
 (`pnpm -C <dir> …`, `npm --prefix <dir> …`) so no `cd` is involved. Recovery is
 `rm pnpm-lock.yaml pnpm-workspace.yaml && rm -rf node_modules && npm ci` in the package that was
 clobbered; check `git status --untracked-files=all` for a stray lockfile before trusting a run.
+**Evidence 2026-09-26:** `CLAUDE.md:59` — `reviewer-core`/`e2e` use npm; `CLAUDE.md:92-96` — lock files are
+do-not-touch, including `reviewer-core/package-lock.json`, the one this clobbered.
 
 ### Every `chrome-devtools` page tool fails with `MCP error -32602: ... Required at pageId`
 **Date:** 2026-09-20
@@ -180,20 +227,28 @@ every page tool that follows. Do not pattern-match the human-readable text outpu
 read the tool's own `inputSchema.properties.pageId`, which states `{"type":"number"}`. Pass
 `--no-page-id-routing` only if single-page use makes the extra call not worth it; the default
 exists to keep concurrent agent sessions from stealing each other's tab.
+**Evidence 2026-09-26:** `.mcp.json:5-11` — the `args` carry no `--no-page-id-routing`, so routing is on.
+The error string above is the proof; the `pageId` type is the tool's input
+schema.
 
 ## Session Notes
 
 - **2026-09-20** — added the `engineering-insights` skill and restructured all five
   `INSIGHTS.md` files onto the eight-rubric format; recorded the `LEARNINGS.md` decision above.
+  **Evidence 2026-09-26:** commit `d345e57`; `.claude/skills/engineering-insights/SKILL.md:1`.
 - **2026-09-20** — installed and verified the `chrome-devtools` MCP server
   (`chrome-devtools-mcp@1.9.0`) through a project `.mcp.json`; captured the `pageId` routing trap,
   the telemetry defaults, and the drive-it-don't-handshake-it smoke-test rule.
+  **Evidence 2026-09-26:** commit `642ae2d`; `.mcp.json:1-14`.
 - **2026-09-20** — verified the `chrome-devtools` server by driving the real click-through
   (root → PR #482 → Agent runs) and screenshotting it; captured the `wait_for` array/casing trap,
   the post-redirect click trap, and the `<main>`-scroller rule in `client/INSIGHTS.md`.
+  **Evidence 2026-09-26:** commit `642ae2d`; `client/src/vendor/ui/shell/AppFrame.tsx:29`.
 - **2026-09-22** — scoped and speced the findings-counter feature (`specs/L01-findings-counter.md`
   + module specs); decoded the bundled design mockup to find the CRITICAL/WARNING/SUGGESTION
   badge pattern and confirmed a ready-made `SeverityBadge` primitive already supports `count`.
+  **Evidence 2026-09-26:** commit `6c962c9`; `specs/L01-findings-counter.md:1`;
+  `client/src/vendor/ui/primitives/Badge.tsx:52` (`SeverityBadge`).
 - **2026-09-22** — implemented the findings-counter feature end to end (server: `agent_runs`
   migration 0011, `rollupSeverities` casing fix, `PrMeta`/`RunSummary` contract additions,
   the PR-list query, seed-data backfill; client: `FindingsPanel` counter+filter,
@@ -202,3 +257,11 @@ exists to keep concurrent agent sessions from stealing each other's tab.
   verified end-to-end via curl against real backfilled data. Browser-based interaction
   verification (hover popover, filter clicks) was skipped due to the chrome-devtools
   profile-lock issue recorded above.
+  **Evidence 2026-09-26:** commit `6c962c9`; `server/src/db/migrations/0011_ambiguous_slyde.sql:1`.
+- **2026-09-26** — fixed the clipped PR-list findings popover (portaled to `<body>`) and added the
+  same popover to Agent-runs Timeline tiles; unblocked the chrome-devtools browser (window-placement
+  cause, recorded above) and checked both popovers in a real browser. Recorded the table-card
+  clipping rule in `client/INSIGHTS.md`.
+  **Evidence 2026-09-26:** uncommitted on `feature/finding-counter`;
+  `client/src/app/repos/[repoId]/pulls/_components/FindingsPopover/FindingsPopover.tsx:101`
+  (`createPortal`).
