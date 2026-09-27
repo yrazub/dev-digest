@@ -23,6 +23,8 @@ export const s = {
     width: POPOVER_WIDTH,
     maxHeight: POPOVER_MAX_HEIGHT,
     overflowY: "auto",
+    // Wheel at the list's end must not chain into <main> — that scroll closes the popover.
+    overscrollBehavior: "contain",
     background: "var(--bg-elevated)",
     border: "1px solid var(--border)",
     borderRadius: 8,

@@ -43,6 +43,7 @@ export function FindingsPopover({
 }) {
   const t = useTranslations("prReview");
   const triggerRef = React.useRef<HTMLDivElement | null>(null);
+  const popoverRef = React.useRef<HTMLDivElement | null>(null);
   const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [placement, setPlacement] = React.useState<Placement | null>(null);
   const counts = severityCounts(findingsBySeverity);
@@ -63,14 +64,19 @@ export function FindingsPopover({
 
   // The popover is fixed-positioned from a one-off measurement, so any scroll
   // (the app scrolls <main>, not the document — hence capture) or resize
-  // would leave it detached from its badges: close instead.
+  // would leave it detached from its badges: close instead. Scrolling the
+  // popover's own list is not such a scroll — the capture listener sees it too.
   React.useEffect(() => {
     if (!placement) return;
+    const onScroll = (e: Event) => {
+      if (e.target instanceof Node && popoverRef.current?.contains(e.target)) return;
+      setPlacement(null);
+    };
     const close = () => setPlacement(null);
-    window.addEventListener("scroll", close, true);
+    window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", close);
     return () => {
-      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", close);
     };
   }, [placement]);
@@ -100,6 +106,7 @@ export function FindingsPopover({
         items.length > 0 &&
         createPortal(
           <div
+            ref={popoverRef}
             role="dialog"
             aria-label={t("list.findingsPopover.title", { count: total })}
             onMouseEnter={cancelClose}

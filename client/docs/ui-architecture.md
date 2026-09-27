@@ -91,7 +91,8 @@ Both are path aliases in `tsconfig.json`, not installed dependencies, and both a
   inside a row is cut off.
 - **So floating UI is portaled.** Render it with `createPortal(…, document.body)`, position it
   `fixed` from the trigger's `getBoundingClientRect()`, close it on scroll (capture) and resize,
-  and delay the close on mouse-leave so the pointer can reach it. `FindingsPopover` is the
+  but ignore scrolls whose target is inside the popover itself (capture sees those too) and give a
+  scrollable popover `overscrollBehavior: "contain"`, and delay the close on mouse-leave so the pointer can reach it. `FindingsPopover` is the
   reference implementation.
 
 ## Styling and strings

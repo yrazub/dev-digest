@@ -30,3 +30,10 @@ Traps we have already hit in the web app. Append-only. See the root
   `src/app/repos/[repoId]/pulls/_components/FindingsPopover/FindingsPopover.tsx:101`
   (`createPortal`).
 
+- **2026-09-27** — a *capture* `scroll` listener on `window` also fires for scrolls **inside** the
+  element it guards: `scroll` does not bubble, but capture still sees every element's scroll. The
+  first FINDINGS popover closed itself whenever its own list was wheeled or its scrollbar dragged.
+  Ignore events whose `target` is inside the popover, and set `overscrollBehavior: "contain"` so a
+  wheel at the list's end doesn't chain into `<main>` and close it that way.
+  **Evidence 2026-09-27:** `src/app/repos/[repoId]/pulls/_components/FindingsPopover/FindingsPopover.tsx:72`
+  (`onScroll` target check).

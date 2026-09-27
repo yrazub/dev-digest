@@ -77,4 +77,17 @@ describe("FindingsPopover", () => {
     await new Promise((r) => setTimeout(r, 200));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
+
+  it("stays open while its own list scrolls, and closes when the page scrolls", () => {
+    renderPopover({
+      findingsBySeverity: { CRITICAL: 0, WARNING: 1, SUGGESTION: 0 },
+      findingsPreview: PREVIEW,
+    });
+    fireEvent.mouseEnter(screen.getByTestId("findings-popover-trigger"));
+    fireEvent.scroll(screen.getByRole("dialog"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    fireEvent.scroll(document);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });
