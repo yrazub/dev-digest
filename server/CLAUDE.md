@@ -10,6 +10,7 @@
 | adapters, DI wiring, or mocking the outside world | `README.md` — "Request & DI flow" |
 | the DB schema, a migration, or seeds | `docs/schema.md` |
 | the container, a review run's lifecycle, SSE/cancellation, or which module owns a table | `docs/architecture.md` |
+| a new route, service, repository, adapter or port, or moving code between layers | the `onion-architecture` skill — then run `pnpm arch:check` |
 | adding a `modules/<name>/` plugin | `specs/` for the feature, and `src/modules/repo-intel/README.md` as the reference module |
 | run cost, or the findings counter/popover data | `specs/L01-run-cost.md` · `specs/L01-findings-counter.md` |
 | repo indexing, symbols, the import graph, or the repo map | `src/modules/repo-intel/README.md` |
@@ -22,6 +23,7 @@ If nothing matches, proceed.
 
 `pnpm dev` (tsx watch, `:3001`) · `pnpm test` · `pnpm typecheck` · `pnpm build`
 `pnpm db:migrate` · `pnpm db:seed` (idempotent) · `pnpm db:generate` (drizzle-kit)
+`pnpm arch:check` (layer boundaries, baselined; also covers `reviewer-core`)
 
 Split the suite: `pnpm exec vitest run --exclude '**/*.it.test.ts'` (hermetic) /
 `pnpm exec vitest run .it.test` (real Postgres via testcontainers).

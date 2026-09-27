@@ -65,6 +65,12 @@ jobs:
 
       - run: pnpm typecheck
 
+      # Onion-architecture boundaries (server + reviewer-core). Known violations are
+      # baselined in .dependency-cruiser-known-violations.json; only new leaks fail.
+      # Inlined like the vitest steps below. Rules: .claude/skills/onion-architecture/.
+      - name: Architecture boundaries
+        run: pnpm exec depcruise --config .dependency-cruiser.cjs --ignore-known .dependency-cruiser-known-violations.json src ../reviewer-core/src
+
   unit:
     name: tests
     runs-on: ubuntu-latest

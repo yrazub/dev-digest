@@ -44,6 +44,22 @@ Traps we have already hit in the server. Append-only. See the root
   same insert once with a throwaway `tsx` script against `DATABASE_URL`, or use
   `cd e2e && npm run e2e:hermetic` for a fresh stack — never `docker compose down -v`.
 
+## Tool & Library Notes
+
+- **2026-09-27** — dependency-cruiser's `--ignore-known` takes an **optional** file argument, so
+  `depcruise --ignore-known src …` reads `src` as the baseline path and dies with
+  `ERROR: EISDIR: illegal operation on a directory, read`. Always name the file:
+  `--ignore-known .dependency-cruiser-known-violations.json` (`package.json:15`, `arch:check`).
+  A bare `--ignore-known` works only when another flag follows it, which is why an ad-hoc run
+  passed and the script did not.
+- **2026-09-27** — under pnpm, dependency-cruiser resolves an npm import to a versioned path
+  (`node_modules/.pnpm/drizzle-orm@0.38.4_postgres@3.4.9/node_modules/drizzle-orm/index.d.ts`),
+  and a known-violations baseline stores that path verbatim. A rule whose `to` targets
+  `drizzle-orm` would therefore produce baseline entries that go stale, and fail CI, on the next
+  version bump. `db-only-in-repository` targets `^src/db/` instead, which every querying file
+  imports anyway (`.dependency-cruiser.cjs:63`). Keep npm packages out of baselined rules' `to`,
+  or use them only in rules with zero baselined hits.
+
 ## Decisions
 
 - **2026-09-26** — the PR list's `cost_usd` is the **total** over a PR's completed runs, and one
@@ -52,6 +68,16 @@ Traps we have already hit in the server. Append-only. See the root
   figure and would understate spend silently. This matches `reviewer-core`, where one unpriced
   chunk makes a run's cost `null`. Failed, running and cancelled runs add nothing.
   **See also:** `specs/L01-run-cost.md` and `server/specs/L01-run-cost.md`, which record the rule.
+
+- **2026-09-27** — layer boundaries (`onion-architecture` skill) are enforced by
+  `pnpm arch:check` against a **known-violations baseline** of 33 existing leaks
+  (`.dependency-cruiser-known-violations.json`), not by fixing them first: routes querying
+  Drizzle, services taking the whole `Container`, `reviews → pulls/status` and the
+  `container.ts ↔ repo-intel` cycles. Fixing them up front was rejected as a large refactor
+  bundled into a docs change. Error-level checks with no baseline were rejected because CI would
+  go red at once. New services take narrow dependencies instead of `Container`
+  (`di-narrow-deps`, `.dependency-cruiser.cjs:82`). Re-baseline only in a PR that *removes* a leak.
+  **See also:** `.claude/skills/onion-architecture/references/enforcement-dependency-cruiser.md`.
 
 ## Recurring Errors & Fixes
 
@@ -143,3 +169,6 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
   rediscovery of the `.it` skip.
   **Evidence 2026-09-26:** `src/db/migrations/0011_ambiguous_slyde.sql:1`; `src/modules/pulls/routes.ts:165-168`
   (the cost total).
+- **2026-09-27** — added the `onion-architecture` skill, plus `server/.dependency-cruiser.cjs`, the
+  baseline and the `arch:check` CI step, which also cruises `../reviewer-core/src`. Recorded two
+  depcruise quirks and the baseline decision.
