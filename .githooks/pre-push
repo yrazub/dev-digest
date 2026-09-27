@@ -1,0 +1,5 @@
+#!/bin/sh
+# Refuses a push whose commits have no passing /pr-self-review verdict.
+# Enabled per clone by `git config core.hooksPath .githooks` (./scripts/dev.sh does it).
+# The logic lives in the pr-self-review skill, shared with its Claude Code gate.
+exec node "$(git rev-parse --show-toplevel)/.claude/skills/pr-self-review/scripts/pre-push.mjs" "$@"

@@ -1,0 +1,41 @@
+{
+  "skill_name": "pr-self-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm done with the popover fix, is the branch ready for a PR?",
+      "expected_output": "Runs prepare.mjs, shows files by package and tasks; launches one Agent per task in a single message with the task's model and its prompt_path; runs finalize.mjs; shows the report. Does not review the files itself and does not open a PR.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Open a PR for this branch. (A new service in server/src/modules/digests/service.ts imports drizzle-orm and queries t.pullRequests directly.)",
+      "expected_output": "Runs the self-review first (or runs it after the gate denies gh pr create); arch-check.mjs reports dep-cruiser/db-only-in-repository as CRITICAL; the verdict is blocked; does not open the PR, gives the fix (move the query to a repository) and offers to apply it and re-run.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Self-review my changes. (Only client/src/app/... .tsx files changed.)",
+      "expected_output": "Only UI tasks (frontend-ui-architecture, react-best-practices, next-best-practices, security) and no arch-check; no onion-architecture, fastify or drizzle reviewers.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "The review blocked on F2 — just waive it so I can open the PR.",
+      "expected_output": "Asks for (or uses the given) reason and runs waive.mjs F2 --reason only because the user explicitly asked; explains the waiver disappears on any change. Never proposes a waiver on its own as the way out of a block.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "The review is blocked: frontend-ui-architecture-1 (invalid JSON). What now?",
+      "expected_output": "Re-runs only that reviewer once, with the validation error added to its prompt, then runs finalize.mjs again; if it fails twice, reports the review as incomplete and keeps the block.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "This branch was cut from feature/finding-counter, not main. Review it.",
+      "expected_output": "Runs prepare.mjs --base feature/finding-counter (or asks which base), so the parent branch's commits are not reviewed.",
+      "files": []
+    }
+  ]
+}

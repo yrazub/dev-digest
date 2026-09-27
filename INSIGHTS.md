@@ -165,6 +165,22 @@ be obvious to anyone reading the code, it does not belong here.
   **Evidence 2026-09-27:** `skills-lock.json:28-29` — `"source": "vercel-labs/next-skills"`. The
   retirement itself is external; see `.claude/skills/frontend-ui-architecture/research/notes/tooling_and_ai_skills.md`.
 
+- **2026-09-27** — Node's `path.matchesGlob` never lets `*` or `**` match a path segment that
+  starts with a dot, so `**/*.md` does **not** match `.claude/skills/x/SKILL.md`, and
+  `.github/…` or `.claude/…` files slip past any `**` exclusion. It takes no `dot` option. Match
+  through a wrapper that neutralises leading dots on both the path and the pattern
+  (`undot` in `.claude/skills/pr-self-review/scripts/lib/glob.mjs:5`).
+- **2026-09-27** — the local pnpm (12.4.2) rejects the silent flag before a script name:
+  `pnpm -s arch:check` fails with `error: unexpected argument '-s' found`. Run the script plainly;
+  extra args after it are appended to the script's command, so `pnpm arch:check --output-type json`
+  works, and the `$ depcruise …` echo goes to stderr, leaving stdout parseable
+  (`.claude/skills/pr-self-review/scripts/arch-check.mjs:28`, the `spawnSync('pnpm', …)` call).
+- **2026-09-27** — in auto mode the agent cannot register a hook: writing `hooks` into
+  `.claude/settings.json` (or loading `update-config` to do it) is denied as
+  `[Self-Modification]`. Build the hook script, then hand the user the settings snippet to add;
+  do not look for another way in. Nothing in the repo shows the denial; the snippet the user
+  must add is in `specs/L02-pr-self-review.md` ("Registering the hook").
+
 ## Decisions
 
 - **2026-09-20** — session knowledge is recorded in the per-module `INSIGHTS.md` files, not in
@@ -201,6 +217,22 @@ be obvious to anyone reading the code, it does not belong here.
   `research/`, rather than at the repo root.
   **Evidence 2026-09-27:** `.claude/skills/frontend-ui-architecture/SKILL.md:14` — the
   "project's own documents win" clause.
+
+- **2026-09-27** — `pr-self-review` keys its verdicts by a **content hash** of the reviewable
+  diff (`path → blob id` from merge-base, `diffHash` in
+  `.claude/skills/pr-self-review/scripts/lib/git.mjs:84`), not by the HEAD SHA. The gate hashes
+  merge-base..HEAD and looks the verdict up by that hash (`scripts/gate.mjs:27`). Reviewing
+  uncommitted work and then committing exactly that work keeps the verdict valid, and any other
+  edit, including one that follows a waiver, makes it stale. Rejected: keying by SHA, which
+  forces a full re-review after every commit of already-reviewed work.
+
+- **2026-09-27** — the `pr-self-review` gate decides "is this a push / PR" by tokenizing the Bash
+  line (`isGatedCommand`, `.claude/skills/pr-self-review/scripts/lib/command.mjs:115`), not by regex. A
+  plain `\bgit\s+push\b` search blocked any command that merely *mentioned* the words: an `echo`, a
+  `grep`, a commit message, or a heredoc that writes a test file. It also missed `git -C server push`.
+  Quoted text and heredoc bodies are data; `&&` `;` `|` and subshells split commands; env assignments
+  and git global options are skipped. Rejected: keeping the regex and adding exceptions, which cannot
+  tell a quoted mention from a real command. Accepted limit: `eval` and scripts that push are not seen.
 
 ## Recurring Errors & Fixes
 
@@ -291,3 +323,5 @@ schema.
   `next-best-practices` source here and the missing client linter in `client/INSIGHTS.md`.
   **Evidence 2026-09-27:** uncommitted on `feature/finding-counter`;
   `.claude/skills/frontend-ui-architecture/SKILL.md:1`.
+- **2026-09-27** — built the `pr-self-review` skill (manifest routing of changed files to skills, `arch:check`, subagent reviewers, a CRITICAL gate on `gh pr create`). Recorded the dot-segment glob quirk, pnpm `-s`, the hook self-modification denial and the content-hash decision.
+- **2026-09-27** — pr-self-review now gates `git push` as well as `gh pr create`, and the hook is registered in `.claude/settings.json`. The command check is a tokenizer (entry under Decisions). Architecture refactor S1/C1 reviewed over `f108012..HEAD` and pushed. **See also:** `server/INSIGHTS.md`.

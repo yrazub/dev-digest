@@ -1,0 +1,152 @@
+{
+  "$comment": "Which skill reviews which changed files. Every folder in .claude/skills/ must have an entry here; one without is reported as unrouted. `review: false` marks a skill that is not a reviewer. `critical_rules` is the closed list of rule IDs that may stay CRITICAL; any other CRITICAL from that skill is clamped to WARNING. The bar is explained in references/critical-rules.md.",
+  "defaults": {
+    "base": "origin/main",
+    "max_files": 12
+  },
+  "exclude": [
+    ".devdigest/**",
+    "**/pnpm-lock.yaml",
+    "**/package-lock.json",
+    "skills-lock.json",
+    "server/src/db/migrations/**",
+    "client/src/vendor/**",
+    "**/*.md",
+    "**/*.{png,jpg,jpeg,gif,webp,ico,svg,pdf,woff,woff2,ttf}"
+  ],
+  "arch_check": {
+    "paths": ["server/src/**", "reviewer-core/src/**", "server/.dependency-cruiser*"]
+  },
+  "skills": {
+    "onion-architecture": {
+      "review": true,
+      "include": ["server/src/**/*.ts", "reviewer-core/src/**/*.ts"],
+      "exclude": ["**/*.test.ts", "**/test/**"],
+      "can_block": true,
+      "model": "opus",
+      "critical_rules": [
+        "dep-inward-only",
+        "dep-domain-framework-free",
+        "edge-thin-routes",
+        "db-only-in-repository",
+        "zod-parse-at-boundary",
+        "di-composition-root-only",
+        "adapter-implements-port",
+        "core-stays-pure",
+        "core-no-node-io"
+      ]
+    },
+    "frontend-ui-architecture": {
+      "review": true,
+      "include": ["client/src/**/*.{ts,tsx}"],
+      "exclude": ["**/*.test.{ts,tsx}", "client/src/test/**"],
+      "can_block": true,
+      "model": "opus",
+      "critical_rules": [
+        "struct-one-way",
+        "struct-no-cross-feature",
+        "split-no-nested-definitions",
+        "split-pure",
+        "place-env-literal",
+        "logic-pure-domain",
+        "logic-no-effect-derivation",
+        "logic-no-server-state-copy"
+      ]
+    },
+    "react-best-practices": {
+      "review": true,
+      "include": ["client/src/**/*.tsx", "client/src/**/use-*.ts"],
+      "exclude": ["**/*.test.{ts,tsx}", "client/src/test/**"],
+      "can_block": true,
+      "model": "opus",
+      "critical_rules": [
+        "react-hooks-conditional",
+        "react-nested-component",
+        "react-render-side-effect"
+      ]
+    },
+    "security": {
+      "review": true,
+      "include": ["server/src/**/*.ts", "reviewer-core/src/**/*.ts", "client/src/**/*.{ts,tsx}"],
+      "exclude": ["**/*.test.{ts,tsx}", "**/test/**", "server/src/adapters/mocks.ts"],
+      "can_block": true,
+      "model": "opus",
+      "critical_rules": [
+        "sec-hardcoded-secret",
+        "sec-injection",
+        "sec-missing-authz",
+        "sec-xss",
+        "sec-secret-exposure",
+        "sec-path-traversal"
+      ]
+    },
+    "next-best-practices": {
+      "review": true,
+      "include": ["client/src/app/**/*.{ts,tsx}", "client/src/middleware.ts", "client/next.config.*"],
+      "exclude": ["**/*.test.{ts,tsx}"],
+      "can_block": false,
+      "model": "sonnet"
+    },
+    "fastify-best-practices": {
+      "review": true,
+      "include": [
+        "server/src/modules/**/routes.ts",
+        "server/src/modules/_shared/**/*.ts",
+        "server/src/platform/**/*.ts",
+        "server/src/app.ts",
+        "server/src/server.ts"
+      ],
+      "exclude": ["**/*.test.ts"],
+      "can_block": false,
+      "model": "sonnet"
+    },
+    "drizzle-orm-patterns": {
+      "review": true,
+      "include": [
+        "server/src/**/repository.ts",
+        "server/src/**/repository/**/*.ts",
+        "server/src/db/**/*.ts"
+      ],
+      "exclude": ["**/*.test.ts"],
+      "can_block": false,
+      "model": "sonnet"
+    },
+    "postgresql-table-design": {
+      "review": true,
+      "include": ["server/src/db/schema.ts", "server/src/db/schema/**/*.ts"],
+      "exclude": [],
+      "can_block": false,
+      "model": "sonnet"
+    },
+    "zod": {
+      "review": true,
+      "include": ["server/src/vendor/shared/**/*.ts"],
+      "exclude": ["**/*.test.ts"],
+      "can_block": false,
+      "model": "sonnet"
+    },
+    "react-testing-library": {
+      "review": true,
+      "include": ["client/src/**/*.test.{ts,tsx}", "client/src/test/**/*.{ts,tsx}"],
+      "exclude": [],
+      "can_block": false,
+      "model": "sonnet"
+    },
+    "typescript-expert": {
+      "review": false,
+      "why": "Generic TypeScript knowledge; typecheck in CI covers what a diff review would."
+    },
+    "mermaid-diagram": {
+      "review": false,
+      "why": "Authoring aid for diagrams, not a code reviewer."
+    },
+    "engineering-insights": {
+      "review": false,
+      "why": "Writes INSIGHTS.md entries; has no review rules."
+    },
+    "pr-self-review": {
+      "review": false,
+      "why": "This skill."
+    }
+  }
+}

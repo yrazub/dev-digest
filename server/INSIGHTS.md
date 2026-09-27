@@ -60,6 +60,13 @@ Traps we have already hit in the server. Append-only. See the root
   imports anyway (`.dependency-cruiser.cjs:63`). Keep npm packages out of baselined rules' `to`,
   or use them only in rules with zero baselined hits.
 
+- **2026-09-27** — `pnpm arch:check --output-type json` puts the **baselined** violations in
+  `summary.violations` too, with `rule.severity: "ignore"` (`summary.ignore` is their count, 33
+  today). The new ones are those with any other severity. Paths are relative to `server/`
+  (`src/…`, `../reviewer-core/src/…`), so resolve them against `server/` before comparing with
+  repo-relative paths. See `toRepoPath` and the `severity !== 'ignore'` filter in
+  `.claude/skills/pr-self-review/scripts/arch-check.mjs:16` and `:44`.
+
 ## Decisions
 
 - **2026-09-26** — the PR list's `cost_usd` is the **total** over a PR's completed runs, and one
@@ -172,3 +179,4 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
 - **2026-09-27** — added the `onion-architecture` skill, plus `server/.dependency-cruiser.cjs`, the
   baseline and the `arch:check` CI step, which also cruises `../reviewer-core/src`. Recorded two
   depcruise quirks and the baseline decision.
+- **2026-09-27** — `pr-self-review` consumes `arch:check` JSON; recorded how its baselined and new violations differ. **See also:** `INSIGHTS.md` (root), 2026-09-27 entries.
