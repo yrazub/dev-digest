@@ -50,7 +50,8 @@ If nothing matches, proceed.
 - A component folder is `_components/<Name>/`: `<Name>.tsx`, an `index.ts` that re-exports it
   (import the folder, not the file), and as needed `styles.ts` (exports `s`), `constants.ts`,
   `helpers.ts`, `<Name>.test.tsx`.
-- Hooks: one file per API resource, `src/lib/hooks/<resource>.ts` (`reviews.ts`).
+- Hooks: one file per API resource, `src/lib/hooks/<resource>.ts` (`reviews.ts`), imported by
+  that path — no `index.ts` barrel. Cross-folder imports use `@/`, never `../../../`.
 - Strings: `messages/en/<namespace>.json`, where the file name is the namespace passed to
   `useTranslations("<namespace>")`; keys are camelCase, nested by area (`list.columns.cost`).
   A key that mirrors an enum uses the enum value (`panel.filter.CRITICAL`).

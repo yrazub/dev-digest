@@ -21,10 +21,10 @@ const TRACE: RunTrace = {
 
 // Reassignable so a case can serve a trace written before cost_usd existed.
 let current: RunTrace = TRACE;
-vi.mock("../../../../../../../lib/hooks/trace", () => ({
+vi.mock("@/lib/hooks/trace", () => ({
   useRunTrace: () => ({ data: current, isLoading: false }),
 }));
-vi.mock("../../../../../../../lib/hooks/reviews", () => ({
+vi.mock("@/lib/hooks/reviews", () => ({
   useRunEvents: () => ({ events: [], running: false }),
 }));
 

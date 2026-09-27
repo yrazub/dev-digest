@@ -10,8 +10,8 @@ runs and how the app is wired is in [`ui-architecture.md`](ui-architecture.md).
 component  →  hook in src/lib/hooks/<resource>.ts  →  api.* in src/lib/api.ts  →  Fastify (:3001)
 ```
 
-- **No `fetch` in components**, and no second HTTP client. Hooks are re-exported from
-  `@/lib/hooks`.
+- **No `fetch` in components**, and no second HTTP client. Import a hook from its resource
+  file (`@/lib/hooks/pulls`); there is no `lib/hooks` barrel.
 - **`apiFetch`** prefixes `NEXT_PUBLIC_API_BASE` (default `http://localhost:3001`). It sets
   `content-type: application/json` only when there is a body, because Fastify rejects a
   body-less request that declares JSON.
