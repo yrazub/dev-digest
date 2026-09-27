@@ -43,20 +43,6 @@
   },
   {
     "type": "dependency",
-    "from": "src/modules/pulls/routes.ts",
-    "to": "src/db/schema.ts",
-    "unresolvedTo": "../../db/schema.js",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "db-only-in-repository"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "src/modules/repos/helpers.ts",
     "to": "src/db/schema.ts",
     "unresolvedTo": "../../db/schema.js",
@@ -200,67 +186,9 @@
   },
   {
     "type": "dependency",
-    "from": "src/modules/pulls/routes.ts",
-    "to": "src/modules/reviews/helpers.ts",
-    "unresolvedTo": "../reviews/helpers.js",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "dep-no-cross-module"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "src/modules/repos/service.ts",
     "to": "src/modules/repo-intel/constants.ts",
     "unresolvedTo": "../repo-intel/constants.js",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "dep-no-cross-module"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/modules/reviews/repository.ts",
-    "to": "src/modules/pulls/status.ts",
-    "unresolvedTo": "../pulls/status.js",
-    "dependencyTypes": [
-      "local",
-      "type-only",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "dep-no-cross-module"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/modules/reviews/repository/run.repo.ts",
-    "to": "src/modules/pulls/status.ts",
-    "unresolvedTo": "../../pulls/status.js",
-    "dependencyTypes": [
-      "local",
-      "type-only",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "dep-no-cross-module"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/modules/reviews/run-executor.ts",
-    "to": "src/modules/pulls/status.ts",
-    "unresolvedTo": "../pulls/status.js",
     "dependencyTypes": [
       "local",
       "import"

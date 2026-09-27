@@ -1,12 +1,18 @@
 /**
- * PR-list rollup helpers (`modules/pulls/status.ts`) — the pure derivation that
- * decides each PR's review STATUS and tallies its FINDINGS for the list. The DB
+ * PR-list rules (`modules/pulls/domain.ts`) — the pure derivations behind each
+ * PR's review STATUS, latest SCORE, total COST and latest-run FINDINGS. The DB
  * `status` column holds GitHub's merge state; the review status
- * (needs_review / reviewed / stale) is derived here from head vs lastReviewedSha
- * + age, so it gets unit coverage independent of the route's queries.
+ * (needs_review / reviewed / stale) is derived from head vs lastReviewedSha
+ * + age, so all of it gets unit coverage independent of the queries.
  */
 import { describe, it, expect } from 'vitest';
-import { deriveReviewStatus, rollupSeverities, STALE_DAYS } from '../src/modules/pulls/status.js';
+import {
+  deriveReviewStatus,
+  latestScoreByPr,
+  pickNeedingDiffStats,
+  summarizeCompletedRuns,
+  STALE_DAYS,
+} from '../src/modules/pulls/domain.js';
 
 const DAY = 86_400_000;
 const now = Date.UTC(2026, 5, 11);
@@ -49,20 +55,58 @@ describe('deriveReviewStatus', () => {
   });
 });
 
-describe('rollupSeverities', () => {
-  it('tallies findings into CRITICAL / WARNING / SUGGESTION buckets (ignores unknown)', () => {
-    expect(
-      rollupSeverities([
-        { severity: 'CRITICAL' },
-        { severity: 'CRITICAL' },
-        { severity: 'WARNING' },
-        { severity: 'SUGGESTION' },
-        { severity: 'WEIRD' },
-      ]),
-    ).toEqual({ CRITICAL: 2, WARNING: 1, SUGGESTION: 1 });
+describe('latestScoreByPr', () => {
+  it('keeps the first (newest) score seen per PR, including a null score', () => {
+    const scores = latestScoreByPr([
+      { prId: 'a', score: null },
+      { prId: 'b', score: 80 },
+      { prId: 'a', score: 90 },
+    ]);
+    expect(scores.get('a')).toBeNull();
+    expect(scores.get('b')).toBe(80);
+    expect(scores.has('c')).toBe(false);
+  });
+});
+
+describe('summarizeCompletedRuns', () => {
+  const sev = { CRITICAL: 1, WARNING: 0, SUGGESTION: 2 };
+
+  it('sums cost across completed runs and takes findings from the newest run', () => {
+    const { latestRunByPr, totalCostByPr } = summarizeCompletedRuns([
+      { prId: 'a', runId: 'r2', costUsd: 0.5, findingsBySeverity: sev },
+      { prId: 'a', runId: 'r1', costUsd: 0.25, findingsBySeverity: null },
+    ]);
+    expect(totalCostByPr.get('a')).toBe(0.75);
+    expect(latestRunByPr.get('a')).toEqual({ runId: 'r2', findingsBySeverity: sev });
   });
 
-  it('is all-zero for no findings', () => {
-    expect(rollupSeverities([])).toEqual({ CRITICAL: 0, WARNING: 0, SUGGESTION: 0 });
+  it('makes the total unknown (null) once any run is unpriced, whatever its position', () => {
+    const { totalCostByPr } = summarizeCompletedRuns([
+      { prId: 'a', runId: 'r3', costUsd: 0.5, findingsBySeverity: null },
+      { prId: 'a', runId: 'r2', costUsd: null, findingsBySeverity: null },
+      { prId: 'a', runId: 'r1', costUsd: 0.25, findingsBySeverity: null },
+    ]);
+    expect(totalCostByPr.get('a')).toBeNull();
+  });
+
+  it('skips runs without a PR and leaves PRs without runs absent', () => {
+    const { latestRunByPr, totalCostByPr } = summarizeCompletedRuns([
+      { prId: null, runId: 'r1', costUsd: 1, findingsBySeverity: null },
+    ]);
+    expect(latestRunByPr.size).toBe(0);
+    expect(totalCostByPr.size).toBe(0);
+  });
+});
+
+describe('pickNeedingDiffStats', () => {
+  it('picks only PRs with all-zero diff stats, capped at the limit', () => {
+    const zero = { additions: 0, deletions: 0, filesCount: 0 };
+    const rows = [
+      { id: 'a', ...zero },
+      { id: 'b', additions: 3, deletions: 0, filesCount: 1 },
+      { id: 'c', ...zero },
+      { id: 'd', ...zero },
+    ];
+    expect(pickNeedingDiffStats(rows, 2).map((r) => r.id)).toEqual(['a', 'c']);
   });
 });

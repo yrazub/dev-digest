@@ -1,7 +1,7 @@
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { Finding, Intent, RunSummary, RunTrace } from '@devdigest/shared';
-import type { SeverityCounts } from '../pulls/status.js';
+import type { SeverityCounts } from './domain.js';
 
 /**
  * A2 — review data-access. The ONLY layer touching the DB for the review

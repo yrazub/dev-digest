@@ -2,7 +2,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { RunSummary, RunTrace } from '@devdigest/shared';
-import type { SeverityCounts } from '../../pulls/status.js';
+import type { SeverityCounts } from '../domain.js';
 
 // ---- in-flight / history --------------------------------------------------
 

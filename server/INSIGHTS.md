@@ -44,6 +44,13 @@ Traps we have already hit in the server. Append-only. See the root
   same insert once with a throwaway `tsx` script against `DATABASE_URL`, or use
   `cd e2e && npm run e2e:hermetic` for a fresh stack — never `docker compose down -v`.
 
+- **2026-09-27** — `modules/_shared/` is exempt from `dep-no-cross-module` but **not** from
+  `db-only-in-repository` (`.dependency-cruiser.cjs:58-59`, `from` covers all of `src/modules/`).
+  A helper shared by two modules therefore goes in `_shared/` with a *structural* input type and no
+  `src/db` import, not even `db/rows` types; a Drizzle row still satisfies it. Moving it to
+  `src/db/` instead would give every non-repository caller a new violation. Reference:
+  `findingRowToDto` + `FindingRecord` (`src/modules/_shared/finding-dto.ts:11`).
+
 ## Tool & Library Notes
 
 - **2026-09-27** — dependency-cruiser's `--ignore-known` takes an **optional** file argument, so
@@ -180,3 +187,7 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
   baseline and the `arch:check` CI step, which also cruises `../reviewer-core/src`. Recorded two
   depcruise quirks and the baseline decision.
 - **2026-09-27** — `pr-self-review` consumes `arch:check` JSON; recorded how its baselined and new violations differ. **See also:** `INSIGHTS.md` (root), 2026-09-27 entries.
+- **2026-09-27** — architecture refactor S1: split `pulls` into routes / service / repository /
+  domain, moved `rollupSeverities` to `reviews/domain.ts` and `findingRowToDto` to
+  `modules/_shared/finding-dto.ts`. The baseline went from 33 to 28, and the `pulls-*.it` tests passed unedited.
+  Plan: `specs/architecture-refactor.md`.
