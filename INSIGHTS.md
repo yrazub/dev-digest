@@ -155,6 +155,16 @@ be obvious to anyone reading the code, it does not belong here.
   window-placement fix lives outside the repo, in
   `~/.cache/chrome-devtools-mcp/chrome-profile/Default/Preferences` → `browser.window_placement`.
 
+- **2026-09-27** — the local `next-best-practices` skill was installed from `vercel-labs/next-skills`,
+  which Vercel has since retired: framework knowledge now ships as version-matched docs bundled
+  with Next.js plus a generated `AGENTS.md`/`CLAUDE.md` (Next 16.3+, or `npx @next/codemod@canary
+  agents-md` on older versions), because "always-available context outperforms on-demand
+  retrieval". Our copy will receive no updates and describes Next 16 behaviour while the client
+  runs Next 15; treat it as a snapshot, and prefer `nextjs.org/docs` when they disagree. Not yet
+  diffed against the last upstream version.
+  **Evidence 2026-09-27:** `skills-lock.json:28-29` — `"source": "vercel-labs/next-skills"`. The
+  retirement itself is external; see `.claude/skills/frontend-ui-architecture/research/notes/tooling_and_ai_skills.md`.
+
 ## Decisions
 
 - **2026-09-20** — session knowledge is recorded in the per-module `INSIGHTS.md` files, not in
@@ -180,6 +190,17 @@ be obvious to anyone reading the code, it does not belong here.
   were never prompted. The ignore rule has been removed and the file is tracked again, so the
   decision stands. Keep `.mcp.json` free of secrets and machine paths — it ships to every clone.
   **Evidence 2026-09-26:** `.mcp.json:1-14` — `npx chrome-devtools-mcp@1.9.0` and its flags only.
+
+- **2026-09-27** — the `frontend-ui-architecture` skill (code organization: where components,
+  constants, helpers, types and business logic live) is deliberately **project-agnostic**, and
+  focuses on organization only so it does not duplicate `react-best-practices`. DevDigest's own
+  layout (`_components/<Name>/`, `styles.ts` → `s`, `lib/hooks/<resource>.ts`) stays in
+  `client/CLAUDE.md`, which the skill defers to ("the project's own documents win"). Rejected:
+  baking DevDigest conventions into the skill, which would duplicate `client/CLAUDE.md` and
+  present house rules as universal. The research the skill was built from lives inside it, in
+  `research/`, rather than at the repo root.
+  **Evidence 2026-09-27:** `.claude/skills/frontend-ui-architecture/SKILL.md:14` — the
+  "project's own documents win" clause.
 
 ## Recurring Errors & Fixes
 
@@ -265,3 +286,8 @@ schema.
   **Evidence 2026-09-26:** uncommitted on `feature/finding-counter`;
   `client/src/app/repos/[repoId]/pulls/_components/FindingsPopover/FindingsPopover.tsx:101`
   (`createPortal`).
+- **2026-09-27** — researched React/Next.js code-organization practice (~110 graded sources) and
+  built the `frontend-ui-architecture` skill (v1.0.0) from it; recorded the retired
+  `next-best-practices` source here and the missing client linter in `client/INSIGHTS.md`.
+  **Evidence 2026-09-27:** uncommitted on `feature/finding-counter`;
+  `.claude/skills/frontend-ui-architecture/SKILL.md:1`.

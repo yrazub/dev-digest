@@ -37,3 +37,14 @@ Traps we have already hit in the web app. Append-only. See the root
   wheel at the list's end doesn't chain into `<main>` and close it that way.
   **Evidence 2026-09-27:** `src/app/repos/[repoId]/pulls/_components/FindingsPopover/FindingsPopover.tsx:72`
   (`onScroll` target check).
+
+## Tool & Library Notes
+
+- **2026-09-27** — the web app has **no linter at all**: no `lint` script, no `eslint` /
+  `eslint-config-next` dependency, no `eslint.config.*`. Structural rules (no cross-feature imports,
+  no aggregating `index.ts` barrels, no nested component definitions) are therefore prose-only
+  and nothing catches a violation. Adding lint means the ESLint CLI with a flat
+  `eslint.config.mjs` — `next lint` was deprecated in Next 15.5 and removed in 16 — plus
+  `import(-x)/no-restricted-paths` zones and `no-cycle`; a starting config is in
+  `.claude/skills/frontend-ui-architecture/references/enforcement.md`.
+  **Evidence 2026-09-27:** `client/package.json:5-11` — `scripts` has `dev`/`build`/`start`/`typecheck`/`test`, no `lint`.
