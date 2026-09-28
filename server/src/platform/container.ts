@@ -29,6 +29,7 @@ import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
+import { type HttpFetcher, NodeHttpFetcher } from '../adapters/http-fetch/index.js';
 
 /**
  * DI container. One per app instance. Holds config, db, the JobRunner,
@@ -51,6 +52,8 @@ export interface ContainerOverrides {
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
+  /** Public-URL text fetcher (skill import from URL). */
+  httpFetch?: HttpFetcher;
 }
 
 export class Container {
@@ -75,6 +78,7 @@ export class Container {
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
+  private _httpFetch?: HttpFetcher;
   private _priceBook?: PriceBook;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
@@ -129,6 +133,13 @@ export class Container {
     if (this.overrides.tokenizer) return this.overrides.tokenizer;
     this._tokenizer ??= new TiktokenTokenizer();
     return this._tokenizer;
+  }
+
+  /** SSRF-guarded https text fetcher for user-supplied URLs (skill import). */
+  get httpFetch(): HttpFetcher {
+    if (this.overrides.httpFetch) return this.overrides.httpFetch;
+    this._httpFetch ??= new NodeHttpFetcher();
+    return this._httpFetch;
   }
 
   /**
