@@ -1,7 +1,8 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
-import type { Skill, SkillSource, SkillType } from '@devdigest/shared';
+import type { Skill } from '@devdigest/shared';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
+import { skillRowToDto } from '../_shared/skill-dto.js';
 import type { SkillFieldChanges } from './domain.js';
 import type { NewSkill, SkillStore, SkillVersionRecord, SkillsUnitOfWork } from './ports.js';
 
@@ -11,24 +12,6 @@ import type { NewSkill, SkillStore, SkillVersionRecord, SkillsUnitOfWork } from 
  */
 
 type Executor = Db | Parameters<Parameters<Db['transaction']>[0]>[0];
-
-type SkillRow = typeof t.skills.$inferSelect;
-
-function toSkill(row: SkillRow, agentCount: number): Skill {
-  return {
-    id: row.id,
-    name: row.name,
-    description: row.description,
-    type: row.type as SkillType,
-    source: row.source as SkillSource,
-    body: row.body,
-    enabled: row.enabled,
-    version: row.version,
-    evidence_files: row.evidenceFiles ?? null,
-    agent_count: agentCount,
-    created_at: row.createdAt.toISOString(),
-  };
-}
 
 export class SkillsRepository implements SkillStore {
   constructor(private readonly db: Executor) {}
@@ -49,14 +32,14 @@ export class SkillsRepository implements SkillStore {
       .where(eq(t.skills.workspaceId, workspaceId))
       .groupBy(t.skills.id)
       .orderBy(t.skills.name);
-    return rows.map((r) => toSkill(r.skill, r.agentCount));
+    return rows.map((r) => skillRowToDto(r.skill, r.agentCount));
   }
 
   async get(workspaceId: string, id: string): Promise<Skill | undefined> {
     const [row] = await this.selectWithCount()
       .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
       .groupBy(t.skills.id);
-    return row ? toSkill(row.skill, row.agentCount) : undefined;
+    return row ? skillRowToDto(row.skill, row.agentCount) : undefined;
   }
 
   async findIdByName(workspaceId: string, name: string): Promise<string | undefined> {

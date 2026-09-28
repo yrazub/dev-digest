@@ -1,6 +1,7 @@
 import type { Container } from '../../platform/container.js';
 import type {
   Agent,
+  AgentSkill,
   AgentSkillLink,
   AgentVersion,
   CiFailOn,
@@ -10,6 +11,8 @@ import type {
 } from '@devdigest/shared';
 import { AgentsRepository } from './repository.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
+import { skillRowToDto } from '../_shared/skill-dto.js';
+import { ValidationError } from '../../platform/errors.js';
 
 /**
  * A2 — agents service. Business logic for the Agents tab + Agent Editor.
@@ -56,13 +59,20 @@ export class AgentsService {
   }
 
   async list(workspaceId: string): Promise<Agent[]> {
-    const rows = await this.repo.list(workspaceId);
-    return rows.map((r) => toAgentDto(r));
+    const [rows, counts] = await Promise.all([
+      this.repo.list(workspaceId),
+      this.repo.skillCounts(workspaceId),
+    ]);
+    return rows.map((r) => toAgentDto(r, counts.get(r.id) ?? 0));
   }
 
   async get(workspaceId: string, id: string): Promise<Agent | undefined> {
     const row = await this.repo.getById(workspaceId, id);
-    return row ? toAgentDto(row) : undefined;
+    return row ? toAgentDto(row, await this.skillCount(id)) : undefined;
+  }
+
+  private async skillCount(agentId: string): Promise<number> {
+    return (await this.repo.linkedSkills(agentId)).length;
   }
 
   /** Delete an agent (and its versions/skill-links, via cascade). */
@@ -105,7 +115,7 @@ export class AgentsService {
       ...(patch.repo_intel !== undefined ? { repoIntel: patch.repo_intel } : {}),
       ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
     });
-    return row ? toAgentDto(row) : undefined;
+    return row ? toAgentDto(row, await this.skillCount(id)) : undefined;
   }
 
   /**
@@ -142,6 +152,39 @@ export class AgentsService {
   }
 
   /**
+   * Every workspace skill as seen from this agent's Skills tab: linked ones
+   * first in prompt order, then the rest by name. Undefined when the agent is
+   * not in the workspace.
+   */
+  async agentSkills(workspaceId: string, agentId: string): Promise<AgentSkill[] | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    const [all, links] = await Promise.all([
+      this.repo.workspaceSkills(workspaceId),
+      this.repo.linkedSkills(agentId),
+    ]);
+    const orderById = new Map(links.map((l, i) => [l.skill.id, i]));
+    const rows: AgentSkill[] = all.map((r) => {
+      const order = orderById.get(r.skill.id);
+      return {
+        ...skillRowToDto(r.skill, r.agentCount),
+        linked: order !== undefined,
+        order: order ?? null,
+      };
+    });
+    const linked = rows.filter((s) => s.linked).sort((a, b) => a.order! - b.order!);
+    return [...linked, ...rows.filter((s) => !s.linked)];
+  }
+
+  /** Every id must be a distinct skill of this workspace (422 otherwise). */
+  private async assertWorkspaceSkills(workspaceId: string, skillIds: string[]): Promise<void> {
+    const unique = new Set(skillIds);
+    if (unique.size !== skillIds.length) throw new ValidationError('skill_ids contains duplicates');
+    const found = await this.repo.countWorkspaceSkills(workspaceId, skillIds);
+    if (found !== skillIds.length) throw new ValidationError('Unknown skill id for this workspace');
+  }
+
+  /**
    * Set / reorder the agent's linked skills. If `skillIds` is provided, replaces
    * the whole set in that order. Returns the resulting ordered links.
    */
@@ -149,11 +192,12 @@ export class AgentsService {
     workspaceId: string,
     agentId: string,
     skillIds: string[],
-  ): Promise<AgentSkillLink[] | undefined> {
+  ): Promise<AgentSkill[] | undefined> {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
+    await this.assertWorkspaceSkills(workspaceId, skillIds);
     await this.repo.setSkills(agentId, skillIds);
-    return this.skillLinks(agentId);
+    return this.agentSkills(workspaceId, agentId);
   }
 
   /** Link a single skill (append or set order) — additive to existing links. */
@@ -162,13 +206,14 @@ export class AgentsService {
     agentId: string,
     skillId: string,
     order?: number,
-  ): Promise<AgentSkillLink[] | undefined> {
+  ): Promise<AgentSkill[] | undefined> {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
+    await this.assertWorkspaceSkills(workspaceId, [skillId]);
     const existing = await this.repo.linkedSkills(agentId);
     const resolvedOrder = order ?? existing.length;
     await this.repo.linkSkill(agentId, skillId, resolvedOrder);
-    return this.skillLinks(agentId);
+    return this.agentSkills(workspaceId, agentId);
   }
 
   /**

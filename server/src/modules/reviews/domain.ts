@@ -17,3 +17,19 @@ export function rollupSeverities(rows: { severity: string }[]): SeverityCounts {
   }
   return c;
 }
+
+/** A skill as it enters the prompt: identity plus body. */
+export interface PromptSkill {
+  name: string;
+  version: number;
+  body: string;
+}
+
+/**
+ * Render skills as prompt blocks, one per skill, in the given order — the
+ * order set on the agent's Skills tab. Each block is headed so the run trace
+ * shows every skill separately.
+ */
+export function renderSkillBlocks(skills: PromptSkill[]): string[] {
+  return skills.map((s) => `### ${s.name} (v${s.version})\n${s.body.trim()}`);
+}

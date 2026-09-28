@@ -8,7 +8,7 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
-import { rollupSeverities } from './domain.js';
+import { renderSkillBlocks, rollupSeverities } from './domain.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -184,6 +184,17 @@ export class ReviewRunExecutor {
 
       const task = taskLine(pull) + rankNote;
 
+      // L02 — the agent's enabled + linked skills, in the order set on its
+      // Skills tab. That order IS the prompt order; nothing re-sorts it.
+      const promptSkills = await this.repo.promptSkillsForAgent(agent.id);
+      const skillBlocks = renderSkillBlocks(promptSkills);
+      const tokenizer = this.container.tokenizer;
+      if (skillBlocks.length === 0) runLog.info('Skills: none linked');
+      skillBlocks.forEach((block, i) => {
+        const s = promptSkills[i]!;
+        runLog.info(`Skill: ${s.name} v${s.version} · ~${tokenizer.count(block)} tok`);
+      });
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -204,6 +215,8 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // L02 — omitted when empty so the slot drops out of the prompt.
+        ...(skillBlocks.length > 0 ? { skills: skillBlocks } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -272,7 +285,14 @@ export class ReviewRunExecutor {
           findings: findingRows.length,
           grounding,
         },
-        prompt_assembly: outcome.assembly,
+        prompt_assembly: {
+          ...outcome.assembly,
+          // L02 — the skills block's own weight, and which skills made it in.
+          skills_tokens: outcome.assembly.skills ? tokenizer.count(outcome.assembly.skills) : null,
+          skills_loaded: promptSkills.length
+            ? promptSkills.map((s) => ({ name: s.name, version: s.version }))
+            : null,
+        },
         tool_calls: outcome.chunks.map((c) => ({
           tool: 'review_file',
           args: c.label,

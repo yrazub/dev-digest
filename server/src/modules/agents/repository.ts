@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
@@ -187,6 +187,40 @@ export class AgentsRepository {
   }
 
   // ---- agent_skills link table (A2 owns the agent side) -------------------
+
+  /** Linked-skill count per agent in the workspace (agents with none are absent). */
+  async skillCounts(workspaceId: string): Promise<Map<string, number>> {
+    const rows = await this.db
+      .select({ agentId: t.agentSkills.agentId, n: sql<number>`count(*)::int` })
+      .from(t.agentSkills)
+      .innerJoin(t.agents, eq(t.agentSkills.agentId, t.agents.id))
+      .where(eq(t.agents.workspaceId, workspaceId))
+      .groupBy(t.agentSkills.agentId);
+    return new Map(rows.map((r) => [r.agentId, r.n]));
+  }
+
+  /** Every workspace skill with its total agent-link count, ordered by name. */
+  async workspaceSkills(
+    workspaceId: string,
+  ): Promise<{ skill: typeof t.skills.$inferSelect; agentCount: number }[]> {
+    return this.db
+      .select({ skill: t.skills, agentCount: sql<number>`count(${t.agentSkills.agentId})::int` })
+      .from(t.skills)
+      .leftJoin(t.agentSkills, eq(t.agentSkills.skillId, t.skills.id))
+      .where(eq(t.skills.workspaceId, workspaceId))
+      .groupBy(t.skills.id)
+      .orderBy(t.skills.name);
+  }
+
+  /** How many of `skillIds` exist in the workspace. */
+  async countWorkspaceSkills(workspaceId: string, skillIds: string[]): Promise<number> {
+    if (skillIds.length === 0) return 0;
+    const [row] = await this.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), inArray(t.skills.id, skillIds)));
+    return row?.n ?? 0;
+  }
 
   /** Skills linked to an agent, in `order` ascending. */
   async linkedSkills(agentId: string): Promise<LinkedSkillRow[]> {

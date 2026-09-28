@@ -1,7 +1,7 @@
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { Finding, Intent, RunSummary, RunTrace } from '@devdigest/shared';
-import type { SeverityCounts } from './domain.js';
+import type { PromptSkill, SeverityCounts } from './domain.js';
 
 /**
  * A2 — review data-access. The ONLY layer touching the DB for the review
@@ -22,6 +22,7 @@ export type ReviewRow = typeof t.reviews.$inferSelect;
 import * as reviewRepo from './repository/review.repo.js';
 import * as runRepo from './repository/run.repo.js';
 import * as pullRepo from './repository/pull.repo.js';
+import * as skillRepo from './repository/skill.repo.js';
 
 export class ReviewRepository {
   constructor(private db: Db) {}
@@ -38,6 +39,13 @@ export class ReviewRepository {
 
   getPrFiles(prId: string): Promise<(typeof t.prFiles.$inferSelect)[]> {
     return pullRepo.getPrFiles(this.db, prId);
+  }
+
+  // ---- skills (L02) -------------------------------------------------------
+
+  /** Enabled + linked skills of an agent, in prompt order. */
+  promptSkillsForAgent(agentId: string): Promise<PromptSkill[]> {
+    return skillRepo.promptSkillsForAgent(this.db, agentId);
   }
 
   // ---- reviews + findings -------------------------------------------------

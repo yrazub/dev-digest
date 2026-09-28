@@ -3,7 +3,7 @@
  * written onto `agent_runs.findings_by_severity` when a run completes.
  */
 import { describe, it, expect } from 'vitest';
-import { rollupSeverities } from '../src/modules/reviews/domain.js';
+import { renderSkillBlocks, rollupSeverities } from '../src/modules/reviews/domain.js';
 
 describe('rollupSeverities', () => {
   it('tallies findings into CRITICAL / WARNING / SUGGESTION buckets (ignores unknown)', () => {
@@ -20,5 +20,16 @@ describe('rollupSeverities', () => {
 
   it('is all-zero for no findings', () => {
     expect(rollupSeverities([])).toEqual({ CRITICAL: 0, WARNING: 0, SUGGESTION: 0 });
+  });
+});
+
+describe('renderSkillBlocks', () => {
+  it('renders one headed block per skill, in the given order', () => {
+    expect(
+      renderSkillBlocks([
+        { name: 'beta', version: 2, body: '  Rule B.\n' },
+        { name: 'alpha', version: 1, body: 'Rule A.' },
+      ]),
+    ).toEqual(['### beta (v2)\nRule B.', '### alpha (v1)\nRule A.']);
   });
 });
