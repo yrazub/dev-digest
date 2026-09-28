@@ -62,6 +62,22 @@ Traps we have already hit in the web app. Append-only. See the root
   where the copy drifts from the kit. If `src/vendor/ui` is ever re-copied from its origin,
   re-apply those three edits. (`src/vendor/ui/shell/Sidebar.tsx:45`, `src/components/app-shell/nav.ts`)
 
+## Recurring Errors & Fixes
+
+### A page 500s with "Module not found: Can't resolve './contracts/findings.js'" from `src/vendor/shared/index.ts`
+**Date:** 2026-09-28
+**Cause:** a client file imported a runtime *value* (a Zod schema such as `SkillType` or
+`SkillName`) from `@devdigest/shared`. A type-only import is erased at compile time, but a
+value import pulls `vendor/shared/index.ts` into the webpack bundle. Its `./contracts/*.js`
+re-exports use NodeNext-style `.js` suffixes that Next's webpack cannot resolve. `pnpm
+typecheck` passes, so the break only shows when the route is compiled in the browser.
+**Fix / rule:** in `client/`, import only `type`s from `@devdigest/shared`. When the client
+needs a value (an enum list, a validation rule), mirror it in `src/lib/` with a "keep in sync"
+note, as `src/lib/feature-models.ts` and `src/lib/skill-rules.ts` do.
+**Evidence:** `src/lib/feature-models.ts:6-11` (the original note), `src/lib/skill-rules.ts`
+(`SKILL_TYPES`, `isValidSkillName`).
+
 ## Session Notes
 
 - **2026-09-28** — moved sidebar menu ownership from the vendored kit to `components/app-shell/nav.ts` (injected via `ShellContext.nav`).
+- **2026-09-28** — built the Skills screens (L02 phase 5); client code must import only types from `@devdigest/shared`.

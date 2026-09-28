@@ -26,6 +26,9 @@ export const APP_NAV: AppNavGroup[] = [
   },
   {
     sectionKey: "skillsLab",
-    items: [{ key: "agents", icon: "Cpu", href: "/agents", gKey: "a" }],
+    items: [
+      { key: "skills", icon: "Sparkles", href: "/skills", gKey: "s" },
+      { key: "agents", icon: "Cpu", href: "/agents", gKey: "a" },
+    ],
   },
 ];
