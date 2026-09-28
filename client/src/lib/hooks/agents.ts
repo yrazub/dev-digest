@@ -3,7 +3,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { Agent, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
+import type { Agent, AgentSkill, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
 
 export function useAgents() {
   return useQuery({
@@ -87,5 +87,59 @@ export function useProviderModels(provider: Provider | null | undefined) {
     queryFn: () => api.get<ModelInfo[]>(`/providers/${provider}/models`),
     enabled: !!provider,
     staleTime: 5 * 60_000,
+  });
+}
+
+/** Every workspace skill as seen from one agent (linked first, in prompt order). */
+export function useAgentSkills(agentId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["agent-skills", agentId],
+    queryFn: () => api.get<AgentSkill[]>(`/agents/${agentId}/skills`),
+    enabled: !!agentId,
+  });
+}
+
+/**
+ * The list as it will look once `linkedIds` (in order) are the agent's links:
+ * linked rows first in that order, then the rest in their current order.
+ */
+export function applyLinkOrder(list: AgentSkill[], linkedIds: string[]): AgentSkill[] {
+  const byId = new Map(list.map((s) => [s.id, s]));
+  const linked: AgentSkill[] = [];
+  for (const id of linkedIds) {
+    const s = byId.get(id);
+    if (s) linked.push({ ...s, linked: true, order: linked.length });
+  }
+  const set = new Set(linkedIds);
+  const rest = list.filter((s) => !set.has(s.id)).map((s) => ({ ...s, linked: false, order: null }));
+  return [...linked, ...rest];
+}
+
+/**
+ * Replace the agent's linked skills with `linkedIds`, in that order — the order
+ * of their blocks in the prompt. Optimistic: the Skills tab moves at once and
+ * rolls back if the server refuses.
+ */
+export function useSetAgentSkills(agentId: string) {
+  const qc = useQueryClient();
+  const key = ["agent-skills", agentId];
+  return useMutation({
+    mutationFn: (linkedIds: string[]) =>
+      api.post<AgentSkill[]>(`/agents/${agentId}/skills`, { skill_ids: linkedIds }),
+    onMutate: async (linkedIds) => {
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<AgentSkill[]>(key);
+      if (previous) qc.setQueryData(key, applyLinkOrder(previous, linkedIds));
+      return { previous };
+    },
+    onError: (_e, _ids, ctx) => {
+      if (ctx?.previous) qc.setQueryData(key, ctx.previous);
+    },
+    onSuccess: (list) => {
+      qc.setQueryData(key, list);
+      qc.invalidateQueries({ queryKey: ["agents"] });
+      qc.invalidateQueries({ queryKey: ["agent", agentId] });
+      qc.invalidateQueries({ queryKey: ["skills"] });
+    },
   });
 }
