@@ -48,6 +48,10 @@ export const PromptAssembly = z.object({
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
   user: z.string(),
+  /** Tokens of the whole skills block (tokenizer count); null when no skills. */
+  skills_tokens: z.number().int().nullish(),
+  /** Skills injected into this run, in prompt order. */
+  skills_loaded: z.array(z.object({ name: z.string(), version: z.number().int() })).nullish(),
 });
 export type PromptAssembly = z.infer<typeof PromptAssembly>;
 
