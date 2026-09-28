@@ -10,6 +10,7 @@ import { useActiveRepo } from "@/lib/repo-context";
 import { usePulls } from "@/lib/hooks/pulls";
 import { useDeleteRepo } from "@/lib/hooks/repos";
 import { activeKeyFor, toShellRepo } from "../helpers";
+import { useAppNav } from "./useAppNav";
 
 interface ShellContextOptions {
   onOpenCommandPalette: () => void;
@@ -28,6 +29,7 @@ export function useShellContext({ onOpenCommandPalette }: ShellContextOptions): 
   const { repoId, repos, activeRepo, setRepoId } = useActiveRepo();
   const { data: pulls } = usePulls(repoId);
   const deleteRepo = useDeleteRepo();
+  const { groups: nav } = useAppNav();
 
   const onSelectRepo = React.useCallback(
     (id: string) => {
@@ -74,6 +76,7 @@ export function useShellContext({ onOpenCommandPalette }: ShellContextOptions): 
       // Sidebar badge = PRs that still NEED review, not the total PR count.
       // 0 → undefined so the badge hides entirely when nothing needs review.
       prCount: pulls?.filter((p) => p.status === "needs_review").length || undefined,
+      nav,
     }),
     [
       pathname,
@@ -87,6 +90,7 @@ export function useShellContext({ onOpenCommandPalette }: ShellContextOptions): 
       onAddRepo,
       onRemoveRepo,
       pulls,
+      nav,
     ],
   );
 }

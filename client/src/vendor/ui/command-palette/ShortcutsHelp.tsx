@@ -1,11 +1,20 @@
 /* ShortcutsHelp — keyboard-shortcuts cheat sheet overlay (triggered by `?`). */
 import React from "react";
 import { Kbd } from "../primitives";
-import { SHORTCUTS } from "../nav";
+import { SHORTCUTS, type ShortcutDef } from "../nav";
 
-export function ShortcutsHelp({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function ShortcutsHelp({
+  open,
+  onClose,
+  shortcuts = SHORTCUTS,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Shortcut list, supplied by the app. Falls back to the kit's `SHORTCUTS`. */
+  shortcuts?: ShortcutDef[];
+}) {
   if (!open) return null;
-  const groups = Array.from(new Set(SHORTCUTS.map((s) => s.group)));
+  const groups = Array.from(new Set(shortcuts.map((s) => s.group)));
   return (
     <div style={{ position: "fixed", inset: 0, display: "grid", placeItems: "center", zIndex: 60, padding: 28 }}>
       <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" }} />
@@ -41,7 +50,7 @@ export function ShortcutsHelp({ open, onClose }: { open: boolean; onClose: () =>
                 {g}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {SHORTCUTS.filter((s) => s.group === g).map((s) => (
+                {shortcuts.filter((s) => s.group === g).map((s) => (
                   <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
                     <span style={{ flex: 1, color: "var(--text-secondary)" }}>{s.label}</span>
                     {s.keys.split(" ").map((k, i) => (

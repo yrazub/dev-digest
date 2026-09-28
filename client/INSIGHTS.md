@@ -48,3 +48,20 @@ Traps we have already hit in the web app. Append-only. See the root
   `import(-x)/no-restricted-paths` zones and `no-cycle`; a starting config is in
   `.claude/skills/frontend-ui-architecture/references/enforcement.md`.
   **Evidence 2026-09-27:** `client/package.json:5-11` — `scripts` has `dev`/`build`/`start`/`typecheck`/`test`, no `lint`.
+
+## Decisions
+
+- **2026-09-28** — the sidebar menu is owned by the app, not the vendored kit. `APP_NAV` in
+  `src/components/app-shell/nav.ts` is injected through `ShellContext.nav`, and the `?` cheat
+  sheet gets `ShortcutsHelp`'s `shortcuts` prop, both built by `useAppNav`. This took a
+  one-time, additive edit to three `src/vendor/ui` files. Each gained an optional input that
+  falls back to the kit's own `NAV` / `SHORTCUTS`: `shell/types.ts` (`nav?`),
+  `shell/Sidebar.tsx` (`ctx.nav ?? NAV`), and `command-palette/ShortcutsHelp.tsx`
+  (`shortcuts = SHORTCUTS`). Rejected: editing `vendor/ui/nav.ts` for every new page, which
+  reopens the "do not touch vendor" question each lesson; and copying `Sidebar` into the app,
+  where the copy drifts from the kit. If `src/vendor/ui` is ever re-copied from its origin,
+  re-apply those three edits. (`src/vendor/ui/shell/Sidebar.tsx:45`, `src/components/app-shell/nav.ts`)
+
+## Session Notes
+
+- **2026-09-28** — moved sidebar menu ownership from the vendored kit to `components/app-shell/nav.ts` (injected via `ShellContext.nav`).

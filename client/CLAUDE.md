@@ -30,6 +30,7 @@ If nothing matches, proceed.
 | `src/app/**/page.tsx` | routes (App Router). Pages are thin |
 | `src/app/**/_components/<Name>/` | feature logic, colocated with its own `*.test.tsx` |
 | `src/components/` | cross-cutting chrome: `app-shell` (nav, breadcrumbs, `g`-then-key shortcuts), `diff-viewer`, `page-shell`, `mermaid-diagram` |
+| `src/components/app-shell/nav.ts` | `APP_NAV` — the sidebar menu. **Add a page's menu item here**, never in `src/vendor/ui/nav.ts`; labels go in `messages/en/shell.json` (`nav.<key>`, `navSection.<key>`) |
 | `src/lib/hooks/` | one hook per API resource — the only data-access layer |
 | `src/lib/api.ts` | the single fetch wrapper. `NEXT_PUBLIC_API_BASE`, default `http://localhost:3001` |
 | `messages/<locale>/` | `next-intl` strings |

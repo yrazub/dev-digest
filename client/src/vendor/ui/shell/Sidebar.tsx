@@ -42,7 +42,7 @@ export function Sidebar({ ctx }: { ctx: ShellContext }) {
       </Link>
       <RepoSwitcher ctx={ctx} />
       <div style={{ overflowY: "auto", flex: 1, margin: "5px -5px 0", padding: "0 5px" }}>
-        {NAV.map((grp, gi) => (
+        {(ctx.nav ?? NAV).map((grp, gi) => (
           <div key={gi} style={{ marginBottom: 16 }}>
             <div
               style={{
