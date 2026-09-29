@@ -7,7 +7,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import type { Skill } from "@devdigest/shared";
 import { Badge, Icon, Toggle } from "@devdigest/ui";
-import { TYPE_COLOR } from "@/app/skills/_lib/skill-display";
+import { TYPE_COLOR } from "@/lib/skill-display";
 import { s } from "./styles";
 
 export function SkillCard({

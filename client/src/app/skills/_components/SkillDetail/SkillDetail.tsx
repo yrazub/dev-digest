@@ -7,7 +7,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import type { Skill } from "@devdigest/shared";
 import { Badge, Tabs } from "@devdigest/ui";
-import { TYPE_COLOR } from "@/app/skills/_lib/skill-display";
+import { TYPE_COLOR } from "@/lib/skill-display";
 import { ConfigTab } from "./_components/ConfigTab";
 import { PreviewTab } from "./_components/PreviewTab";
 import { VersionsTab } from "./_components/VersionsTab";

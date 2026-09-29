@@ -14,7 +14,7 @@ import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 import { ListDetailLayout } from "@/components/list-detail-layout";
 import { useDeleteSkill, useSkill, useSkills, useUpdateSkill } from "@/lib/hooks/skills";
 import { useToast } from "@/lib/toast";
-import { filterSkills } from "@/app/skills/_lib/skill-display";
+import { filterSkills } from "@/lib/skill-display";
 import { ImportSkillModal } from "../ImportSkillModal";
 import { SkillFormModal } from "../SkillFormModal";
 import { SkillCard } from "../SkillCard";
