@@ -64,6 +64,19 @@ Traps we have already hit in the web app. Append-only. See the root
 
 ## Recurring Errors & Fixes
 
+### App renders as unstyled HTML; `layout.css`, `main-app.js`, `app/page.js` 404 while the server answers 200
+**Date:** 2026-09-28
+**Cause:** `next build` ran in `client/` while `next dev` was still up. Both write to the same
+`client/.next`, so the production build replaced the dev server's output. Dev kept serving HTML
+that links to chunks it no longer has. Signs: `.next/BUILD_ID`, `.next/export-marker.json` and
+content-hashed files in `.next/static/chunks/`, newer than the dev process start. `next dev`
+creates none of them.
+**Fix / rule:** stop the dev server, `rm -rf client/.next`, and `pnpm dev` again. Never run
+`pnpm build` in `client/` while dev is running. For a correctness check use `pnpm typecheck`
+and `pnpm test`, which do not touch `.next`.
+**Evidence:** `client/package.json:6-7` — `"dev": "next dev -p 3000"` and `"build": "next build"`,
+with no separate `distDir`, so both share `.next`.
+
 ### A page 500s with "Module not found: Can't resolve './contracts/findings.js'" from `src/vendor/shared/index.ts`
 **Date:** 2026-09-28
 **Cause:** a client file imported a runtime *value* (a Zod schema such as `SkillType` or
@@ -79,5 +92,6 @@ note, as `src/lib/feature-models.ts` and `src/lib/skill-rules.ts` do.
 
 ## Session Notes
 
+- **2026-09-28** — diagnosed and fixed the unstyled-app breakage caused by `next build` overwriting the dev server's `.next`.
 - **2026-09-28** — moved sidebar menu ownership from the vendored kit to `components/app-shell/nav.ts` (injected via `ShellContext.nav`).
 - **2026-09-28** — built the Skills screens (L02 phase 5); client code must import only types from `@devdigest/shared`.
