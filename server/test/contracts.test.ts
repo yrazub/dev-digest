@@ -17,6 +17,7 @@ import {
   Settings,
   Repo,
   PrDetail,
+  PrMeta,
 } from '@devdigest/shared';
 
 /**
@@ -196,6 +197,7 @@ describe('AI contracts parse fixtures', () => {
       tokens_in: 1,
       tokens_out: 1,
       findings_count: 0,
+      findings_by_severity: null,
       grounding: '0/0 passed',
       ran_at: null,
       score: null,
@@ -203,6 +205,39 @@ describe('AI contracts parse fixtures', () => {
     };
     expect(RunSummary.parse({ ...summary, cost_usd: 0.0013 }).cost_usd).toBe(0.0013);
     expect(RunSummary.parse({ ...summary, cost_usd: null }).cost_usd).toBeNull();
+  });
+
+  it('RunSummary carries a per-severity findings breakdown, required but nullable', () => {
+    const summary = {
+      run_id: 'r1',
+      agent_id: null,
+      agent_name: null,
+      provider: 'openai',
+      model: 'gpt-4.1',
+      status: 'done',
+      error: null,
+      duration_ms: 1,
+      tokens_in: 1,
+      tokens_out: 1,
+      cost_usd: 0.0013,
+      findings_count: 3,
+      grounding: '3/3 passed',
+      ran_at: null,
+      score: 61,
+      blockers: 1,
+    };
+    // the key is always written by the server, so it is required (not optional)
+    expect(() => RunSummary.parse(summary)).toThrow();
+    const withBreakdown = {
+      ...summary,
+      findings_by_severity: { CRITICAL: 1, WARNING: 2, SUGGESTION: 0 },
+    };
+    expect(RunSummary.parse(withBreakdown).findings_by_severity).toEqual({
+      CRITICAL: 1,
+      WARNING: 2,
+      SUGGESTION: 0,
+    });
+    expect(RunSummary.parse({ ...summary, findings_by_severity: null }).findings_by_severity).toBeNull();
   });
 });
 
@@ -243,5 +278,43 @@ describe('platform DTOs', () => {
         commits: [],
       }),
     ).not.toThrow();
+  });
+
+  it('PrMeta carries an optional findings breakdown + read-only preview', () => {
+    const base = {
+      number: 482,
+      title: 't',
+      author: 'a',
+      branch: 'b',
+      base: 'main',
+      head_sha: 'sha',
+      additions: 1,
+      deletions: 0,
+      files_count: 1,
+      status: 'needs_review' as const,
+    };
+    // absent entirely (list endpoint, no completed run) — nullish, so omission parses fine
+    expect(PrMeta.parse(base).findings_by_severity).toBeUndefined();
+    expect(PrMeta.parse(base).findings_preview).toBeUndefined();
+
+    const withBreakdown = PrMeta.parse({
+      ...base,
+      findings_by_severity: { CRITICAL: 1, WARNING: 1, SUGGESTION: 0 },
+      findings_preview: [
+        {
+          id: 'f1',
+          severity: 'CRITICAL',
+          category: 'security',
+          title: 'Hardcoded Stripe secret key in commit',
+          file: 'src/config.ts',
+          start_line: 12,
+          end_line: 12,
+          rationale: 'Line 12 contains a literal `sk_live_` Stripe key.',
+          confidence: 0.98,
+        },
+      ],
+    });
+    expect(withBreakdown.findings_by_severity).toEqual({ CRITICAL: 1, WARNING: 1, SUGGESTION: 0 });
+    expect(withBreakdown.findings_preview).toHaveLength(1);
   });
 });

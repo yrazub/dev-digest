@@ -49,13 +49,17 @@ From the design file, `docs/DevDigest Design (standalone).html`:
 
 | # | Screen | What it shows |
 |---|---|---|
-| A | Pull-request list, `/repos/:repoId/pulls` | a `COST` column — the cost of that PR's **latest completed** run |
+| A | Pull-request list, `/repos/:repoId/pulls` | a `COST` column — the **total** cost of all that PR's completed runs |
 | B | PR detail → Agent runs | on the timeline row, `9,119 tok · $0.0013` under the timestamp; and the run's cost in the "Review runs" accordion header |
 | C | Run Trace drawer | a fourth **Stats** tile, making the row `DURATION · TOKENS · COST · FINDINGS` |
 
 A shows a per-PR roll-up, B and C show a single run. That is the whole product decision:
-the list answers "what has this PR cost me lately", the detail answers "what did this run
-cost". Neither sums across PRs — an account-wide cost dashboard is L08's job, not this one.
+the list answers "what has this PR cost me in total" (hw1 criterion #12), the detail answers
+"what did this run cost". Neither sums across PRs — an account-wide cost dashboard is L08's
+job, not this one. One unpriced run makes the PR total unknown (`—`), never a partial sum.
+
+> **Revised 2026-09-26:** A first showed the latest completed run's cost; it now shows the
+> total, per `docs/hw1-criteria.md` #12.
 
 Four decimal places everywhere, because a single run routinely costs a fraction of a cent
 and two decimals would render most of the product's real spend as `$0.00`.
@@ -82,9 +86,11 @@ The per-package criteria are in the module specs. Across the boundary:
 2. The number on screen C for a run equals the number on screen B for the same run.
 3. Pointing an agent at a model that neither the static price table nor OpenRouter prices
    produces `—` on every surface — never `$0.0000`.
-4. A failed or cancelled run contributes no cost anywhere, and does not overwrite the cost
-   already shown for the PR's last successful run.
-5. Data that predates the feature — runs and trace documents written before the migration —
+4. A failed or cancelled run contributes no cost anywhere and leaves the PR's total on
+   screen A unchanged.
+5. Two successful runs of $0.0013 and $0.0037 on one PR show `$0.0050` on screen A, while
+   each run still shows its own cost on screens B and C.
+6. Data that predates the feature — runs and trace documents written before the migration —
    renders as unknown rather than breaking a screen.
 
 ## Out of scope

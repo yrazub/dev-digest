@@ -16,8 +16,12 @@ swapped for mocks in tests.
 - **Stack:** Fastify 5 (`@fastify/helmet`, `@fastify/rate-limit`, `@fastify/cors`,
   `fastify-sse-v2` for streaming run traces), Drizzle ORM, `postgres`, pgvector.
   Zod contracts from `src/vendor/shared` (`@devdigest/shared`) double as route
-  schemas via `fastify-type-provider-zod` — one definition drives request
-  validation **and** response serialization.
+  schemas via `fastify-type-provider-zod`: they validate **requests**
+  (`params`/`body` → `422`) and type the handlers' return values. Responses are
+  **not** checked against them at runtime — no route declares a
+  `schema.response`, so a field the repository maps reaches the wire as-is. The
+  error handler's response-serialization branch (→ `500`) only applies to a
+  route that adds one.
 - **Run:** `pnpm dev` (`:3001`). **Migrate/seed:** `pnpm db:migrate`,
   `pnpm db:seed`. **Test:** `pnpm test` (see [Testing](#testing)).
 - **No keys required to boot:** `loadConfig` (`src/platform/config.ts`) marks

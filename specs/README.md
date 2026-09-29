@@ -10,6 +10,7 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | Spec | Status |
 |---|---|
 | [`L01-run-cost.md`](L01-run-cost.md) | draft |
+| [`L01-findings-counter.md`](L01-findings-counter.md) | draft |
 
 The lesson roadmap (L01–L08) is in the root [`README.md`](../README.md).
 When you add a spec, add a row above.

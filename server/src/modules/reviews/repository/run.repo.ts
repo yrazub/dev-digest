@@ -2,6 +2,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { RunSummary, RunTrace } from '@devdigest/shared';
+import type { SeverityCounts } from '../../pulls/status.js';
 
 // ---- in-flight / history --------------------------------------------------
 
@@ -61,6 +62,7 @@ export async function listRunsForPull(
     tokens_out: run.tokensOut,
     cost_usd: run.costUsd,
     findings_count: run.findingsCount,
+    findings_by_severity: run.findingsBySeverity ?? null,
     grounding: run.grounding,
     ran_at: run.ranAt ? run.ranAt.toISOString() : null,
     score: run.score,
@@ -150,6 +152,8 @@ export async function completeAgentRun(
     /** USD cost of the run; null when the model is unpriced and on failed/cancelled runs. */
     costUsd?: number | null;
     findingsCount: number;
+    /** Per-severity breakdown of findingsCount; null on failed/cancelled runs. */
+    findingsBySeverity?: SeverityCounts | null;
     grounding: string;
     /** Review score (0-100); null on failed/cancelled runs. */
     score?: number | null;
@@ -168,6 +172,7 @@ export async function completeAgentRun(
       tokensOut: values.tokensOut,
       costUsd: values.costUsd ?? null,
       findingsCount: values.findingsCount,
+      findingsBySeverity: values.findingsBySeverity ?? null,
       grounding: values.grounding,
       score: values.score ?? null,
       blockers: values.blockers ?? null,

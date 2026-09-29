@@ -16,3 +16,7 @@ are the executable acceptance criteria, so there is no separate prose spec here.
 
 Read [`../README.md`](../README.md) before adding one — locator rules and the
 seeded-data precondition are not optional.
+
+The flows are the acceptance criteria, but what each one silently assumes
+about `seed.ts`'s output is documented separately in
+[`seed-fixtures.md`](seed-fixtures.md).

@@ -8,8 +8,9 @@
 |---|---|
 | writing or editing a flow | `README.md` — "How a flow works", plus an existing `specs/*.flow.json` |
 | a flow that fails locally but passes in CI | `README.md` — the freshly-seeded-DB precondition |
-| the runner, its conventions, or `{BASE}` substitution | `run.ts` and `agent-browser.json` |
-| what these flows are meant to cover at all | `../TESTING.md` |
+| the runner, its conventions, or `{BASE}` substitution | `docs/runner-internals.md`, then `run.ts` and `agent-browser.json` |
+| what these flows are meant to cover at all, or which flow a check belongs in | `docs/coverage-strategy.md`, then `../TESTING.md` |
+| the seed data a flow depends on, or a change to `server/src/db/seed.ts` | `specs/seed-fixtures.md` — the seed contract the flows rely on |
 | a failure that smells familiar | `INSIGHTS.md` — and **append** to it through the `engineering-insights` skill |
 
 If nothing matches, proceed.

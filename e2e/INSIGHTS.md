@@ -17,3 +17,6 @@ other repos you imported, so the redirect lands somewhere else.
 alternate ports and leaves your dev DB alone. Never "fix" this by resetting your dev
 database — and never with `docker compose down -v`, which deletes the volume and every
 repo and review in it.
+**Evidence 2026-09-26:** first recorded 2026-09-19, in commit `7aca026` (its **Date** field says "starter").
+`specs/04-pr-findings.flow.json:5-6` — the flow opens `/` and follows the redirect to `/pulls`,
+which lands on the *first* repo; `../scripts/e2e.sh:3-5` — the hermetic stack on alternate ports.

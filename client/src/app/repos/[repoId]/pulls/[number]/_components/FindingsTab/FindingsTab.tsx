@@ -73,6 +73,10 @@ export function FindingsTab({
 
   // A review is not a run: pair each review with its run's cost by run_id.
   const costByRunId = new Map((prRuns ?? []).map((r) => [r.run_id, r.cost_usd]));
+  // …and the other way round: each timeline run's findings come from its review.
+  const findingsByRunId = new Map(
+    runs.filter((rv) => rv.run_id).map((rv) => [rv.run_id!, rv.findings] as const),
+  );
 
   return (
     <section>
@@ -137,6 +141,7 @@ export function FindingsTab({
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
             onDelete={handleDelete}
+            findingsByRunId={findingsByRunId}
           />
         </div>
       )}

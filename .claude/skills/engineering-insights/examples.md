@@ -12,6 +12,8 @@
 ## Rejected vs accepted
 
 The rejected column is not wrong, it is *useless cold*: it names a topic instead of a claim.
+Every accepted entry also carries a `path:line` it was checked against — without one it fails
+the evidence test in `SKILL.md` § 6, however good the claim.
 
 ### What Works
 
@@ -21,6 +23,7 @@ The rejected column is not wrong, it is *useless cold*: it names a topic instead
 > named `*.it.test.ts`; `pnpm exec vitest run .it.test` runs only those and
 > `--exclude '**/*.it.test.ts'` runs only the hermetic half. Splitting the suite this way is
 > what keeps the hermetic lane key-free and runnable with no Docker.
+> (`server/test/helpers/pg.ts:35`, `startPg`)
 
 ### What Doesn't Work
 
@@ -33,6 +36,7 @@ The rejected column is not wrong, it is *useless cold*: it names a topic instead
 > other side's migrations and the columns they added.
 > **Fix / rule:** renumber your own migrations to sit after upstream's and relink the snapshot
 > chain, or regenerate with `pnpm db:generate`. Never resolve `meta/` by choosing a side.
+> **Evidence:** `server/src/db/migrations/meta/_journal.json:4` — the `entries` chain.
 
 ### Codebase Patterns
 
@@ -41,6 +45,7 @@ The rejected column is not wrong, it is *useless cold*: it names a topic instead
 > ✓ **2026-08-05** — routes declare Zod `params`/`body` through `fastify-type-provider-zod`,
 > so invalid input is rejected with `422` *before* the handler runs. A handler that calls
 > `Schema.parse(req.body)` itself is a bug: it turns a 422 into a 500.
+> (`server/src/app.ts:119`, the validation → 422 branch of the error handler)
 
 ### Tool & Library Notes
 
@@ -49,7 +54,7 @@ The rejected column is not wrong, it is *useless cold*: it names a topic instead
 > ✓ **2026-08-05** — an import resolves locally from a stray `node_modules` copy even when the
 > package is in neither `package.json` nor the lockfile; CI then fails with `TS2307`. Only
 > `pnpm install --frozen-lockfile` reproduces what CI sees — a green local build proves
-> nothing about the dependency graph.
+> nothing about the dependency graph. (`server/package.json:16`, `dependencies`)
 
 ### Decisions
 
@@ -59,7 +64,7 @@ The rejected column is not wrong, it is *useless cold*: it names a topic instead
 > no workspace root: each package installs on its own and shares code through tsconfig path
 > aliases. Rejected a pnpm workspace because the packages are meant to be lifted out
 > independently. Practical consequence: never run `pnpm -r`, and match the lockfile that is
-> already in the directory.
+> already in the directory. (`CLAUDE.md:58-59`)
 
 ### Recurring Errors & Fixes
 
@@ -72,6 +77,7 @@ The rejected column is not wrong, it is *useless cold*: it names a topic instead
 > **Fix / rule:** `cd server && pnpm db:migrate`. Reach for this before suspecting the schema
 > — and never `docker compose down -v`, which drops `devdigest_pgdata` along with every repo
 > and review that was imported.
+> **Evidence:** `CLAUDE.md:80` — the "Migrations do not run on boot" gotcha.
 
 ### Open Questions
 
@@ -80,7 +86,7 @@ The rejected column is not wrong, it is *useless cold*: it names a topic instead
 > ✓ **2026-08-05** — unclear whether the grounding gate drops findings on a renamed file, or
 > whether the line references simply never match. Ruled out: it is not the diff parser, which
 > reports the rename correctly. Next step is a fixture with a rename plus an edit in the same
-> PR.
+> PR. (`reviewer-core/src/grounding.ts:52`, `groundFindings`)
 
 ### Session Notes
 
@@ -88,7 +94,7 @@ The rejected column is not wrong, it is *useless cold*: it names a topic instead
 
 > ✓ **2026-08-05** — tracked a CI-only migration failure to a rewritten journal; added the
 > chain rule under Recurring Errors & Fixes and the `--frozen-lockfile` note under Tool &
-> Library Notes.
+> Library Notes. (`server/src/db/migrations/meta/_journal.json:4`)
 
 ---
 

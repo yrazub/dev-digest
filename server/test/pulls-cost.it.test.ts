@@ -1,8 +1,8 @@
 /**
- * L01 — `cost_usd` on GET /repos/:id/pulls. The list column shows the cost of a
- * PR's latest COMPLETED run: a newer running/failed run must not displace it, a
- * PR with no completed run is null, and an unpriced (null) cost stays null
- * instead of collapsing to 0. Gated on Docker, like the other integration tests.
+ * L01 — `cost_usd` on GET /repos/:id/pulls. The list column shows the TOTAL spent
+ * on a PR: the sum over all its COMPLETED runs. Running/failed runs add nothing,
+ * a PR with no completed run is null, and one unpriced (null) run makes the total
+ * null instead of a partial sum. Gated on Docker, like the other integration tests.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
@@ -34,7 +34,7 @@ d('PR list cost_usd (Testcontainers pg)', () => {
     await pg?.stop();
   });
 
-  it('serves the latest completed run cost per PR and keeps unknown as null', async () => {
+  it('serves the total cost of completed runs per PR and keeps unknown as null', async () => {
     const db = pg.handle.db;
     const [repo] = await db
       .insert(t.repos)
@@ -47,6 +47,7 @@ d('PR list cost_usd (Testcontainers pg)', () => {
       [2, 'unpriced'],
       [3, 'noRuns'],
       [4, 'newerRunning'],
+      [5, 'partlyUnpriced'],
     ] as const) {
       const [pr] = await db
         .insert(t.pullRequests)
@@ -76,7 +77,7 @@ d('PR list cost_usd (Testcontainers pg)', () => {
     ) => ({ workspaceId, prId: prIds[key]!, status, costUsd, ranAt });
 
     await db.insert(t.agentRuns).values([
-      // done 0.002 (older) → done 0.005 (newer) → failed (newest): expect 0.005
+      // done 0.002 + done 0.005, then a failed run that adds nothing: expect 0.007
       run('newerFailed', 'done', 0.002, minutesAgo(30)),
       run('newerFailed', 'done', 0.005, minutesAgo(20)),
       run('newerFailed', 'failed', null, minutesAgo(10)),
@@ -85,6 +86,9 @@ d('PR list cost_usd (Testcontainers pg)', () => {
       // done 0.003, then a newer run still in flight: expect 0.003
       run('newerRunning', 'done', 0.003, minutesAgo(20)),
       run('newerRunning', 'running', null, minutesAgo(1)),
+      // one priced + one unpriced completed run: the total is unknown, not 0.004
+      run('partlyUnpriced', 'done', 0.004, minutesAgo(30)),
+      run('partlyUnpriced', 'done', null, minutesAgo(20)),
     ]);
 
     const app = await buildApp({
@@ -96,10 +100,11 @@ d('PR list cost_usd (Testcontainers pg)', () => {
     expect(res.statusCode).toBe(200);
     const byId = new Map((res.json() as PrMeta[]).map((p) => [p.id, p]));
 
-    expect(byId.get(prIds.newerFailed)!.cost_usd).toBe(0.005);
+    expect(byId.get(prIds.newerFailed)!.cost_usd).toBeCloseTo(0.007, 10);
     expect(byId.get(prIds.unpriced)!.cost_usd).toBeNull();
     expect(byId.get(prIds.noRuns)!.cost_usd).toBeNull();
     expect(byId.get(prIds.newerRunning)!.cost_usd).toBe(0.003);
+    expect(byId.get(prIds.partlyUnpriced)!.cost_usd).toBeNull();
 
     await app.close();
   });

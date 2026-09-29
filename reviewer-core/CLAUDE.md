@@ -7,7 +7,9 @@
 | If the task touches… | Read first |
 |---|---|
 | prompt assembly, the grounding gate, or scoring | `README.md` — pipeline diagram |
-| adding or filling a prompt slot (`skills` `memory` `specs` `callers`) | `specs/` for the lesson, then `src/prompt.ts` |
+| adding or filling a prompt slot (`skills` `memory` `specs` `callers`) | `docs/prompt-slots.md`, the lesson's spec in `specs/`, then `src/prompt.ts` |
+| the LLM's JSON output — schema conversion, extraction, the repair loop | `docs/structured-output.md` |
+| what `reviewPullRequest()` guarantees — grounding, scoring, single-pass vs map-reduce | `specs/review-contract.md` |
 | what this package exposes | `src/index.ts` — the public API is that file and nothing else |
 | how the server consumes the engine | `../server/README.md` |
 | any test | `../TESTING.md` |

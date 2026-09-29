@@ -144,12 +144,13 @@ The common path:
 **Date:** YYYY-MM-DD
 **Cause:** what was really wrong (not what it looked like).
 **Fix / rule:** what to do instead, phrased so it applies next time.
+**Evidence:** `path:line` it was verified against (+ the exact error string, if any).
 ```
 
 for `Recurring Errors & Fixes` and `What Doesn't Work`; everywhere else, one line:
 
 ```markdown
-- **YYYY-MM-DD** — <claim, with the path, symbol, command or error string that proves it>
+- **YYYY-MM-DD** — <claim, with the symbol, command or error string that proves it> (`path:line`)
 ```
 
 ## 6. Quality gate
@@ -160,9 +161,13 @@ An entry ships only if it passes all three.
    careful with X", no "remember that Y can be tricky".
 2. **Obviousness.** If it would be obvious to anyone reading the code, do not write it. The
    value is in what the code does *not* say.
-3. **Evidence.** It names a real path, symbol, command or error string — `file:line` where
-   that applies. An entry that could have been written without doing the work is not a
-   finding.
+3. **Evidence.** It names at least one `path:line` that you **opened in this session** and
+   that shows the claim, paired with the symbol (`tableCard`, `dockerAvailable`) so it can be
+   found again after the line moves. For a finding about an external tool rather than repo
+   code, cite the line of the repo config that governs that tool (`.mcp.json:10`), say so if
+   that file is local-only, and keep the exact error string. If nothing in the repo shows it,
+   write that plainly — never invent a line. An entry that could have been written without
+   doing the work is not a finding.
 
 Calibration, with examples from this repo: [`examples.md`](examples.md).
 
@@ -170,7 +175,8 @@ Calibration, with examples from this repo: [`examples.md`](examples.md).
 
 - **Append-only.** The text of an existing entry is never reworded or deleted, even when it
   has turned out to be wrong. Everything goes *beneath* it as a dated line —
-  `**Superseded …**`, `**Disputed …**`, `**See also:** …`, or a further detail. This is what
+  `**Superseded …**`, `**Disputed …**`, `**See also:** …`, `**Evidence …:**` (a `path:line`
+  for an entry that lacks one, or whose anchor moved), or a further detail. This is what
   "extend an entry" means above; it is not a licence to rewrite one. Deleting destroys the
   record of why the rule existed, which is usually the point of the entry.
 - **Add, never reorder.** If the target section heading is missing, add that one heading in

@@ -27,7 +27,8 @@ different concern.
 ## Screen A — pull-request list · `/repos/:repoId/pulls`
 
 A new `COST` column between `STATUS` and `UPDATED`, showing `formatCostUsd(pr.cost_usd)`:
-the cost of that PR's latest completed run, or `—`.
+the total cost of all that PR's completed runs, or `—` (no completed run, or any of them
+unpriced). The server does the summing; the client only formats the number.
 
 The table is a CSS grid whose header renders from a single list of column keys, so the
 column is one new key, one new grid track, one new cell and one new `next-intl` string.

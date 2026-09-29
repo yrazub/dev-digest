@@ -59,6 +59,22 @@ Node ≥22 · TypeScript · Fastify 5 · Drizzle + Postgres/pgvector · Next.js 
   **pnpm**, `reviewer-core`/`e2e` use **npm** — match the lockfile that is there.
 - One test suite per package, one CI workflow per suite, path-filtered.
 
+## Naming
+
+Cross-package rules; each module's `CLAUDE.md` adds its own file layout.
+
+- **Contract fields are `snake_case`** (`cost_usd`, `findings_by_severity`) — that is the JSON
+  on the wire. Drizzle properties are `camelCase` over `snake_case` columns
+  (`costUsd: doublePrecision('cost_usd')`); convert in the repository/route layer, never by
+  renaming a contract field.
+- A Zod schema and its inferred type share one PascalCase name (`Finding` + `z.infer<typeof Finding>`).
+- Enum values keep the case they have — `Severity` is `CRITICAL`, most others are lowercase
+  (`request_changes`, `done`). An object keyed by an enum uses its exact values:
+  `{ CRITICAL, WARNING, SUGGESTION }`, never `{ critical, … }`.
+- Source files are `kebab-case.ts` (`run-executor.ts`); React components are `PascalCase.tsx`.
+- Branches are `<type>/<kebab-name>` (`feature/finding-counter`); commits are conventional,
+  `type(scope): subject`.
+
 ## Gotchas
 
 - **Migrations do not run on boot.** `relation … does not exist` → `cd server && pnpm db:migrate`.
@@ -70,8 +86,14 @@ Node ≥22 · TypeScript · Fastify 5 · Drizzle + Postgres/pgvector · Next.js 
 
 ## Do not touch
 
-`client/src/vendor/**` (vendored copies) · `server/src/db/migrations/**` including the journal
-(generate with `pnpm db:generate`, never hand-edit) · `skills-lock.json`
+- `client/src/vendor/**` (vendored copies).
+- `server/src/db/migrations/**` including the journal — generate with `pnpm db:generate`,
+  never hand-edit.
+- **Lock files**: `server/pnpm-lock.yaml` · `client/pnpm-lock.yaml` ·
+  `reviewer-core/package-lock.json` · `e2e/package-lock.json` · `skills-lock.json`. Never
+  hand-edit, delete-and-regenerate, or create one with the other package manager. They change
+  only as a side effect of `pnpm add` / `npm install` run inside that package, and only when
+  the task is a dependency change.
 
 Deliberately **not** on that list: `server/src/vendor/shared` is the *authored*
 `@devdigest/shared`, aliased by `server` and `reviewer-core`. Contract changes belong there;

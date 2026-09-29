@@ -6,7 +6,8 @@ room — prompt design, the grounding rules, structured-output repair.
 
 | Document | What it covers |
 |---|---|
-| _(none yet)_ | |
+| [`structured-output.md`](structured-output.md) | Schema conversion, JSON extraction, and the parse-with-repair flow |
+| [`prompt-slots.md`](prompt-slots.md) | Section order in `assemblePrompt()`, slot omission, the injection guard's scope |
 
 Add a row when you add a document, and a `Before answering` row in
 [`../CLAUDE.md`](../CLAUDE.md) if an agent should read it before working on that topic.
