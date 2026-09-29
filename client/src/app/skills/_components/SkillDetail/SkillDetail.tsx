@@ -42,8 +42,11 @@ export function SkillDetail({
         <Tabs tabs={tabs} value={tab} onChange={(k) => onTab(k as SkillTab)} pad="0 28px" />
       </div>
       <div style={s.body}>
-        {/* key: a different skill (or a restore) resets the form to the saved state */}
-        {tab === "config" && <ConfigTab key={`${skill.id}:${skill.version}`} skill={skill} onDelete={onDelete} />}
+        {/* Config stays mounted (hidden) so unsaved edits survive a trip to Preview or Versions.
+            key: a different skill, or a new version (save / restore), resets it to the saved state. */}
+        <div hidden={tab !== "config"}>
+          <ConfigTab key={`${skill.id}:${skill.version}`} skill={skill} onDelete={onDelete} />
+        </div>
         {tab === "preview" && <PreviewTab skill={skill} />}
         {tab === "versions" && <VersionsTab skill={skill} />}
       </div>

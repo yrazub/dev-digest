@@ -9,6 +9,15 @@ import { ValidationError } from '../../../platform/errors.js';
 export const URL_IMPORT_MAX_BYTES = 262_144;
 export const URL_IMPORT_TIMEOUT_MS = 10_000;
 
+/** decodeURIComponent that turns malformed %-escapes into a 422, not a 500. */
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    throw new ValidationError('Not a valid URL');
+  }
+}
+
 /**
  * Validate a user-supplied skill URL and return what to fetch plus a fallback
  * name. `github.com/<o>/<r>/blob/<ref>/<path>` becomes its raw.githubusercontent URL.
@@ -29,10 +38,10 @@ export function resolveSkillUrl(raw: string): { fetchUrl: string; fallbackName: 
   }
 
   const segments = url.pathname.split('/').filter(Boolean);
-  const file = decodeURIComponent(segments.at(-1) ?? '');
+  const file = decodeSegment(segments.at(-1) ?? '');
   if (!/\.md$/i.test(file)) throw new ValidationError('The URL must point to a .md file');
   const fallbackName = /^skill\.md$/i.test(file)
-    ? decodeURIComponent(segments.at(-2) ?? 'imported-skill')
+    ? decodeSegment(segments.at(-2) ?? 'imported-skill')
     : file.replace(/\.md$/i, '');
   return { fetchUrl: url.toString(), fallbackName };
 }

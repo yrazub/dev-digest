@@ -3,7 +3,7 @@ import type { Skill } from '@devdigest/shared';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import { skillRowToDto } from '../_shared/skill-dto.js';
-import type { SkillFieldChanges } from './domain.js';
+import type { SkillFieldChanges, SkillVersionState } from './domain.js';
 import type { NewSkill, SkillStore, SkillVersionRecord, SkillsUnitOfWork } from './ports.js';
 
 /**
@@ -65,6 +65,15 @@ export class SkillsRepository implements SkillStore {
       })
       .returning({ id: t.skills.id });
     return row!.id;
+  }
+
+  async lockVersionState(workspaceId: string, id: string): Promise<SkillVersionState | undefined> {
+    const [row] = await this.db
+      .select({ body: t.skills.body, version: t.skills.version })
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
+      .for('update');
+    return row;
   }
 
   async update(workspaceId: string, id: string, changes: SkillFieldChanges): Promise<void> {

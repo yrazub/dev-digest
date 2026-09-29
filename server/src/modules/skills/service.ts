@@ -66,8 +66,12 @@ export class SkillsService {
     if (patch.name !== undefined && patch.name !== current.name) {
       await this.assertNameFree(workspaceId, patch.name);
     }
-    const plan = planSkillUpdate(current, patch);
     await this.deps.uow.run(async (store) => {
+      // Plan from the row-locked state, not the read above: a concurrent save
+      // waits here and then builds on the version this one writes.
+      const locked = await store.lockVersionState(workspaceId, id);
+      if (!locked) throw new NotFoundError('Skill not found');
+      const plan = planSkillUpdate(locked, patch);
       await store.update(workspaceId, id, plan.changes);
       if (plan.snapshot) {
         await store.insertVersion(id, plan.snapshot.version, plan.snapshot.body, plan.snapshot.note);

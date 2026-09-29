@@ -147,6 +147,9 @@ export const SkillName = z
   .max(80)
   .regex(/^[a-z0-9][a-z0-9-]*$/, 'lower-case letters, digits and dashes');
 
+/** Evidence paths a skill cites (from Conventions): bounded count and length. */
+export const SkillEvidenceFiles = z.array(z.string().max(512)).max(100);
+
 /** Body cap: 64 KB of markdown. */
 export const SKILL_BODY_MAX = 65_536;
 
@@ -157,7 +160,7 @@ export const SkillCreate = z.object({
   body: z.string().min(1).max(SKILL_BODY_MAX),
   source: SkillSource.optional(),
   enabled: z.boolean().optional(),
-  evidence_files: z.array(z.string()).optional(),
+  evidence_files: SkillEvidenceFiles.optional(),
 });
 export type SkillCreate = z.infer<typeof SkillCreate>;
 
@@ -167,7 +170,7 @@ export const SkillUpdate = z.object({
   type: SkillType.optional(),
   body: z.string().min(1).max(SKILL_BODY_MAX).optional(),
   enabled: z.boolean().optional(),
-  evidence_files: z.array(z.string()).optional(),
+  evidence_files: SkillEvidenceFiles.optional(),
   /** One-line change note, stored only when the body changes. */
   version_note: z.string().max(120).optional(),
 });

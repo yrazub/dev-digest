@@ -114,6 +114,28 @@ d('skills module', () => {
     expect((await app.inject({ method: 'POST', url: `/skills/${created.id}/versions/9/restore` })).statusCode).toBe(404);
   });
 
+  it('concurrent body edits serialise into consecutive versions instead of failing', async () => {
+    const created = (await app.inject({ method: 'POST', url: '/skills', payload: { ...body, name: 'raced' } })).json();
+    const results = await Promise.all(
+      ['edit-a', 'edit-b', 'edit-c'].map((b) =>
+        app.inject({ method: 'PUT', url: `/skills/${created.id}`, payload: { body: b } }),
+      ),
+    );
+    expect(results.map((r) => r.statusCode)).toEqual([200, 200, 200]);
+    const versions = (await app.inject({ method: 'GET', url: `/skills/${created.id}/versions` })).json();
+    expect(versions.map((v: { version: number }) => v.version)).toEqual([4, 3, 2, 1]);
+  });
+
+  it('caps evidence_files', async () => {
+    const tooMany = Array.from({ length: 101 }, (_, i) => `src/f${i}.ts`);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/skills',
+      payload: { ...body, name: 'too-much-evidence', evidence_files: tooMany },
+    });
+    expect(res.statusCode).toBe(422);
+  });
+
   it('counts linked agents', async () => {
     const skill = (await app.inject({ method: 'POST', url: '/skills', payload: { ...body, name: 'linked' } })).json();
     const agents = (await app.inject({ method: 'GET', url: '/agents' })).json();

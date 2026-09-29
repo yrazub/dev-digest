@@ -2,13 +2,19 @@
  * http-fetch adapter — fetches a small text document from a public https URL.
  *
  * Used by skill import-from-URL. The URL is user-supplied, so this is the SSRF
- * chokepoint: https only, every hop's host must resolve to public addresses
- * only, redirects are followed manually (max 3, each re-checked), and the body
- * is capped in bytes and time. Swappable in tests via ContainerOverrides.
+ * chokepoint: https only; every connection goes through `publicOnlyLookup`,
+ * which resolves the host AT CONNECT TIME and refuses private addresses — so
+ * the address that was checked is the address connected to (no DNS-rebinding
+ * window between a check and a second lookup). IP-literal hosts skip DNS and
+ * are checked up front. Redirects are followed manually (max 3, each hop
+ * re-checked), and the body is capped in bytes and time. Swappable in tests
+ * via ContainerOverrides.
  */
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
-import { ExternalServiceError, ValidationError } from '../../platform/errors.js';
+import dns from 'node:dns';
+import https from 'node:https';
+import type { IncomingMessage } from 'node:http';
+import { isIP, type LookupFunction } from 'node:net';
+import { AppError, ExternalServiceError, ValidationError } from '../../platform/errors.js';
 
 export interface FetchTextOptions {
   maxBytes: number;
@@ -20,8 +26,20 @@ export interface HttpFetcher {
 }
 
 const MAX_REDIRECTS = 3;
+const PRIVATE_ADDRESS = 'URL resolves to a private or local address';
 
-/** True for loopback, private, link-local, CGNAT, unspecified and ULA addresses. */
+/** The IPv4 address inside an IPv4-mapped IPv6 address (`::ffff:a.b.c.d` or `::ffff:7f00:1`). */
+function mappedIPv4(low: string): string | undefined {
+  const dotted = low.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (dotted) return dotted[1];
+  const hex = low.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (!hex) return undefined;
+  const hi = parseInt(hex[1]!, 16);
+  const lo = parseInt(hex[2]!, 16);
+  return `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+}
+
+/** True for loopback, private, link-local, CGNAT, multicast, unspecified and ULA addresses. */
 export function isPrivateAddress(ip: string): boolean {
   const v = isIP(ip);
   if (v === 4) {
@@ -40,39 +58,58 @@ export function isPrivateAddress(ip: string): boolean {
   if (v === 6) {
     const low = ip.toLowerCase();
     if (low === '::' || low === '::1') return true;
-    const mapped = low.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isPrivateAddress(mapped[1]!);
-    return /^f[cd]/.test(low) || /^fe[89ab]/.test(low);
+    const v4 = mappedIPv4(low);
+    if (v4) return isPrivateAddress(v4);
+    return /^f[cd]/.test(low) || /^fe[89ab]/.test(low) || /^ff/.test(low);
   }
   return true;
 }
 
-async function assertPublicHttps(url: URL): Promise<void> {
+/**
+ * A `lookup` for the https agent that refuses any host resolving to a private
+ * address. Node calls it when the socket connects, so the vetted address is the
+ * one used.
+ */
+export const publicOnlyLookup = ((hostname: string, options: dns.LookupOptions, callback: Function) => {
+  dns.lookup(hostname, { ...options, all: true }, (err, addresses) => {
+    if (err) return callback(err);
+    const list = addresses as dns.LookupAddress[];
+    if (list.length === 0 || list.some((a) => isPrivateAddress(a.address))) {
+      return callback(new ValidationError(PRIVATE_ADDRESS));
+    }
+    if (options.all) return callback(null, list);
+    return callback(null, list[0]!.address, list[0]!.family);
+  });
+}) as LookupFunction;
+
+function assertHttpsPublicLiteral(url: URL): void {
   if (url.protocol !== 'https:') throw new ValidationError('Only https URLs can be imported');
   const host = url.hostname.replace(/^\[|\]$/g, '');
-  const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
-  if (addrs.length === 0 || addrs.some((a) => isPrivateAddress(a.address))) {
-    throw new ValidationError('URL resolves to a private or local address');
-  }
+  // IP literals never reach the lookup hook, so check them here.
+  if (isIP(host) && isPrivateAddress(host)) throw new ValidationError(PRIVATE_ADDRESS);
+}
+
+function get(url: URL, signal: AbortSignal): Promise<IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { lookup: publicOnlyLookup, signal, headers: { accept: 'text/markdown, text/plain, */*' } }, resolve);
+    req.on('error', reject);
+  });
 }
 
 /** Read the body as text, aborting as soon as it passes `maxBytes`. */
-async function readCapped(res: Response, maxBytes: number): Promise<string> {
-  if (!res.body) return '';
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
+async function readCapped(res: IncomingMessage, maxBytes: number): Promise<string> {
+  const chunks: Buffer[] = [];
   let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
+  for await (const chunk of res) {
+    const buf = chunk as Buffer;
+    total += buf.byteLength;
     if (total > maxBytes) {
-      await reader.cancel();
+      res.destroy();
       throw new ValidationError(`Document is larger than ${maxBytes} bytes`);
     }
-    chunks.push(value);
+    chunks.push(buf);
   }
-  return new TextDecoder().decode(Buffer.concat(chunks));
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 export class NodeHttpFetcher implements HttpFetcher {
@@ -80,22 +117,30 @@ export class NodeHttpFetcher implements HttpFetcher {
     let url = new URL(rawUrl);
     const signal = AbortSignal.timeout(timeoutMs);
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-      await assertPublicHttps(url);
-      let res: Response;
+      assertHttpsPublicLiteral(url);
+      let res: IncomingMessage;
       try {
-        res = await fetch(url, { redirect: 'manual', signal });
+        res = await get(url, signal);
       } catch (err) {
+        if (err instanceof AppError) throw err;
         throw new ExternalServiceError(`Fetching ${url.host} failed: ${(err as Error).message}`);
       }
-      if (res.status >= 300 && res.status < 400) {
-        const next = res.headers.get('location');
+      const status = res.statusCode ?? 0;
+      if (status >= 300 && status < 400) {
+        res.resume();
+        const next = res.headers.location;
         if (!next) throw new ExternalServiceError('Redirect without a location');
         url = new URL(next, url);
         continue;
       }
-      if (!res.ok) throw new ExternalServiceError(`Fetching ${url.host} returned ${res.status}`);
-      const declared = Number(res.headers.get('content-length') ?? 0);
-      if (declared > maxBytes) throw new ValidationError(`Document is larger than ${maxBytes} bytes`);
+      if (status < 200 || status >= 300) {
+        res.resume();
+        throw new ExternalServiceError(`Fetching ${url.host} returned ${status}`);
+      }
+      if (Number(res.headers['content-length'] ?? 0) > maxBytes) {
+        res.destroy();
+        throw new ValidationError(`Document is larger than ${maxBytes} bytes`);
+      }
       return readCapped(res, maxBytes);
     }
     throw new ExternalServiceError('Too many redirects');
