@@ -12,6 +12,9 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | [`L01-run-cost.md`](L01-run-cost.md) | draft |
 | [`L01-findings-counter.md`](L01-findings-counter.md) | draft |
 | [`L02-pr-self-review.md`](L02-pr-self-review.md) | implemented |
+| [`L02-skills.md`](L02-skills.md) | draft |
+| [`L02-skills-plan.md`](L02-skills-plan.md) | in progress |
+| [`L02-conventions.md`](L02-conventions.md) | draft |
 | [`architecture-refactor.md`](architecture-refactor.md) | draft |
 
 The lesson roadmap (L01–L08) is in the root [`README.md`](../README.md).
