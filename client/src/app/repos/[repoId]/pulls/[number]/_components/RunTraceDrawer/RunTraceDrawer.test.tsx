@@ -70,6 +70,37 @@ describe("A5 Run Trace drawer (smoke)", () => {
     expect(screen.queryByText("$0.0000")).not.toBeInTheDocument();
   });
 
+  it("lists the skills loaded into the run and the skills block's token count (#19)", () => {
+    current = {
+      ...TRACE,
+      prompt_assembly: {
+        ...TRACE.prompt_assembly,
+        skills: "### branch-coverage (v1)\nRule.\n\n### edge-cases (v3)\nRule.",
+        skills_tokens: 42,
+        skills_loaded: [
+          { name: "branch-coverage", version: 1 },
+          { name: "edge-cases", version: 3 },
+        ],
+      },
+    };
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+    expect(screen.getByText("Skills loaded")).toBeInTheDocument();
+    const first = screen.getByText("branch-coverage v1");
+    const second = screen.getByText("edge-cases v3");
+    expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByText("Prompt assembly"));
+    expect(screen.getByText("~42 tokens")).toBeInTheDocument();
+  });
+
+  it("hides the Skills loaded row when no skills were injected (#20)", () => {
+    current = { ...TRACE, prompt_assembly: { ...TRACE.prompt_assembly, skills: null } };
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+    expect(screen.queryByText("Skills loaded")).toBeNull();
+    fireEvent.click(screen.getByText("Prompt assembly"));
+    expect(screen.getByText("System")).toBeInTheDocument();
+    expect(screen.queryByText("Skills (dynamic)")).toBeNull();
+  });
+
   it("switches to the live log tab", () => {
     renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
     fireEvent.click(screen.getByText("log"));
