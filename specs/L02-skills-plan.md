@@ -1,6 +1,6 @@
 # L02 — Skills: implementation plan
 
-**Status:** approved 2026-09-28 · phases 1–6 done, 7–8 next
+**Status:** done 2026-09-30
 
 How [`L02-skills.md`](L02-skills.md) gets built. The *what* is in that spec and its module
 specs ([server](../server/specs/L02-skills.md), [client](../client/specs/L02-skills.md)).

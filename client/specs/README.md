@@ -10,7 +10,7 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 |---|---|---|
 | [`L01-run-cost.md`](L01-run-cost.md) | `/repos/:repoId/pulls` · `/repos/:repoId/pulls/:number` | draft |
 | [`L01-findings-counter.md`](L01-findings-counter.md) | `/repos/:repoId/pulls` · `/repos/:repoId/pulls/:number` | draft |
-| [`L02-skills.md`](L02-skills.md) | `/skills` · `/skills/:id` · `/agents` · `/agents/:id` | draft |
+| [`L02-skills.md`](L02-skills.md) | `/skills` · `/skills/:id` · `/agents` · `/agents/:id` | implemented |
 | [`L02-conventions.md`](L02-conventions.md) | `/repos/:repoId/conventions` | draft |
 | [`architecture-refactor.md`](architecture-refactor.md) | all (C1: `src/lib/hooks`) | draft |
 
