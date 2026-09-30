@@ -1,16 +1,34 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import React from "react";
+import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../messages/en/skills.json";
 import { SkillBodyEditor } from "./SkillBodyEditor";
 
 afterEach(cleanup);
 
+/** A real controlled parent, so typing updates the value the editor renders. */
+function Harness({ initial, dirty, onChange }: { initial: string; dirty?: boolean; onChange: (v: string) => void }) {
+  const [value, setValue] = React.useState(initial);
+  return (
+    <SkillBodyEditor
+      value={value}
+      onChange={(v) => {
+        setValue(v);
+        onChange(v);
+      }}
+      fileName="edge-cases"
+      dirty={dirty}
+    />
+  );
+}
+
 function renderEditor(value: string, dirty = false) {
   const onChange = vi.fn();
   render(
     <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
-      <SkillBodyEditor value={value} onChange={onChange} fileName="edge-cases" dirty={dirty} />
+      <Harness initial={value} dirty={dirty} onChange={onChange} />
     </NextIntlClientProvider>,
   );
   return onChange;
@@ -24,11 +42,13 @@ describe("SkillBodyEditor", () => {
     expect(screen.getByText("unsaved")).toBeInTheDocument();
   });
 
-  it("edits in Write mode and renders markdown in Preview mode", () => {
+  it("edits in Write mode and renders markdown in Preview mode", async () => {
+    const user = userEvent.setup();
     const onChange = renderEditor("# Heading");
-    fireEvent.change(screen.getByLabelText("Skill body"), { target: { value: "# New" } });
-    expect(onChange).toHaveBeenCalledWith("# New");
-    fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
-    expect(screen.getByRole("heading", { name: "Heading" })).toBeInTheDocument();
+    await user.clear(screen.getByLabelText("Skill body"));
+    await user.type(screen.getByLabelText("Skill body"), "# New");
+    expect(onChange).toHaveBeenLastCalledWith("# New");
+    await user.click(screen.getByRole("tab", { name: "Preview" }));
+    expect(screen.getByRole("heading", { name: "New" })).toBeInTheDocument();
   });
 });

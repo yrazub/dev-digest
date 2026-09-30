@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 
 afterEach(cleanup);
@@ -21,12 +22,13 @@ function renderModal() {
 }
 
 describe("ConfirmDeleteModal", () => {
-  it("confirms, cancels and closes with the ✕", () => {
+  it("confirms, cancels and closes with the ✕", async () => {
+    const user = userEvent.setup();
     const { onConfirm, onClose } = renderModal();
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
     expect(onConfirm).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 });

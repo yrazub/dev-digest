@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Agent } from "@devdigest/shared";
@@ -53,11 +54,12 @@ describe("AgentCard (smoke)", () => {
     expect(screen.getByText("1 skill")).toBeInTheDocument();
   });
 
-  it("delete defers to the parent (confirmation) and does not open the agent", () => {
+  it("delete defers to the parent (confirmation) and does not open the agent", async () => {
+    const user = userEvent.setup();
     const onDelete = vi.fn();
     const onClick = vi.fn();
     renderWithIntl(<AgentCard ag={AGENT} onDelete={onDelete} onClick={onClick} />);
-    fireEvent.click(screen.getByRole("button", { name: "Delete agent" }));
+    await user.click(screen.getByRole("button", { name: "Delete agent" }));
     expect(onDelete).toHaveBeenCalledOnce();
     expect(onClick).not.toHaveBeenCalled();
   });

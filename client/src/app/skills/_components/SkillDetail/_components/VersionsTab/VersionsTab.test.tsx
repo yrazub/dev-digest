@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
+import { render, screen, cleanup, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type { Skill, SkillVersion } from "@devdigest/shared";
 import skillsMessages from "../../../../../../../messages/en/skills.json";
@@ -42,19 +43,21 @@ describe("VersionsTab", () => {
     expect(screen.getAllByRole("button", { name: "Diff" })).toHaveLength(1);
   });
 
-  it("Diff shows the change against the current body", () => {
+  it("Diff shows the change against the current body", async () => {
+    const user = userEvent.setup();
     renderTab();
-    fireEvent.click(screen.getByRole("button", { name: "Diff" }));
+    await user.click(screen.getByRole("button", { name: "Diff" }));
     expect(screen.getByText("line two changed")).toBeInTheDocument();
     expect(screen.getByText("line two")).toBeInTheDocument();
   });
 
-  it("Restore asks for confirmation, then restores that version", () => {
+  it("Restore asks for confirmation, then restores that version", async () => {
+    const user = userEvent.setup();
     renderTab();
-    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    await user.click(screen.getByRole("button", { name: "Restore" }));
     const dialog = screen.getByRole("dialog");
     expect(restore).not.toHaveBeenCalled();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Restore" }));
+    await user.click(within(dialog).getByRole("button", { name: "Restore" }));
     expect(restore.mock.calls[0]![0]).toEqual({ id: "s1", version: 1 });
   });
 });

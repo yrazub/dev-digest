@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type { AgentSkill } from "@devdigest/shared";
 import agentsMessages from "../../../../../../../messages/en/agents.json";
@@ -66,17 +67,20 @@ describe("SkillsTab", () => {
     expect(screen.queryByRole("button", { name: "Drag semver-discipline to reorder" })).toBeNull();
   });
 
-  it("checking appends to the prompt order; unchecking removes", () => {
+  it("checking appends to the prompt order; unchecking removes", async () => {
+    const user = userEvent.setup();
     renderTab();
-    fireEvent.click(screen.getByRole("checkbox", { name: "semver-discipline" }));
+    await user.click(screen.getByRole("checkbox", { name: "semver-discipline" }));
     expect(setLinks).toHaveBeenLastCalledWith(["id-branch-coverage", "id-edge-cases", "id-semver-discipline"]);
-    fireEvent.click(screen.getByRole("checkbox", { name: "branch-coverage" }));
+    await user.click(screen.getByRole("checkbox", { name: "branch-coverage" }));
     expect(setLinks).toHaveBeenLastCalledWith(["id-edge-cases"]);
   });
 
-  it("filtering narrows the list and turns off dragging (#30)", () => {
+  it("filtering narrows the list and turns off dragging (#30)", async () => {
+    const user = userEvent.setup();
     renderTab();
-    fireEvent.change(screen.getByLabelText("Filter skills…"), { target: { value: "edge" } });
+    await user.clear(screen.getByLabelText("Filter skills…"));
+    await user.type(screen.getByLabelText("Filter skills…"), "edge");
     expect(screen.getAllByTestId(/^skill-row-/)).toHaveLength(1);
     expect(screen.queryByRole("button", { name: /^Drag / })).toBeNull();
     expect(screen.getByText("Clear the filter to reorder.")).toBeInTheDocument();

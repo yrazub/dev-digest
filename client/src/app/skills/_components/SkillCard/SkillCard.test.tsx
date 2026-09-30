@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type { Skill } from "@devdigest/shared";
 import messages from "../../../../../messages/en/skills.json";
@@ -42,16 +43,18 @@ describe("SkillCard", () => {
     expect(screen.getByText("2 agents")).toBeInTheDocument();
   });
 
-  it("delete asks the parent to confirm and does not select the card", () => {
+  it("delete asks the parent to confirm and does not select the card", async () => {
+    const user = userEvent.setup();
     const h = renderCard();
-    fireEvent.click(screen.getByRole("button", { name: "Delete skill" }));
+    await user.click(screen.getByRole("button", { name: "Delete skill" }));
     expect(h.onDelete).toHaveBeenCalledOnce();
     expect(h.onSelect).not.toHaveBeenCalled();
   });
 
-  it("clicking the card selects it", () => {
+  it("clicking the card selects it", async () => {
+    const user = userEvent.setup();
     const h = renderCard();
-    fireEvent.click(screen.getByText("breaking-change"));
+    await user.click(screen.getByText("breaking-change"));
     expect(h.onSelect).toHaveBeenCalledOnce();
   });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type { SkillImportDraft } from "@devdigest/shared";
 import messages from "../../../../../messages/en/skills.json";
@@ -48,10 +49,11 @@ function renderModal() {
 }
 
 describe("ImportSkillModal", () => {
-  it("previews the draft with the trust notice and ignored files before saving", () => {
+  it("previews the draft with the trust notice and ignored files before saving", async () => {
+    const user = userEvent.setup();
     renderModal();
     const file = new File(["zip"], "edge-cases.zip");
-    fireEvent.change(screen.getByLabelText("choose a file"), { target: { files: [file] } });
+    await user.upload(screen.getByLabelText("choose a file"), file);
     expect(importFile).toHaveBeenCalledWith(file);
 
     expect(screen.getByText(/becomes instructions in your agent's prompt/)).toBeInTheDocument();
@@ -59,7 +61,7 @@ describe("ImportSkillModal", () => {
     expect(screen.getByRole("heading", { name: "Edge cases" })).toBeInTheDocument();
     expect(create).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Save skill" }));
+    await user.click(screen.getByRole("button", { name: "Save skill" }));
     expect(create.mock.calls[0]![0]).toEqual({
       name: "edge-cases",
       description: "Flag tests that skip boundaries.",
@@ -69,10 +71,11 @@ describe("ImportSkillModal", () => {
     });
   });
 
-  it("Back returns to the source step without saving", () => {
+  it("Back returns to the source step without saving", async () => {
+    const user = userEvent.setup();
     renderModal();
-    fireEvent.change(screen.getByLabelText("choose a file"), { target: { files: [new File(["x"], "a.md")] } });
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await user.upload(screen.getByLabelText("choose a file"), new File(["x"], "a.md"));
+    await user.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByText(/Drop a .md or .zip here/)).toBeInTheDocument();
     expect(create).not.toHaveBeenCalled();
   });

@@ -148,7 +148,8 @@ export const SkillName = z
   .regex(/^[a-z0-9][a-z0-9-]*$/, 'lower-case letters, digits and dashes');
 
 /** Evidence paths a skill cites (from Conventions): bounded count and length. */
-export const SkillEvidenceFiles = z.array(z.string().max(512)).max(100);
+export const SkillEvidenceFiles = z.array(z.string().min(1).max(512)).max(100);
+export type SkillEvidenceFiles = z.infer<typeof SkillEvidenceFiles>;
 
 /** Body cap: 64 KB of markdown. */
 export const SKILL_BODY_MAX = 65_536;

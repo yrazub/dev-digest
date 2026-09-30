@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type { Skill } from "@devdigest/shared";
 import skillsMessages from "../../../../../messages/en/skills.json";
@@ -39,9 +40,11 @@ function renderAt(tab: SkillTab) {
 }
 
 describe("SkillDetail", () => {
-  it("keeps unsaved Config edits across a trip to another tab", () => {
+  it("keeps unsaved Config edits across a trip to another tab", async () => {
+    const user = userEvent.setup();
     const { rerender } = render(renderAt("config"));
-    fireEvent.change(screen.getByLabelText("Skill body"), { target: { value: "# Draft body" } });
+    await user.clear(screen.getByLabelText("Skill body"));
+    await user.type(screen.getByLabelText("Skill body"), "# Draft body");
 
     rerender(renderAt("preview"));
     expect(screen.getByText("Rendered as the reviewing agent receives it.")).toBeInTheDocument();
