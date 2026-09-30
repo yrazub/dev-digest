@@ -181,6 +181,15 @@ be obvious to anyone reading the code, it does not belong here.
   do not look for another way in. Nothing in the repo shows the denial; the snippet the user
   must add is in `specs/L02-pr-self-review.md` ("Registering the hook").
 
+- **2026-09-28** — `chrome-devtools` `upload_file` only reads files under the MCP's workspace roots.
+  With no `--workspace` flag, that is the OS temp directory (`$TMPDIR`, `/var/folders/...`), not
+  `/tmp` or the session scratchpad. Copy a fixture into `$TMPDIR` before uploading. It also
+  cannot reach an `<input type="file" hidden>`: the `hidden` attribute removes the input from
+  the accessibility tree. Keep upload inputs visually hidden instead
+  (`client/src/app/skills/_components/ImportSkillModal/styles.ts`, `fileInput`). The config that
+  sets the roots is `.mcp.json:3`. Error seen: `Access denied: path … is not within any of the
+  configured workspace roots.`
+
 ## Decisions
 
 - **2026-09-20** — session knowledge is recorded in the per-module `INSIGHTS.md` files, not in

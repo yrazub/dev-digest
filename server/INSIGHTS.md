@@ -93,6 +93,15 @@ Traps we have already hit in the server. Append-only. See the root
   (`di-narrow-deps`, `.dependency-cruiser.cjs:82`). Re-baseline only in a PR that *removes* a leak.
   **See also:** `.claude/skills/onion-architecture/references/enforcement-dependency-cruiser.md`.
 
+- **2026-09-29** — the URL-import SSRF guard checks addresses **at connect time**, through a
+  `lookup` hook on `https.get`, not by resolving the host first and fetching afterwards
+  (`src/adapters/http-fetch/index.ts`, `publicOnlyLookup`). Resolve-then-`fetch()` was rejected,
+  because `fetch` resolves the name a second time, and a DNS-rebinding host can answer differently
+  that time. The hook sees every address the socket will use, including redirect hops.
+  `127.0.0.1.nip.io` is refused only by this hook. IP literals skip DNS, so they are checked up
+  front. That check also has to handle Node's hex rewrite of `[::ffff:127.0.0.1]` to
+  `::ffff:7f00:1`, and the NAT64 and 6to4 forms (`hextets`, `embeddedIPv4`).
+
 ## Recurring Errors & Fixes
 
 ### `No file …_<name>.sql found` on a fresh database, while CI's migrated lane is green
@@ -191,3 +200,4 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
   domain, moved `rollupSeverities` to `reviews/domain.ts` and `findingRowToDto` to
   `modules/_shared/finding-dto.ts`. The baseline went from 33 to 28, and the `pulls-*.it` tests passed unedited.
   Plan: `specs/architecture-refactor.md`.
+- **2026-09-29** — L02 skills module; URL-import SSRF hardening (connect-time lookup); skill version bumps serialised with `SELECT … FOR UPDATE`.

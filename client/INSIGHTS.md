@@ -49,6 +49,14 @@ Traps we have already hit in the web app. Append-only. See the root
   `.claude/skills/frontend-ui-architecture/references/enforcement.md`.
   **Evidence 2026-09-27:** `client/package.json:5-11` — `scripts` has `dev`/`build`/`start`/`typecheck`/`test`, no `lint`.
 
+- **2026-09-30** — the vendored `FormField` renders its `<label>` without a `htmlFor`, and
+  `TextInput` / `SelectInput` accept no `id` or `aria-label`. So form fields built from them
+  have **no accessible name**. `getByLabelText` in tests and `find label … fill` in e2e cannot
+  find them. Locate them by placeholder (`find placeholder "…" fill`), as `e2e/specs/08-skills.flow.json`
+  does, or give the control its own `aria-label` when it is app code (the skill body textarea
+  in `src/components/skill-body-editor/SkillBodyEditor.tsx` has one). `src/vendor/ui/kit/FormField.tsx:19`
+  shows the bare `<label>`.
+
 ## Decisions
 
 - **2026-09-28** — the sidebar menu is owned by the app, not the vendored kit. `APP_NAV` in
@@ -95,3 +103,4 @@ note, as `src/lib/feature-models.ts` and `src/lib/skill-rules.ts` do.
 - **2026-09-28** — diagnosed and fixed the unstyled-app breakage caused by `next build` overwriting the dev server's `.next`.
 - **2026-09-28** — moved sidebar menu ownership from the vendored kit to `components/app-shell/nav.ts` (injected via `ShellContext.nav`).
 - **2026-09-28** — built the Skills screens (L02 phase 5); client code must import only types from `@devdigest/shared`.
+- **2026-09-30** — L02 Skills UI done (skills, agents Skills tab, trace); L02 tests moved to `userEvent`.

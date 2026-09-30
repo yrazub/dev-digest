@@ -44,14 +44,22 @@ workspace — there is no repo selector in this flow. That means:
 - The Files changed tab must render at least one seeded file's diff
   content (`05`).
 
-## The three built-in agents must be seeded, "Security Reviewer" named exactly
+## The four built-in agents must be seeded, "Security Reviewer" and "Test Quality Reviewer" named exactly
 
-`03-agents` waits for the literal text `Security Reviewer` on `/agents`.
-`seed.ts` seeds three built-in agent presets (General + Security + a third)
+`03-agents` waits for the literal text `Security Reviewer` on `/agents`, and
+`08-skills` opens the agent named `Test Quality Reviewer`.
+`seed.ts` seeds four built-in agent presets (General, Security, Performance, and
+L02's Test Quality Reviewer)
 by `name`, upserting only when no agent of that name already exists for the
 workspace — so renaming the security preset in `seed.ts` breaks this flow's
 assertion silently (the flow itself gives no hint that the name is what it
 depends on; only this document does).
+
+## No skills are seeded
+
+`08-skills` waits for the Skills page's empty state ("No skills yet") and then
+expects exactly one skill ("0 of 1 enabled") on the agent's Skills tab. Seeding a
+skill breaks both assertions.
 
 ## None of this data is real GitHub data
 
