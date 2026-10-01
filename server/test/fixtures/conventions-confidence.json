@@ -1,0 +1,8 @@
+[
+  { "confidence": 0, "level": "low" },
+  { "confidence": 0.59, "level": "low" },
+  { "confidence": 0.6, "level": "medium" },
+  { "confidence": 0.79, "level": "medium" },
+  { "confidence": 0.8, "level": "high" },
+  { "confidence": 1, "level": "high" }
+]
