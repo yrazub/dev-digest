@@ -1,6 +1,6 @@
 # L02 — Conventions Extractor: implementation plan
 
-**Status:** draft 2026-10-01
+**Status:** done 2026-10-01
 
 How [`L02-conventions.md`](L02-conventions.md) gets built. The *what* is in that spec and its
 module specs ([server](../server/specs/L02-conventions.md),

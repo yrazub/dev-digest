@@ -61,6 +61,17 @@ depends on; only this document does).
 expects exactly one skill ("0 of 1 enabled") on the agent's Skills tab. Seeding a
 skill breaks both assertions.
 
+## The demo repo has exactly three pending convention candidates
+
+`09-conventions` opens Conventions on `acme/payments-api` and waits for
+`0 of 3 accepted`, then rejects the first card and accepts the other two.
+`seed.ts` inserts three `pending` candidates for that repo, only while it has
+none, ordered by confidence (0.91, 0.78, 0.55), with no `repo_index_state`
+row, so their evidence has no GitHub link. Changing the count breaks the
+`N of M accepted` assertions. The flow also expects no skill named
+`repo-conventions` to exist beforehand, because it creates one (`08-skills`
+creates only `e2e-rule`).
+
 ## None of this data is real GitHub data
 
 All of it — the repo, the PR, its diff, its review, its findings, the

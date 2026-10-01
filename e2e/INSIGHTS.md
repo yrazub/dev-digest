@@ -32,7 +32,22 @@ the row's text first. `04` failed on one run and `05` on the other.
 **Evidence:** `specs/04-pr-findings.flow.json` and `specs/05-pr-diff.flow.json` now carry the
 "seeded PR title row is visible" wait step, copied from `specs/02-repo-pulls-detail.flow.json:7`.
 Hermetic runs before the fix: 7/8, then 6/8. After: 8/8.
+**Evidence 2026-10-01:** the same race hit `08-skills` at "switch to the Skills tab": it clicked
+the tab right after `wait --url /agents/`, before the editor rendered (the failure screenshot
+shows the tab present). Fixed with a `wait --text Configuration` step first
+(`specs/08-skills.flow.json`). Hermetic run before: 7/9; after: 9/9.
+
+### `wait --text` times out on text that is plainly visible inside a form field
+**Date:** 2026-10-01
+**Cause:** the text was an `<input>`'s value (the Create-skill modal's pre-filled description),
+and `wait --text` matches rendered text content, which does not include input values.
+**Fix / rule:** assert on static text near the field (a label, an intro line), never on a
+pre-filled input's value. `09-conventions` waits for the modal's intro line instead.
+**Evidence:** `specs/09-conventions.flow.json` step "the draft is merged from the two accepted
+candidates" (`wait --text "Merged from 2 accepted conventions"`); the failing version waited for
+`2 house conventions extracted from acme/payments-api`, the description input's value.
 
 ## Session Notes
 
 - **2026-09-30** — added `08-skills` (create skill → link to agent → persists) and fixed the `04`/`05` click race.
+- **2026-10-01** — added `09-conventions` (reject/accept seeded candidates → reload → create skill) and three seeded convention candidates; fixed the `08` tab-click race.

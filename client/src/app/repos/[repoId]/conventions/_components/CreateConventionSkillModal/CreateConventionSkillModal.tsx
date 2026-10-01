@@ -130,7 +130,14 @@ export function CreateConventionSkillModal({
           <Button kind="secondary" onClick={onClose} disabled={create.isPending}>
             {t("create.cancel")}
           </Button>
-          <Button kind="primary" icon="Sparkles" onClick={submit} disabled={!valid} loading={create.isPending}>
+          <Button
+            kind="primary"
+            icon="Sparkles"
+            onClick={submit}
+            disabled={!valid}
+            loading={create.isPending}
+            data-testid="create-convention-skill"
+          >
             {t("create.submit")}
           </Button>
         </div>

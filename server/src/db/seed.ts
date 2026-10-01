@@ -22,8 +22,9 @@ const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
  * with a few findings, and the three built-in agents (General + Security +
  * Performance), all on the default openrouter/deepseek-v4-flash provider+model.
  *
- * Course lessons populate the other tables (skills, conventions, memory, eval,
- * …) once their features are built — they start empty here.
+ * L02 adds the Test Quality Reviewer agent and three pending convention
+ * candidates for the demo repo (fixtures for the e2e flow). Other lesson
+ * tables (skills, memory, eval, …) start empty here.
  */
 
 export const DEFAULT_WORKSPACE_NAME = 'default';
@@ -253,6 +254,61 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       .from(t.agents)
       .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, a.name)));
     if (!existing) await db.insert(t.agents).values(a);
+  }
+
+  // ---- L02 Conventions: three pending candidates for the demo repo ----
+  // Fixture data for the e2e flow, which may not call a model. Inserted only
+  // while the repo has none, so a re-seed never undoes the user's decisions.
+  const [anyConvention] = await db
+    .select({ id: t.conventions.id })
+    .from(t.conventions)
+    .where(eq(t.conventions.repoId, repoId))
+    .limit(1);
+  if (!anyConvention) {
+    const candidate = (
+      category: string,
+      rule: string,
+      evidencePath: string,
+      line: number,
+      evidenceSnippet: string,
+      confidence: number,
+    ) => ({
+      workspaceId,
+      repoId,
+      category,
+      rule,
+      evidencePath,
+      evidenceLineStart: line,
+      evidenceLineEnd: line,
+      evidenceSnippet,
+      confidence,
+    });
+    await db.insert(t.conventions).values([
+      candidate(
+        'error-handling',
+        'Reject over-limit requests with a 429 and a Retry-After header.',
+        'src/middleware/ratelimit.ts',
+        18,
+        "reply.header('Retry-After', retryAfter).code(429).send({ error: 'rate_limited' });",
+        0.91,
+      ),
+      candidate(
+        'structure',
+        'Read configuration through src/config.ts, never process.env in handlers.',
+        'src/config.ts',
+        12,
+        'export const config = loadConfig(process.env);',
+        0.78,
+      ),
+      candidate(
+        'naming',
+        'Name public route modules after the resource they serve.',
+        'src/api/public/webhooks.ts',
+        3,
+        "export async function webhooksRoutes(app: FastifyInstance) {",
+        0.55,
+      ),
+    ]);
   }
 
   return { workspaceId, userId };
