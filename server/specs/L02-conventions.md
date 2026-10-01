@@ -74,8 +74,9 @@ not a wire contract.
    line and check that the rest follow. On a hit, set `evidence_line_start` and
    `evidence_line_end` to the real range. On a miss, drop it. Also drop duplicates, meaning the same normalized rule text.
 4. **Persist.** In one transaction, delete the repo's `pending` rows and insert the
-   survivors, **except** those whose normalized rule matches an existing `rejected` or
-   `accepted` row (#48). Build `evidence_url` on read from `repos.owner/name`,
+   survivors, **except** those whose normalized rule, or whose evidence `path` + start line,
+   matches an existing `rejected` or `accepted` row (#48). The evidence match keeps an edited
+   rule's original wording from coming back. Build `evidence_url` on read from `repos.owner/name`,
    `last_indexed_sha`, `evidence_path` and the range (`#L<start>-L<end>`, or `#L<start>`
    when the range is a single line).
 
