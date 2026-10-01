@@ -29,6 +29,7 @@ export const APP_NAV: AppNavGroup[] = [
     items: [
       { key: "skills", icon: "Sparkles", href: "/skills", gKey: "s" },
       { key: "agents", icon: "Cpu", href: "/agents", gKey: "a" },
+      { key: "conventions", icon: "ListChecks", href: "/repos/:repoId/conventions", gKey: "c" },
     ],
   },
 ];

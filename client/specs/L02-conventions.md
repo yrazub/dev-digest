@@ -52,7 +52,7 @@ Detected from 14 sample files · last scan 1h ago
 - **Rejected (#48)** cards do not come back after a reload or ReScan. A "Show rejected (N)"
   link at the bottom lists them with Restore, for mistakes.
 - **Header counters**: *"K of N accepted"* and **Deselect all**, which returns every
-  accepted card to pending after a confirm.
+  accepted card to pending. There is no confirm, because the change is undone by accepting again.
 - **Create skill (#50)** is visible only when K ≥ 1. This follows the criteria, where the
   mock shows it always.
 
@@ -70,9 +70,10 @@ It calls `skill-draft` with the accepted ids, then shows:
   accepted rules + evidence — edit freely."* (#41)
 - The footer *"Saved as v1 · added to Skills Lab"*, then **Cancel** · **Create skill**, plus
   ✕.
-- On success, a toast *"Skill created"* with **Open** (→ `/skills/:id`) and **Add to an
-  agent** (→ `/agents`), and the modal closes (#52). A `409` duplicate name shows inline on
-  the Name field.
+- On success the modal closes, a toast says *"Skill created"*, and a banner above the cards
+  offers **Open skill** (→ `/skills/:id`) and **Add to an agent →** (→ `/agents`) (#52). The
+  toast kit takes text only, hence the banner. A `409` duplicate name shows inline on the
+  Name field.
 
 ## Tests (colocated)
 

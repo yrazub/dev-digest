@@ -38,6 +38,9 @@ All work goes on `feature/l02-conventions-extractor`, branched from `main` after
 
 ## Phases
 
+Phases 4 and 5 landed in one commit: the page's Create skill button opens the modal, so
+neither builds alone.
+
 ### 1 · Contracts — `@devdigest/shared`
 
 Edit `server/src/vendor/shared/contracts/knowledge.ts`, and make the same edits in
