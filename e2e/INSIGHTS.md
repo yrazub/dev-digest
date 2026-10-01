@@ -47,6 +47,23 @@ pre-filled input's value. `09-conventions` waits for the modal's intro line inst
 candidates" (`wait --text "Merged from 2 accepted conventions"`); the failing version waited for
 `2 house conventions extracted from acme/payments-api`, the description input's value.
 
+### After `npm run e2e:hermetic`, the dev app on :3000 says "Cannot reach the DevDigest engine at http://localhost:3101"
+**Date:** 2026-10-01
+**Cause:** the hermetic stack starts its own `next dev` in `client/` with
+`NEXT_PUBLIC_API_BASE=http://localhost:3101`, and it writes to the same `client/.next` as the
+developer's running dev server. `NEXT_PUBLIC_*` values are inlined into compiled bundles, so the
+dev server on :3000 went on serving pages built for the e2e API. After teardown, :3101 is gone
+and every request fails. The e2e runs themselves pass, so nothing flags it until someone opens
+the app. Seen after three hermetic runs in one session; `grep -rl 3101 client/.next` listed
+compiled pages.
+**Fix / rule:** after a hermetic run with the dev server up, stop the dev server,
+`rm -rf client/.next`, and `pnpm dev` again. Better, stop the dev server before running the
+hermetic suite. A lasting fix would give the hermetic web its own build dir (a `distDir` set from
+an env var in `next.config`), which has not been done.
+**Evidence:** `../scripts/e2e.sh:146-148` — `(cd client && pnpm exec next dev -p "$WEB_PORT")`, no
+separate dist dir. **See also:** `../client/INSIGHTS.md` — the same shared-`.next` clobbering by
+`next build`.
+
 ## Session Notes
 
 - **2026-09-30** — added `08-skills` (create skill → link to agent → persists) and fixed the `04`/`05` click race.
