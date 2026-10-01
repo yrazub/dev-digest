@@ -87,8 +87,9 @@ rejected, a rejected rule is not proposed again).
 - `POST /repos/:id/conventions/skill-draft` → `ConventionSkillDraft` (`422` if any id is not
   `accepted`).
 - `POST /repos/:id/conventions/skill` → `201 Skill`: the skill (`source: 'extracted'`,
-  `type: 'convention'`, `evidence_files`) and v1 in one transaction, through the skills
-  module's repository rather than a second copy of its insert logic. `409` for a taken name.
+  `type: 'convention'`, `evidence_files`) and v1 in one transaction. The conventions
+  repository writes both rows itself, because a module may not import another module
+  (`dep-no-cross-module`), the same way `reviews` reads skills. `409` for a taken name.
 
 **Tests:** `test/conventions-draft.test.ts`, `test/conventions-skill.it.test.ts`.
 **Verify:** server green; the created skill appears in `GET /skills` and can be linked with

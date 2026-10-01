@@ -1,5 +1,6 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
-import type { ConventionCategory } from '@devdigest/shared';
+import type { ConventionCategory, Skill } from '@devdigest/shared';
+import { skillRowToDto } from '../_shared/skill-dto.js';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { ConventionRecord } from './domain.js';
@@ -7,6 +8,7 @@ import type {
   ConventionChanges,
   ConventionStore,
   ConventionsUnitOfWork,
+  NewExtractedSkill,
   ScanInfoRecord,
   ScanRepo,
 } from './ports.js';
@@ -15,7 +17,8 @@ import type { VerifiedCandidate } from './verify.js';
 /**
  * L02 — conventions data-access. Owns `conventions`; reads `repos` and
  * `repo_index_state`; keeps per-repo scan info in `settings` under
- * `conventions_scan:<repoId>`. Workspace-scoped throughout.
+ * `conventions_scan:<repoId>`; writes a new `skills` row + its v1 in
+ * `skill_versions` when accepted candidates become a skill. Workspace-scoped throughout.
  */
 
 type Executor = Db | Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -139,6 +142,33 @@ export class ConventionsRepository implements ConventionStore {
         target: [t.settings.workspaceId, t.settings.userId, t.settings.key],
         set: { value },
       });
+  }
+
+  async skillNames(workspaceId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ name: t.skills.name })
+      .from(t.skills)
+      .where(eq(t.skills.workspaceId, workspaceId));
+    return rows.map((r) => r.name);
+  }
+
+  async insertSkill(skill: NewExtractedSkill): Promise<Skill> {
+    const [row] = await this.db
+      .insert(t.skills)
+      .values({
+        workspaceId: skill.workspaceId,
+        name: skill.name,
+        description: skill.description,
+        type: skill.type,
+        source: 'extracted',
+        body: skill.body,
+        enabled: skill.enabled,
+        version: 1,
+        evidenceFiles: skill.evidenceFiles,
+      })
+      .returning();
+    await this.db.insert(t.skillVersions).values({ skillId: row!.id, version: 1, body: skill.body });
+    return skillRowToDto(row!, 0);
   }
 }
 

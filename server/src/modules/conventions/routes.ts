@@ -1,7 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import type { ConventionCandidate, ConventionExtractResult, ConventionList } from '@devdigest/shared';
-import { ConventionUpdate } from '@devdigest/shared';
+import type {
+  ConventionCandidate,
+  ConventionExtractResult,
+  ConventionList,
+  ConventionSkillDraft,
+  Skill,
+} from '@devdigest/shared';
+import { ConventionSkillCreate, ConventionSkillDraftRequest, ConventionUpdate } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { resolveFeatureModel } from '../_shared/repository/feature-models.repo.js';
 import { IdParams } from '../_shared/schemas.js';
@@ -16,6 +22,8 @@ const EXTRACT_RATE_LIMIT = { rateLimit: { max: 5, timeWindow: '1 minute' } };
  *   POST  /repos/:id/conventions/extract → run the scan (synchronous), all candidates + stats
  *   GET   /repos/:id/conventions         → scan info + all candidates (every status)
  *   PATCH /conventions/:id               → accept / reject / inline edit
+ *   POST  /repos/:id/conventions/skill-draft → merged skill from accepted ids (stores nothing)
+ *   POST  /repos/:id/conventions/skill       → create that skill + v1 (no agent link)
  */
 export default async function conventionsRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
@@ -55,6 +63,26 @@ export default async function conventionsRoutes(appBase: FastifyInstance) {
     async (req): Promise<ConventionCandidate> => {
       const { workspaceId } = await getContext(container, req);
       return service.update(workspaceId, req.params.id, req.body);
+    },
+  );
+
+  app.post(
+    '/repos/:id/conventions/skill-draft',
+    { schema: { params: IdParams, body: ConventionSkillDraftRequest } },
+    async (req): Promise<ConventionSkillDraft> => {
+      const { workspaceId } = await getContext(container, req);
+      return service.skillDraft(workspaceId, req.params.id, req.body.candidate_ids);
+    },
+  );
+
+  app.post(
+    '/repos/:id/conventions/skill',
+    { schema: { params: IdParams, body: ConventionSkillCreate } },
+    async (req, reply): Promise<Skill> => {
+      const { workspaceId } = await getContext(container, req);
+      const skill = await service.createSkill(workspaceId, req.params.id, req.body);
+      reply.status(201);
+      return skill;
     },
   );
 }

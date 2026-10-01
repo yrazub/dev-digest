@@ -2,8 +2,11 @@ import type {
   ConventionCandidate,
   ConventionExtractResult,
   ConventionList,
+  ConventionSkillCreate,
+  ConventionSkillDraft,
   ConventionUpdate,
   LLMProvider,
+  Skill,
 } from '@devdigest/shared';
 import {
   AppError,
@@ -11,8 +14,16 @@ import {
   ConflictError,
   ExternalServiceError,
   NotFoundError,
+  ValidationError,
 } from '../../platform/errors.js';
-import { evidenceKey, normalizeRule, toCandidate, type EvidenceRepo } from './domain.js';
+import { buildSkillDraft, draftSkillName, evidenceFiles } from './draft.js';
+import {
+  evidenceKey,
+  normalizeRule,
+  toCandidate,
+  type ConventionRecord,
+  type EvidenceRepo,
+} from './domain.js';
 import { ConventionLlmOutput } from './llm-schema.js';
 import type {
   ConventionModelGateway,
@@ -138,6 +149,52 @@ export class ConventionsService {
     const updated = await this.deps.store.find(workspaceId, id);
     if (!updated) throw new NotFoundError('Convention not found');
     return toCandidate(updated.record, evidenceRepo(repo));
+  }
+
+  /** The merged skill for the chosen accepted candidates; stores nothing. */
+  async skillDraft(workspaceId: string, repoId: string, candidateIds: string[]): Promise<ConventionSkillDraft> {
+    const repo = await this.requireRepo(workspaceId, repoId);
+    const accepted = await this.requireAccepted(workspaceId, repoId, candidateIds);
+    const taken = new Set(await this.deps.store.skillNames(workspaceId));
+    const name = draftSkillName(repo.name, (n) => taken.has(n));
+    return buildSkillDraft(name, repo.fullName, accepted);
+  }
+
+  /**
+   * Saves the (possibly edited) draft as a skill with v1, in one transaction.
+   * Linking it to an agent is the agent's Skills tab, like any other skill.
+   */
+  async createSkill(workspaceId: string, repoId: string, input: ConventionSkillCreate): Promise<Skill> {
+    await this.requireRepo(workspaceId, repoId);
+    const accepted = await this.requireAccepted(workspaceId, repoId, input.candidate_ids);
+    return this.deps.uow.run(async (store) => {
+      if ((await store.skillNames(workspaceId)).includes(input.name)) {
+        throw new ConflictError(`A skill named "${input.name}" already exists`);
+      }
+      return store.insertSkill({
+        workspaceId,
+        name: input.name,
+        description: input.description,
+        type: input.type,
+        body: input.body,
+        enabled: input.enabled,
+        evidenceFiles: evidenceFiles(accepted),
+      });
+    });
+  }
+
+  /** Every id must be one of this repo's candidates and accepted (#48: rejected never reach a skill). */
+  private async requireAccepted(
+    workspaceId: string,
+    repoId: string,
+    ids: string[],
+  ): Promise<ConventionRecord[]> {
+    const byId = new Map((await this.deps.store.list(workspaceId, repoId)).map((r) => [r.id, r]));
+    const picked = [...new Set(ids)].map((id) => byId.get(id));
+    if (picked.some((r) => r?.status !== 'accepted')) {
+      throw new ValidationError('Only accepted conventions of this repo can become a skill');
+    }
+    return picked as ConventionRecord[];
   }
 
   private async requireRepo(workspaceId: string, repoId: string): Promise<ScanRepo> {

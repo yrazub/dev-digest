@@ -89,10 +89,13 @@ Follows the design's merged body:
 ````
 # repo-conventions
 
-House conventions for `<name>`. Flag changes that violate any rule below and cite the
+House conventions for `<owner/name>`. Flag changes that violate any rule below and cite the
 offending `file:line`.
 
-## <rule-slug>
+## <Category>
+
+### <rule-slug>
+
 <rule>
 
 Detected in `<path>:<start>-<end>`:
@@ -102,7 +105,8 @@ Detected in `<path>:<start>-<end>`:
 ```
 ````
 
-Rules are grouped by category in enum order, and by confidence within each category.
+Rules are grouped under a `## <Category>` heading in enum order, and by confidence within
+each category. The snippet fence is longer than any backtick run inside the snippet.
 `rule-slug` is the first 4 words of the rule, kebab-cased. The default name is
 `repo-conventions`, or `<name>-conventions` if that name is taken. The description is
 `<N> house conventions extracted from <name>`.

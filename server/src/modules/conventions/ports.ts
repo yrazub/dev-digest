@@ -4,6 +4,8 @@ import type {
   FeatureModelChoice,
   LLMProvider,
   RepoRef,
+  Skill,
+  SkillType,
 } from '@devdigest/shared';
 import type { ConventionRecord } from './domain.js';
 import type { VerifiedCandidate } from './verify.js';
@@ -33,6 +35,17 @@ export interface ConventionChanges {
   category?: ConventionCategory;
 }
 
+/** A skill created from accepted candidates (`source: 'extracted'`), written with its v1. */
+export interface NewExtractedSkill {
+  workspaceId: string;
+  name: string;
+  description: string;
+  type: SkillType;
+  body: string;
+  enabled: boolean;
+  evidenceFiles: string[];
+}
+
 export interface ConventionStore {
   findRepo(workspaceId: string, repoId: string): Promise<ScanRepo | undefined>;
   /** All of the repo's candidates, every status: pending first, then by confidence. */
@@ -44,6 +57,10 @@ export interface ConventionStore {
   insertMany(workspaceId: string, repoId: string, rows: VerifiedCandidate[]): Promise<void>;
   getScanInfo(workspaceId: string, repoId: string): Promise<ScanInfoRecord | undefined>;
   saveScanInfo(workspaceId: string, userId: string, repoId: string, info: ScanInfoRecord): Promise<void>;
+  /** Names of the workspace's skills, for picking a free default name. */
+  skillNames(workspaceId: string): Promise<string[]>;
+  /** Inserts the skill and its v1 snapshot; call inside `ConventionsUnitOfWork.run`. */
+  insertSkill(skill: NewExtractedSkill): Promise<Skill>;
 }
 
 /** Runs `work` in one transaction; the store it receives writes through that transaction. */
