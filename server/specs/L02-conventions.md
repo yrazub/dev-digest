@@ -32,11 +32,13 @@ the table is empty in every starter database. Add an index on `(repo_id, status)
 |---|---|
 | `ConventionCategory` | `naming` `structure` `imports` `error-handling` `typing` `testing` `formatting` `api` `other` |
 | `ConventionStatus` | `pending` `accepted` `rejected` |
-| `ConventionCandidate` | `id`, `category`, `rule`, `evidence_path`, `evidence_line_start`, `evidence_line_end`, `evidence_snippet`, `evidence_url`, `confidence` (0–1), `status`. **Remove `accepted`** |
+| `ConventionCandidate` | `id`, `category`, `rule`, `evidence_path`, `evidence_line_start`, `evidence_line_end`, `evidence_snippet`, `evidence_url` (nullable: no index sha), `confidence` (0–1), `status`. **Remove `accepted`** |
 | `ConventionExtractResult` | `candidates: ConventionCandidate[]`, `stats: { sampled_files, proposed, verified, dropped, model, scanned_at }` |
 | `ConventionScanInfo` | `last_scan_at: string \| null`, `sampled_files: number \| null`, the header's "Detected from N sample files · last scan 1h ago" |
-| `ConventionUpdate` | `status?`, `rule?`, `category?` |
-| `ConventionSkillCreate` | `candidate_ids` (1+), `name`, `description`, `body`, `enabled` |
+| `ConventionList` | `scan: ConventionScanInfo`, `candidates` — the `GET` response |
+| `ConventionUpdate` | `status?`, `rule?`, `category?`; at least one field |
+| `ConventionSkillDraftRequest` | `candidate_ids` (1+) |
+| `ConventionSkillCreate` | `candidate_ids` (1+), `name`, `description`, `type`, `body`, `enabled` |
 | `ConventionSkillDraft` | `name`, `description`, `type: 'convention'`, `body` |
 
 The LLM's own output schema (`{ candidates: [{ category, rule, evidence: { path, line,
