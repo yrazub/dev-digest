@@ -10,6 +10,7 @@
 | adding or filling a prompt slot (`skills` `memory` `specs` `callers`) | `docs/prompt-slots.md`, the lesson's spec in `specs/`, then `src/prompt.ts` |
 | the LLM's JSON output — schema conversion, extraction, the repair loop | `docs/structured-output.md` |
 | what `reviewPullRequest()` guarantees — grounding, scoring, single-pass vs map-reduce | `specs/review-contract.md` |
+| a new import, dependency or side effect in `src/` | the `onion-architecture` skill — `reviewer-core-pure-engine.md`; checked by `cd ../server && pnpm arch:check` |
 | what this package exposes | `src/index.ts` — the public API is that file and nothing else |
 | how the server consumes the engine | `../server/README.md` |
 | any test | `../TESTING.md` |

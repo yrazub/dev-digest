@@ -155,6 +155,41 @@ be obvious to anyone reading the code, it does not belong here.
   window-placement fix lives outside the repo, in
   `~/.cache/chrome-devtools-mcp/chrome-profile/Default/Preferences` → `browser.window_placement`.
 
+- **2026-09-27** — the local `next-best-practices` skill was installed from `vercel-labs/next-skills`,
+  which Vercel has since retired: framework knowledge now ships as version-matched docs bundled
+  with Next.js plus a generated `AGENTS.md`/`CLAUDE.md` (Next 16.3+, or `npx @next/codemod@canary
+  agents-md` on older versions), because "always-available context outperforms on-demand
+  retrieval". Our copy will receive no updates and describes Next 16 behaviour while the client
+  runs Next 15; treat it as a snapshot, and prefer `nextjs.org/docs` when they disagree. Not yet
+  diffed against the last upstream version.
+  **Evidence 2026-09-27:** `skills-lock.json:28-29` — `"source": "vercel-labs/next-skills"`. The
+  retirement itself is external; see `.claude/skills/frontend-ui-architecture/research/notes/tooling_and_ai_skills.md`.
+
+- **2026-09-27** — Node's `path.matchesGlob` never lets `*` or `**` match a path segment that
+  starts with a dot, so `**/*.md` does **not** match `.claude/skills/x/SKILL.md`, and
+  `.github/…` or `.claude/…` files slip past any `**` exclusion. It takes no `dot` option. Match
+  through a wrapper that neutralises leading dots on both the path and the pattern
+  (`undot` in `.claude/skills/pr-self-review/scripts/lib/glob.mjs:5`).
+- **2026-09-27** — the local pnpm (12.4.2) rejects the silent flag before a script name:
+  `pnpm -s arch:check` fails with `error: unexpected argument '-s' found`. Run the script plainly;
+  extra args after it are appended to the script's command, so `pnpm arch:check --output-type json`
+  works, and the `$ depcruise …` echo goes to stderr, leaving stdout parseable
+  (`.claude/skills/pr-self-review/scripts/arch-check.mjs:28`, the `spawnSync('pnpm', …)` call).
+- **2026-09-27** — in auto mode the agent cannot register a hook: writing `hooks` into
+  `.claude/settings.json` (or loading `update-config` to do it) is denied as
+  `[Self-Modification]`. Build the hook script, then hand the user the settings snippet to add;
+  do not look for another way in. Nothing in the repo shows the denial; the snippet the user
+  must add is in `specs/L02-pr-self-review.md` ("Registering the hook").
+
+- **2026-09-28** — `chrome-devtools` `upload_file` only reads files under the MCP's workspace roots.
+  With no `--workspace` flag, that is the OS temp directory (`$TMPDIR`, `/var/folders/...`), not
+  `/tmp` or the session scratchpad. Copy a fixture into `$TMPDIR` before uploading. It also
+  cannot reach an `<input type="file" hidden>`: the `hidden` attribute removes the input from
+  the accessibility tree. Keep upload inputs visually hidden instead
+  (`client/src/app/skills/_components/ImportSkillModal/styles.ts`, `fileInput`). The config that
+  sets the roots is `.mcp.json:3`. Error seen: `Access denied: path … is not within any of the
+  configured workspace roots.`
+
 ## Decisions
 
 - **2026-09-20** — session knowledge is recorded in the per-module `INSIGHTS.md` files, not in
@@ -180,6 +215,33 @@ be obvious to anyone reading the code, it does not belong here.
   were never prompted. The ignore rule has been removed and the file is tracked again, so the
   decision stands. Keep `.mcp.json` free of secrets and machine paths — it ships to every clone.
   **Evidence 2026-09-26:** `.mcp.json:1-14` — `npx chrome-devtools-mcp@1.9.0` and its flags only.
+
+- **2026-09-27** — the `frontend-ui-architecture` skill (code organization: where components,
+  constants, helpers, types and business logic live) is deliberately **project-agnostic**, and
+  focuses on organization only so it does not duplicate `react-best-practices`. DevDigest's own
+  layout (`_components/<Name>/`, `styles.ts` → `s`, `lib/hooks/<resource>.ts`) stays in
+  `client/CLAUDE.md`, which the skill defers to ("the project's own documents win"). Rejected:
+  baking DevDigest conventions into the skill, which would duplicate `client/CLAUDE.md` and
+  present house rules as universal. The research the skill was built from lives inside it, in
+  `research/`, rather than at the repo root.
+  **Evidence 2026-09-27:** `.claude/skills/frontend-ui-architecture/SKILL.md:14` — the
+  "project's own documents win" clause.
+
+- **2026-09-27** — `pr-self-review` keys its verdicts by a **content hash** of the reviewable
+  diff (`path → blob id` from merge-base, `diffHash` in
+  `.claude/skills/pr-self-review/scripts/lib/git.mjs:84`), not by the HEAD SHA. The gate hashes
+  merge-base..HEAD and looks the verdict up by that hash (`scripts/gate.mjs:27`). Reviewing
+  uncommitted work and then committing exactly that work keeps the verdict valid, and any other
+  edit, including one that follows a waiver, makes it stale. Rejected: keying by SHA, which
+  forces a full re-review after every commit of already-reviewed work.
+
+- **2026-09-27** — the `pr-self-review` gate decides "is this a push / PR" by tokenizing the Bash
+  line (`isGatedCommand`, `.claude/skills/pr-self-review/scripts/lib/command.mjs:115`), not by regex. A
+  plain `\bgit\s+push\b` search blocked any command that merely *mentioned* the words: an `echo`, a
+  `grep`, a commit message, or a heredoc that writes a test file. It also missed `git -C server push`.
+  Quoted text and heredoc bodies are data; `&&` `;` `|` and subshells split commands; env assignments
+  and git global options are skipped. Rejected: keeping the regex and adding exceptions, which cannot
+  tell a quoted mention from a real command. Accepted limit: `eval` and scripts that push are not seen.
 
 ## Recurring Errors & Fixes
 
@@ -265,3 +327,10 @@ schema.
   **Evidence 2026-09-26:** uncommitted on `feature/finding-counter`;
   `client/src/app/repos/[repoId]/pulls/_components/FindingsPopover/FindingsPopover.tsx:101`
   (`createPortal`).
+- **2026-09-27** — researched React/Next.js code-organization practice (~110 graded sources) and
+  built the `frontend-ui-architecture` skill (v1.0.0) from it; recorded the retired
+  `next-best-practices` source here and the missing client linter in `client/INSIGHTS.md`.
+  **Evidence 2026-09-27:** uncommitted on `feature/finding-counter`;
+  `.claude/skills/frontend-ui-architecture/SKILL.md:1`.
+- **2026-09-27** — built the `pr-self-review` skill (manifest routing of changed files to skills, `arch:check`, subagent reviewers, a CRITICAL gate on `gh pr create`). Recorded the dot-segment glob quirk, pnpm `-s`, the hook self-modification denial and the content-hash decision.
+- **2026-09-27** — pr-self-review now gates `git push` as well as `gh pr create`, and the hook is registered in `.claude/settings.json`. The command check is a tokenizer (entry under Decisions). Architecture refactor S1/C1 reviewed over `f108012..HEAD` and pushed. **See also:** `server/INSIGHTS.md`.

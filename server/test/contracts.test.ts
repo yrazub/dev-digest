@@ -18,6 +18,11 @@ import {
   Repo,
   PrDetail,
   PrMeta,
+  Skill,
+  SkillCreate,
+  SkillImportDraft,
+  AgentSkill,
+  Agent,
 } from '@devdigest/shared';
 
 /**
@@ -316,5 +321,66 @@ describe('platform DTOs', () => {
     });
     expect(withBreakdown.findings_by_severity).toEqual({ CRITICAL: 1, WARNING: 1, SUGGESTION: 0 });
     expect(withBreakdown.findings_preview).toHaveLength(1);
+  });
+});
+
+describe('L02 skills contracts', () => {
+  const skill = {
+    id: 's1',
+    name: 'breaking-change',
+    description: 'Flag any removed or renamed field in a public response.',
+    type: 'rubric',
+    source: 'imported_file',
+    body: '# Breaking change\n\nFlag it.',
+    enabled: true,
+    version: 2,
+    evidence_files: null,
+    agent_count: 1,
+    created_at: '2026-09-28T10:00:00.000Z',
+  };
+
+  it('Skill accepts the imported_file source and requires agent_count', () => {
+    expect(Skill.parse(skill).source).toBe('imported_file');
+    const { agent_count: _dropped, ...withoutCount } = skill;
+    expect(Skill.safeParse(withoutCount).success).toBe(false);
+  });
+
+  it('SkillCreate enforces a kebab-case name', () => {
+    const base = { description: 'd', type: 'custom', body: 'b' };
+    expect(SkillCreate.safeParse({ ...base, name: 'edge-cases' }).success).toBe(true);
+    expect(SkillCreate.safeParse({ ...base, name: 'Edge Cases' }).success).toBe(false);
+  });
+
+  it('AgentSkill is a Skill plus link state', () => {
+    const linked = AgentSkill.parse({ ...skill, linked: true, order: 0 });
+    expect(linked.order).toBe(0);
+    expect(AgentSkill.parse({ ...skill, linked: false, order: null }).linked).toBe(false);
+  });
+
+  it('SkillImportDraft lists ignored archive entries', () => {
+    const draft = SkillImportDraft.parse({
+      name: 'breaking-change',
+      description: 'd',
+      type: 'rubric',
+      body: 'b',
+      source: 'imported_file',
+      ignored_files: ['scripts/run.sh'],
+      warnings: [],
+    });
+    expect(draft.ignored_files).toEqual(['scripts/run.sh']);
+  });
+
+  it('Agent defaults skill_count to 0', () => {
+    const agent = Agent.parse({
+      id: 'a1',
+      name: 'Test Quality Reviewer',
+      description: '',
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      system_prompt: 'Review tests.',
+      enabled: true,
+      version: 1,
+    });
+    expect(agent.skill_count).toBe(0);
   });
 });

@@ -1,7 +1,8 @@
 {
   "card": {
     "noDescription": "No description",
-    "skillCount": "{count} skills"
+    "skillCount": "{count, plural, one {# skill} other {# skills}}",
+    "delete": "Delete agent"
   },
   "list": {
     "breadcrumbLab": "Skills Lab",
@@ -14,7 +15,10 @@
     "loadError": "Could not load agents.",
     "emptyTitle": "No agents yet",
     "emptyBody": "An agent is a configured reviewer — a model, a prompt, and the skills it uses. Create one to start reviewing.",
-    "emptyCta": "Create your first agent"
+    "emptyCta": "Create your first agent",
+    "noMatch": "No agents match “{query}”.",
+    "selectTitle": "Select an agent",
+    "selectBody": "Pick an agent on the left to edit its config and skills."
   },
   "create": {
     "title": "Create agent",
@@ -95,5 +99,27 @@
   },
   "mount": {
     "body": "Mount point for {owner}. The Agent Editor shell + tab routing are wired by A2 — {owner} renders this tab."
+  },
+  "delete": {
+    "title": "Delete agent",
+    "body": "Delete “{name}”? Its skill links and config history go with it; past review runs are kept. This can't be undone.",
+    "cancel": "Cancel",
+    "confirm": "Delete",
+    "deleting": "Deleting…",
+    "deleted": "Agent “{name}” deleted."
+  },
+  "skillsTab": {
+    "heading": "Skills",
+    "enabledCount": "{enabled} of {total} enabled",
+    "filterPlaceholder": "Filter skills…",
+    "orderHint": "Order matters — earlier skills appear earlier in the assembled prompt. Drag to reorder.",
+    "dragDisabled": "Clear the filter to reorder.",
+    "dragHandle": "Drag {name} to reorder",
+    "toggle": "Use {name} in this agent's prompt",
+    "disabledGlobally": "disabled globally — not sent until enabled on the Skills page",
+    "empty": "No skills yet.",
+    "emptyCta": "Create or import a skill",
+    "noMatch": "No skills match “{query}”.",
+    "loadError": "Could not load this agent's skills."
   }
 }

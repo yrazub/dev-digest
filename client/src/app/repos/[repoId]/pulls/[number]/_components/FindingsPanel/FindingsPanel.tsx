@@ -7,7 +7,7 @@ import { useTranslations } from "next-intl";
 import { Toggle, EmptyState, SeverityBadge, Chip, SEV } from "@devdigest/ui";
 import type { FindingRecord, Severity } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
-import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
+import { useFindingAction } from "@/lib/hooks/reviews";
 import { KEY_TO_ACTION, SEVERITIES } from "./constants";
 import { countBySeverity, severityCounts, visibleFindings } from "./helpers";
 import { s } from "./styles";

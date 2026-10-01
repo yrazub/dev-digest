@@ -2,9 +2,10 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import { NAV, SETTINGS_ITEM, resolveHref } from "@devdigest/ui";
-import { useActiveRepo } from "../../../lib/repo-context";
+import { SETTINGS_ITEM, resolveHref } from "@devdigest/ui";
+import { useActiveRepo } from "@/lib/repo-context";
 import { G_NAV_TIMEOUT_MS } from "../constants";
+import { APP_NAV } from "../nav";
 import { isTextInput } from "../helpers";
 
 interface GlobalShortcutHandlers {
@@ -42,7 +43,7 @@ export function useGlobalShortcuts({ onOpenPalette, onOpenHelp }: GlobalShortcut
       }
       if (gPending) {
         gPending = false;
-        const target = NAV.flatMap((g) => g.items).find((it) => it.gKey === e.key);
+        const target = APP_NAV.flatMap((g) => g.items).find((it) => it.gKey === e.key);
         if (target) router.push(resolveHref(target.href, repoId));
         else if (e.key === SETTINGS_ITEM.gKey) router.push(SETTINGS_ITEM.href);
       }

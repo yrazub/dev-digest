@@ -5,7 +5,7 @@
 
 import React from "react";
 import { AppFrame, CommandPalette, ShortcutsHelp, type Crumb } from "@devdigest/ui";
-import { useGlobalShortcuts, useShellCommands, useShellContext } from "./hooks";
+import { useAppNav, useGlobalShortcuts, useShellCommands, useShellContext } from "./hooks";
 
 export function AppShell({ children, crumb }: { children: React.ReactNode; crumb?: Crumb[] }) {
   const [paletteOpen, setPaletteOpen] = React.useState(false);
@@ -18,6 +18,7 @@ export function AppShell({ children, crumb }: { children: React.ReactNode; crumb
   useGlobalShortcuts({ onOpenPalette: openPalette, onOpenHelp: openHelp });
   const commands = useShellCommands();
   const ctx = useShellContext({ onOpenCommandPalette: openPalette });
+  const { shortcuts } = useAppNav();
 
   return (
     <>
@@ -25,7 +26,7 @@ export function AppShell({ children, crumb }: { children: React.ReactNode; crumb
         {children}
       </AppFrame>
       <CommandPalette open={paletteOpen} commands={commands} onClose={closePalette} />
-      <ShortcutsHelp open={helpOpen} onClose={closeHelp} />
+      <ShortcutsHelp open={helpOpen} onClose={closeHelp} shortcuts={shortcuts} />
     </>
   );
 }

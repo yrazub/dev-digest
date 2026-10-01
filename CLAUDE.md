@@ -58,6 +58,7 @@ Node ≥22 · TypeScript · Fastify 5 · Drizzle + Postgres/pgvector · Next.js 
 - No workspace: install inside the package, never `pnpm -r`. `server`/`client` use
   **pnpm**, `reviewer-core`/`e2e` use **npm** — match the lockfile that is there.
 - One test suite per package, one CI workflow per suite, path-filtered.
+- **Run `/pr-self-review` before opening a PR.** Do not open one while its verdict is blocked.
 
 ## Naming
 

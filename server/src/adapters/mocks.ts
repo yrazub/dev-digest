@@ -33,6 +33,8 @@ import type {
   SecretKey,
 } from '@devdigest/shared';
 import { parseUnifiedDiff } from './git/diff-parser.js';
+import type { HttpFetcher } from './http-fetch/index.js';
+import { ExternalServiceError } from '../platform/errors.js';
 
 /**
  * Deterministic MOCK adapters for tests/dev — NO real network. Each mirrors the
@@ -326,5 +328,18 @@ export class MockSecretsProvider implements SecretsProvider {
   constructor(private secrets: Partial<Record<string, string>> = {}) {}
   async get(key: SecretKey): Promise<string | undefined> {
     return this.secrets[key as string];
+  }
+}
+
+// ---------- Mock HTTP fetch ----------
+/** Serves canned text by exact URL; any other URL throws like a failed fetch. */
+export class MockHttpFetcher implements HttpFetcher {
+  readonly requested: string[] = [];
+  constructor(private pages: Record<string, string> = {}) {}
+  async getText(url: string): Promise<string> {
+    this.requested.push(url);
+    const page = this.pages[url];
+    if (page === undefined) throw new ExternalServiceError(`No mock page for ${url}`);
+    return page;
   }
 }

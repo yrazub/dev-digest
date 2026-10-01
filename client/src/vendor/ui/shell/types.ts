@@ -1,4 +1,5 @@
 import type React from "react";
+import type { NavGroup } from "../nav";
 
 /** Minimal Link contract — Next's <Link> satisfies this. */
 export type LinkLike = React.ComponentType<{
@@ -34,6 +35,8 @@ export interface ShellContext {
   onRemoveRepo?: (id: string) => void;
   onRefresh?: () => void;
   prCount?: number;
+  /** Sidebar nav groups, supplied by the app. Falls back to the kit's `NAV`. */
+  nav?: NavGroup[];
 }
 
 export interface Crumb {

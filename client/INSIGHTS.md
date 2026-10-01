@@ -37,3 +37,70 @@ Traps we have already hit in the web app. Append-only. See the root
   wheel at the list's end doesn't chain into `<main>` and close it that way.
   **Evidence 2026-09-27:** `src/app/repos/[repoId]/pulls/_components/FindingsPopover/FindingsPopover.tsx:72`
   (`onScroll` target check).
+
+## Tool & Library Notes
+
+- **2026-09-27** — the web app has **no linter at all**: no `lint` script, no `eslint` /
+  `eslint-config-next` dependency, no `eslint.config.*`. Structural rules (no cross-feature imports,
+  no aggregating `index.ts` barrels, no nested component definitions) are therefore prose-only
+  and nothing catches a violation. Adding lint means the ESLint CLI with a flat
+  `eslint.config.mjs` — `next lint` was deprecated in Next 15.5 and removed in 16 — plus
+  `import(-x)/no-restricted-paths` zones and `no-cycle`; a starting config is in
+  `.claude/skills/frontend-ui-architecture/references/enforcement.md`.
+  **Evidence 2026-09-27:** `client/package.json:5-11` — `scripts` has `dev`/`build`/`start`/`typecheck`/`test`, no `lint`.
+
+- **2026-09-30** — the vendored `FormField` renders its `<label>` without a `htmlFor`, and
+  `TextInput` / `SelectInput` accept no `id` or `aria-label`. So form fields built from them
+  have **no accessible name**. `getByLabelText` in tests and `find label … fill` in e2e cannot
+  find them. Locate them by placeholder (`find placeholder "…" fill`), as `e2e/specs/08-skills.flow.json`
+  does, or give the control its own `aria-label` when it is app code (the skill body textarea
+  in `src/components/skill-body-editor/SkillBodyEditor.tsx` has one). `src/vendor/ui/kit/FormField.tsx:19`
+  shows the bare `<label>`.
+
+## Decisions
+
+- **2026-09-28** — the sidebar menu is owned by the app, not the vendored kit. `APP_NAV` in
+  `src/components/app-shell/nav.ts` is injected through `ShellContext.nav`, and the `?` cheat
+  sheet gets `ShortcutsHelp`'s `shortcuts` prop, both built by `useAppNav`. This took a
+  one-time, additive edit to three `src/vendor/ui` files. Each gained an optional input that
+  falls back to the kit's own `NAV` / `SHORTCUTS`: `shell/types.ts` (`nav?`),
+  `shell/Sidebar.tsx` (`ctx.nav ?? NAV`), and `command-palette/ShortcutsHelp.tsx`
+  (`shortcuts = SHORTCUTS`). Rejected: editing `vendor/ui/nav.ts` for every new page, which
+  reopens the "do not touch vendor" question each lesson; and copying `Sidebar` into the app,
+  where the copy drifts from the kit. If `src/vendor/ui` is ever re-copied from its origin,
+  re-apply those three edits. (`src/vendor/ui/shell/Sidebar.tsx:45`, `src/components/app-shell/nav.ts`)
+
+## Recurring Errors & Fixes
+
+### App renders as unstyled HTML; `layout.css`, `main-app.js`, `app/page.js` 404 while the server answers 200
+**Date:** 2026-09-28
+**Cause:** `next build` ran in `client/` while `next dev` was still up. Both write to the same
+`client/.next`, so the production build replaced the dev server's output. Dev kept serving HTML
+that links to chunks it no longer has. Signs: `.next/BUILD_ID`, `.next/export-marker.json` and
+content-hashed files in `.next/static/chunks/`, newer than the dev process start. `next dev`
+creates none of them.
+**Fix / rule:** stop the dev server, `rm -rf client/.next`, and `pnpm dev` again. Never run
+`pnpm build` in `client/` while dev is running. For a correctness check use `pnpm typecheck`
+and `pnpm test`, which do not touch `.next`.
+**Evidence:** `client/package.json:6-7` — `"dev": "next dev -p 3000"` and `"build": "next build"`,
+with no separate `distDir`, so both share `.next`.
+
+### A page 500s with "Module not found: Can't resolve './contracts/findings.js'" from `src/vendor/shared/index.ts`
+**Date:** 2026-09-28
+**Cause:** a client file imported a runtime *value* (a Zod schema such as `SkillType` or
+`SkillName`) from `@devdigest/shared`. A type-only import is erased at compile time, but a
+value import pulls `vendor/shared/index.ts` into the webpack bundle. Its `./contracts/*.js`
+re-exports use NodeNext-style `.js` suffixes that Next's webpack cannot resolve. `pnpm
+typecheck` passes, so the break only shows when the route is compiled in the browser.
+**Fix / rule:** in `client/`, import only `type`s from `@devdigest/shared`. When the client
+needs a value (an enum list, a validation rule), mirror it in `src/lib/` with a "keep in sync"
+note, as `src/lib/feature-models.ts` and `src/lib/skill-rules.ts` do.
+**Evidence:** `src/lib/feature-models.ts:6-11` (the original note), `src/lib/skill-rules.ts`
+(`SKILL_TYPES`, `isValidSkillName`).
+
+## Session Notes
+
+- **2026-09-28** — diagnosed and fixed the unstyled-app breakage caused by `next build` overwriting the dev server's `.next`.
+- **2026-09-28** — moved sidebar menu ownership from the vendored kit to `components/app-shell/nav.ts` (injected via `ShellContext.nav`).
+- **2026-09-28** — built the Skills screens (L02 phase 5); client code must import only types from `@devdigest/shared`.
+- **2026-09-30** — L02 Skills UI done (skills, agents Skills tab, trace); L02 tests moved to `userEvent`.

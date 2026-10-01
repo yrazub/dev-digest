@@ -1,7 +1,11 @@
-import { AgentsListView } from "./_components/AgentsListView";
+import { Suspense } from "react";
+import { AgentsView } from "./_components/AgentsView";
 
-/* Route: /agents (Agents list). Thin route entry — the view, its create modal,
-   styles, constants, helpers and i18n are colocated under _components/AgentsListView. */
+/* Route: /agents (agent list + empty detail pane). Thin route entry. */
 export default function AgentsPage() {
-  return <AgentsListView />;
+  return (
+    <Suspense>
+      <AgentsView />
+    </Suspense>
+  );
 }

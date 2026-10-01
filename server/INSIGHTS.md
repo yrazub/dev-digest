@@ -44,6 +44,36 @@ Traps we have already hit in the server. Append-only. See the root
   same insert once with a throwaway `tsx` script against `DATABASE_URL`, or use
   `cd e2e && npm run e2e:hermetic` for a fresh stack — never `docker compose down -v`.
 
+- **2026-09-27** — `modules/_shared/` is exempt from `dep-no-cross-module` but **not** from
+  `db-only-in-repository` (`.dependency-cruiser.cjs:58-59`, `from` covers all of `src/modules/`).
+  A helper shared by two modules therefore goes in `_shared/` with a *structural* input type and no
+  `src/db` import, not even `db/rows` types; a Drizzle row still satisfies it. Moving it to
+  `src/db/` instead would give every non-repository caller a new violation. Reference:
+  `findingRowToDto` + `FindingRecord` (`src/modules/_shared/finding-dto.ts:11`).
+
+## Tool & Library Notes
+
+- **2026-09-27** — dependency-cruiser's `--ignore-known` takes an **optional** file argument, so
+  `depcruise --ignore-known src …` reads `src` as the baseline path and dies with
+  `ERROR: EISDIR: illegal operation on a directory, read`. Always name the file:
+  `--ignore-known .dependency-cruiser-known-violations.json` (`package.json:15`, `arch:check`).
+  A bare `--ignore-known` works only when another flag follows it, which is why an ad-hoc run
+  passed and the script did not.
+- **2026-09-27** — under pnpm, dependency-cruiser resolves an npm import to a versioned path
+  (`node_modules/.pnpm/drizzle-orm@0.38.4_postgres@3.4.9/node_modules/drizzle-orm/index.d.ts`),
+  and a known-violations baseline stores that path verbatim. A rule whose `to` targets
+  `drizzle-orm` would therefore produce baseline entries that go stale, and fail CI, on the next
+  version bump. `db-only-in-repository` targets `^src/db/` instead, which every querying file
+  imports anyway (`.dependency-cruiser.cjs:63`). Keep npm packages out of baselined rules' `to`,
+  or use them only in rules with zero baselined hits.
+
+- **2026-09-27** — `pnpm arch:check --output-type json` puts the **baselined** violations in
+  `summary.violations` too, with `rule.severity: "ignore"` (`summary.ignore` is their count, 33
+  today). The new ones are those with any other severity. Paths are relative to `server/`
+  (`src/…`, `../reviewer-core/src/…`), so resolve them against `server/` before comparing with
+  repo-relative paths. See `toRepoPath` and the `severity !== 'ignore'` filter in
+  `.claude/skills/pr-self-review/scripts/arch-check.mjs:16` and `:44`.
+
 ## Decisions
 
 - **2026-09-26** — the PR list's `cost_usd` is the **total** over a PR's completed runs, and one
@@ -52,6 +82,25 @@ Traps we have already hit in the server. Append-only. See the root
   figure and would understate spend silently. This matches `reviewer-core`, where one unpriced
   chunk makes a run's cost `null`. Failed, running and cancelled runs add nothing.
   **See also:** `specs/L01-run-cost.md` and `server/specs/L01-run-cost.md`, which record the rule.
+
+- **2026-09-27** — layer boundaries (`onion-architecture` skill) are enforced by
+  `pnpm arch:check` against a **known-violations baseline** of 33 existing leaks
+  (`.dependency-cruiser-known-violations.json`), not by fixing them first: routes querying
+  Drizzle, services taking the whole `Container`, `reviews → pulls/status` and the
+  `container.ts ↔ repo-intel` cycles. Fixing them up front was rejected as a large refactor
+  bundled into a docs change. Error-level checks with no baseline were rejected because CI would
+  go red at once. New services take narrow dependencies instead of `Container`
+  (`di-narrow-deps`, `.dependency-cruiser.cjs:82`). Re-baseline only in a PR that *removes* a leak.
+  **See also:** `.claude/skills/onion-architecture/references/enforcement-dependency-cruiser.md`.
+
+- **2026-09-29** — the URL-import SSRF guard checks addresses **at connect time**, through a
+  `lookup` hook on `https.get`, not by resolving the host first and fetching afterwards
+  (`src/adapters/http-fetch/index.ts`, `publicOnlyLookup`). Resolve-then-`fetch()` was rejected,
+  because `fetch` resolves the name a second time, and a DNS-rebinding host can answer differently
+  that time. The hook sees every address the socket will use, including redirect hops.
+  `127.0.0.1.nip.io` is refused only by this hook. IP literals skip DNS, so they are checked up
+  front. That check also has to handle Node's hex rewrite of `[::ffff:127.0.0.1]` to
+  `::ffff:7f00:1`, and the NAT64 and 6to4 forms (`hextets`, `embeddedIPv4`).
 
 ## Recurring Errors & Fixes
 
@@ -143,3 +192,12 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
   rediscovery of the `.it` skip.
   **Evidence 2026-09-26:** `src/db/migrations/0011_ambiguous_slyde.sql:1`; `src/modules/pulls/routes.ts:165-168`
   (the cost total).
+- **2026-09-27** — added the `onion-architecture` skill, plus `server/.dependency-cruiser.cjs`, the
+  baseline and the `arch:check` CI step, which also cruises `../reviewer-core/src`. Recorded two
+  depcruise quirks and the baseline decision.
+- **2026-09-27** — `pr-self-review` consumes `arch:check` JSON; recorded how its baselined and new violations differ. **See also:** `INSIGHTS.md` (root), 2026-09-27 entries.
+- **2026-09-27** — architecture refactor S1: split `pulls` into routes / service / repository /
+  domain, moved `rollupSeverities` to `reviews/domain.ts` and `findingRowToDto` to
+  `modules/_shared/finding-dto.ts`. The baseline went from 33 to 28, and the `pulls-*.it` tests passed unedited.
+  Plan: `specs/architecture-refactor.md`.
+- **2026-09-29** — L02 skills module; URL-import SSRF hardening (connect-time lookup); skill version bumps serialised with `SELECT … FOR UPDATE`.

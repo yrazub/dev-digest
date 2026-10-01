@@ -13,6 +13,7 @@ are the executable acceptance criteria, so there is no separate prose spec here.
 | `05-pr-diff.flow.json` | the diff view |
 | `06-onboarding.flow.json` | add a repository |
 | `07-settings.flow.json` | settings sections |
+| `08-skills.flow.json` | create a skill, link it to an agent, the link persists |
 
 Read [`../README.md`](../README.md) before adding one — locator rules and the
 seeded-data precondition are not optional.

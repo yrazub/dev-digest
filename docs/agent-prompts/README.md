@@ -9,6 +9,8 @@ in the DB). The canonical, reviewable copies live next to this file:
 - [`general-reviewer.md`](./general-reviewer.md)
 - [`security-reviewer.md`](./security-reviewer.md)
 - [`performance-reviewer.md`](./performance-reviewer.md)
+- [`test-quality-reviewer.md`](./test-quality-reviewer.md) — seeded (L02); its detailed rules come from the `branch-coverage` and `edge-cases` skills in [`../skills/test-quality/`](../skills/test-quality/)
+- [`api-contract-reviewer.md`](./api-contract-reviewer.md) — created in the UI (L02); its rules come from the skills in [`../skills/api-contract/`](../skills/api-contract/)
 
 > The DB is the source of truth at run time. These files are the human-readable
 > originals — when you change a prompt, edit the file here **and** push it to the

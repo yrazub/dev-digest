@@ -10,8 +10,8 @@ runs and how the app is wired is in [`ui-architecture.md`](ui-architecture.md).
 component  →  hook in src/lib/hooks/<resource>.ts  →  api.* in src/lib/api.ts  →  Fastify (:3001)
 ```
 
-- **No `fetch` in components**, and no second HTTP client. Hooks are re-exported from
-  `@/lib/hooks`.
+- **No `fetch` in components**, and no second HTTP client. Import a hook from its resource
+  file (`@/lib/hooks/pulls`); there is no `lib/hooks` barrel.
 - **`apiFetch`** prefixes `NEXT_PUBLIC_API_BASE` (default `http://localhost:3001`). It sets
   `content-type: application/json` only when there is a body, because Fastify rejects a
   body-less request that declares JSON.
@@ -37,6 +37,13 @@ A key is `[resource, id]`. The ones the PR screens depend on:
 
 Other screens follow the same shape: `["repos"]`, `["settings"]`, `["agents"]` /
 `["agent", id]`, and `["repo-intel-state", repoId]`, which polls every 1.5 s while indexing.
+
+Skills (L02): `["skills"]` / `["skill", id]`, `["skill-versions", id]`, and
+`["agent-skills", agentId]` (every workspace skill with its link state for one agent). Saving,
+restoring or deleting a skill invalidates `skills` and every `agent-skills`; deleting one also
+invalidates `agents`, since link counts change. `useSetAgentSkills` is optimistic: the list
+reorders at once and rolls back if the server refuses. File import goes through `api.upload`
+(a `FormData` body gets its own multipart header; only string bodies are sent as JSON).
 
 Keep server data in the query cache. Do not copy it into `useState`; derive from it instead
 (the severity counters are a `useMemo` over `review.findings`).

@@ -1,0 +1,27 @@
+{
+  "name": "Create a skill and link it to an agent",
+  "description": "Creates a skill through the Skills page (Add Skill → Create), then checks it on the seeded Test Quality Reviewer's Skills tab and confirms the link survives a reload. Exercises /skills, /skills/:id, the agent Skills tab and the POST /skills and POST /agents/:id/skills round trips. No model call: the review-time injection and trace are covered by server tests.",
+  "steps": [
+    { "cmd": ["open", "{BASE}/skills"], "label": "load the Skills page" },
+    { "cmd": ["wait", "--url", "/skills"], "label": "skills route reached" },
+    { "cmd": ["wait", "--text", "No skills yet"], "label": "a fresh DB has no skills" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Add Skill"], "label": "open the Add Skill menu" },
+    { "cmd": ["find", "text", "Create skill", "click"], "label": "choose Create" },
+    { "cmd": ["find", "placeholder", "edge-cases", "fill", "e2e-rule"], "label": "fill the skill name" },
+    { "cmd": ["find", "placeholder", "Flag tests that skip boundary values.", "fill", "Flag every TODO added in the diff."], "label": "fill the directive description" },
+    { "cmd": ["find", "label", "Skill body", "fill", "# TODO rule\n\n- Flag every TODO comment the diff adds."], "label": "fill the markdown body" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Create skill", "--exact"], "label": "save the new skill" },
+    { "cmd": ["wait", "--url", "/skills/"], "label": "the new skill's page opens" },
+    { "cmd": ["wait", "--text", "Skill “e2e-rule” created."], "label": "creation is confirmed" },
+    { "cmd": ["open", "{BASE}/agents"], "label": "load the Agents page" },
+    { "cmd": ["wait", "--text", "Test Quality Reviewer"], "label": "seeded Test Quality Reviewer is listed" },
+    { "cmd": ["find", "text", "Test Quality Reviewer", "click"], "label": "open the agent" },
+    { "cmd": ["wait", "--url", "/agents/"], "label": "agent editor route reached" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Skills", "--exact"], "label": "switch to the Skills tab" },
+    { "cmd": ["wait", "--text", "0 of 1 enabled"], "label": "the skill is listed but not linked" },
+    { "cmd": ["find", "role", "checkbox", "click", "--name", "e2e-rule"], "label": "link the skill to the agent" },
+    { "cmd": ["wait", "--text", "1 of 1 enabled"], "label": "the link is shown" },
+    { "cmd": ["reload"], "label": "reload the editor" },
+    { "cmd": ["wait", "--text", "1 of 1 enabled"], "label": "the link persisted on the server" }
+  ]
+}

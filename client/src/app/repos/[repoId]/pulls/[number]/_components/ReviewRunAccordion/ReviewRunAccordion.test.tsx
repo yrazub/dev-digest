@@ -8,7 +8,7 @@ import { render, screen, cleanup } from "@testing-library/react";
 import type { ReviewRecord } from "@devdigest/shared";
 
 // The header's delete button uses a TanStack mutation; no query client here.
-vi.mock("../../../../../../../lib/hooks/reviews", () => ({
+vi.mock("@/lib/hooks/reviews", () => ({
   useDeleteReview: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 

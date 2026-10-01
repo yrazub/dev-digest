@@ -22,3 +22,26 @@
     transform: translateY(0);
   }
 }
+
+/* Skill bodies rendered "as the agent receives them" (Skills preview, import
+   preview, body editor preview). The kit's Markdown styles inline elements
+   only; block elements get their typography here, scoped so other markdown
+   on the site is unchanged. */
+.skill-markdown h1 { font-size: 20px; font-weight: 700; margin: 4px 0 12px; }
+.skill-markdown h2 { font-size: 16px; font-weight: 650; margin: 18px 0 8px; }
+.skill-markdown h3 { font-size: 14px; font-weight: 650; margin: 14px 0 6px; }
+.skill-markdown ul, .skill-markdown ol { margin: 0 0 10px; padding-left: 22px; }
+.skill-markdown ul { list-style: disc; }
+.skill-markdown ol { list-style: decimal; }
+.skill-markdown li { margin: 2px 0; }
+.skill-markdown pre {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--code-bg);
+  overflow: auto;
+}
+.skill-markdown pre code { padding: 0; background: none; color: var(--text-primary); }
+.skill-markdown table { border-collapse: collapse; margin: 0 0 12px; font-size: 13px; }
+.skill-markdown th, .skill-markdown td { border: 1px solid var(--border); padding: 5px 9px; text-align: left; }
+.skill-markdown blockquote { margin: 0 0 10px; padding-left: 12px; border-left: 3px solid var(--border-strong); color: var(--text-secondary); }

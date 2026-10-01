@@ -11,6 +11,14 @@ export const s = {
     opacity: enabled ? 1 : 0.6,
     marginBottom: 10,
   }),
+  delete: {
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    color: "var(--text-muted)",
+    display: "inline-flex",
+    padding: 4,
+  } satisfies CSSProperties,
   headerRow: { display: "flex", alignItems: "center", gap: 10 } satisfies CSSProperties,
   iconBox: {
     width: 26,

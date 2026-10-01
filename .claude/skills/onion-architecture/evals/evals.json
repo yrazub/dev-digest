@@ -1,0 +1,47 @@
+{
+  "skill_name": "onion-architecture",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Add GET /repos/:id/digest to the server: it returns the last 7 days of merged PRs for a repo with their review scores.",
+      "expected_output": "Contract in @devdigest/shared; routes.ts only parses, resolves context and calls a service; the query lives in a repository that returns contracts (no $inferSelect rows leave it); the service gets narrow deps wired in routes.ts, not Container; no import from another module; runs pnpm arch:check.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Review this change: a new modules/digests/service.ts that does `import { and, eq } from 'drizzle-orm'` and `import * as t from '../../db/schema.js'` and queries t.pullRequests directly.",
+      "expected_output": "Flags db-only-in-repository (CRITICAL) with the file, cites references/drizzle-persistence.md, proposes moving the query to digests/repository.ts returning a contract, and notes arch:check would fail on it.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "The reviews module needs rollupSeverities from pulls/status.ts. Where should that function live?",
+      "expected_output": "Not imported across modules (dep-no-cross-module). Since two modules need a pure rule, it moves inward to @devdigest/shared (or modules/_shared if server-only), then arch:baseline is run in the same PR to drop the fixed entries.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Save a run's findings and mark the run done atomically, after the LLM call finishes.",
+      "expected_output": "Service owns the boundary via a UnitOfWork port; repository implements it with db.transaction passing tx; the LLM call stays outside the transaction; no Drizzle types in the service.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "I want reviewer-core to read the model name from process.env.REVIEW_MODEL.",
+      "expected_output": "Refuses to put process.env in reviewer-core (core-no-node-io / purity); the server resolves it in platform/config.ts and passes it as an argument; notes dependency-cruiser cannot catch process.env so it is a review-time check.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "pnpm arch:check fails with `di-narrow-deps: src/modules/digests/service.ts → src/platform/container.ts`. Can I just rerun arch:baseline?",
+      "expected_output": "No — the baseline is for pre-existing leaks only; fix the service to take narrow deps (functions for secret-backed clients) wired in routes.ts.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Add a Slack notifier the server calls when a review finishes.",
+      "expected_output": "Port (in modules/<m>/ports.ts or @devdigest/shared if shared), adapter in src/adapters/slack/ translating SDK errors to ExternalServiceError, a mock in mocks.ts implementing the same port, a lazy getter + override in container.ts, secret read via SecretsProvider.",
+      "files": []
+    }
+  ]
+}

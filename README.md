@@ -105,6 +105,9 @@ This script:
 4. applies DB migrations and seeds demo data,
 5. launches the API (`:3001`) and the web app (`:3000`).
 
+It also enables the repo's git hooks (`git config core.hooksPath .githooks`). The pre-push hook
+refuses commits that have no passing `/pr-self-review` verdict; `git push --no-verify` skips it.
+
 Open **http://localhost:3000**. Press **Ctrl-C** to stop the dev servers —
 Postgres keeps running (`docker compose down` to stop it).
 

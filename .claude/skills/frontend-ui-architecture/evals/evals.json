@@ -1,0 +1,59 @@
+{
+  "skill_name": "frontend-ui-architecture",
+  "version": "1.0.0",
+  "evals": [
+    {
+      "id": 1,
+      "name": "helper-placement",
+      "prompt": "In my Next.js app, InvoiceTable needs a function that formats a row's due date as 'in 3 days' / 'overdue'. Nothing else uses it yet. Where should I put it? Add it.",
+      "expected_output": "Places the function next to InvoiceTable (same file or a sibling helpers.ts in its folder), named without a use prefix, pure and unit-testable; does not create or extend a global utils/ file; mentions promoting it only when a second consumer appears.",
+      "assertions": [
+        "The function is not placed in src/utils or another global folder",
+        "The function name does not start with 'use'",
+        "The answer explains colocation / promotion on reuse"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "cross-feature-import-review",
+      "prompt": "Review this change: src/features/billing/components/InvoiceHeader.tsx now does `import { useCurrentUser } from '@/features/auth/hooks/use-current-user'`. Anything wrong with the structure?",
+      "expected_output": "Flags the cross-feature import (struct-no-cross-feature) and proposes either composing both features at the route or moving useCurrentUser into the shared layer; suggests enforcing it with an import-restriction lint rule.",
+      "assertions": [
+        "Identifies the feature-to-feature import as a violation",
+        "Offers composition at the route or promotion to shared as the fix",
+        "Mentions a lint rule (no-restricted-paths, boundaries or dependency-cruiser)"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "business-logic-extraction",
+      "prompt": "This component has a 40-line reduce that computes a risk score and a verdict from findings, plus a useEffect that copies the filtered findings into state. Refactor it so the logic lives in the right place.",
+      "expected_output": "Moves score/verdict rules into pure framework-free functions (feature lib or helpers.ts) with unit tests, removes the effect+state and derives the filtered list during render, and keeps the component rendering only.",
+      "assertions": [
+        "Business rules end up in plain functions without React imports",
+        "The useEffect that syncs derived data into state is removed",
+        "Filtered findings are computed during render"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "barrel-file-request",
+      "prompt": "Create src/components/index.ts that re-exports all our shared components so we can import them from '@/components'.",
+      "expected_output": "Pushes back on an aggregating barrel in app code (module-graph cost, cycles), recommends direct imports per component, and notes a one-line per-component index.ts is a separate, acceptable convention; does not silently create the aggregate barrel.",
+      "assertions": [
+        "Explains the cost of aggregating barrel files",
+        "Recommends direct per-component imports",
+        "Does not create an export * barrel without flagging the trade-off"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "negative-trigger",
+      "prompt": "Why does my useEffect run twice in development?",
+      "expected_output": "The skill should not be needed; this is a React behaviour question (Strict Mode), not code organization.",
+      "assertions": [
+        "The frontend-ui-architecture skill is not the primary source of the answer"
+      ]
+    }
+  ]
+}

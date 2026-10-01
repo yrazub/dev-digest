@@ -1,7 +1,7 @@
-import type { FindingActionKind } from '@devdigest/shared';
+import type { FindingActionKind, FindingRecord } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { ReviewRepository } from './repository.js';
-import { findingRowToDto, type ReviewDtoFinding } from './helpers.js';
+import { findingRowToDto } from '../_shared/finding-dto.js';
 
 /**
  * Finding actions available in the starter: accept / dismiss. These decisions
@@ -13,7 +13,7 @@ export async function actOnFinding(
   workspaceId: string,
   findingId: string,
   action: FindingActionKind,
-): Promise<{ finding: ReviewDtoFinding }> {
+): Promise<{ finding: FindingRecord }> {
   const ctx = await repo.findingContext(findingId);
   if (!ctx || ctx.pull.workspaceId !== workspaceId) {
     throw new NotFoundError('Finding not found');

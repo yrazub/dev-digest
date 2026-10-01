@@ -6,7 +6,7 @@ import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
 import type { RunSummary, PrCommit, FindingRecord } from "@devdigest/shared";
 import { formatCostUsd } from "@/lib/format-cost";
 import { severityCounts } from "../FindingsPanel/helpers";
-import { FindingsPopover } from "../../../_components/FindingsPopover";
+import { FindingsPopover } from "@/app/repos/[repoId]/pulls/_components/FindingsPopover";
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
