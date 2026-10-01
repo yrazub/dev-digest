@@ -114,6 +114,10 @@ blocking the shell.
 **Evidence:** `src/app/repos/[repoId]/conventions/_components/CreateConventionSkillModal/CreateConventionSkillModal.test.tsx`
 `draftMutation` (the stable mock) and `CreateConventionSkillModal.tsx` `fetchDraft` /
 `React.useEffect(fetchDraft, [fetchDraft])` (the dependency).
+**Evidence moved 2026-10-01:** the self-review then replaced that effect with a query
+(`useConventionSkillDraft` in `src/lib/hooks/conventions.ts` is now `useQuery`), so the modal
+no longer has the effect or `draftMutation`. The rule still holds for any mocked hook whose
+function identity a component depends on; the original code is in commit `54e2b1e`.
 
 ## Session Notes
 

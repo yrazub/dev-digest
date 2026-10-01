@@ -239,7 +239,7 @@ export const ConventionCandidate = z.object({
   evidence_line_end: z.number().int().min(1),
   evidence_snippet: z.string(),
   /** GitHub blob URL pinned to the indexed commit; null when the repo has no index sha. */
-  evidence_url: z.string().nullable(),
+  evidence_url: z.string().url().nullable(),
   confidence: z.number().min(0).max(1),
   status: ConventionStatus,
 });
@@ -288,10 +288,10 @@ export type ConventionSkillDraftRequest = z.infer<typeof ConventionSkillDraftReq
 
 /** The merged skill the Create skill modal opens with; nothing is stored yet. */
 export const ConventionSkillDraft = z.object({
-  name: z.string(),
-  description: z.string(),
+  name: SkillName,
+  description: z.string().min(1).max(500),
   type: SkillType,
-  body: z.string(),
+  body: z.string().min(1).max(SKILL_BODY_MAX),
 });
 export type ConventionSkillDraft = z.infer<typeof ConventionSkillDraft>;
 

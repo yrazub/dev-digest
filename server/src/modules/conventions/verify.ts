@@ -1,5 +1,5 @@
-import { CONVENTION_RULE_MAX, type ConventionCategory } from '@devdigest/shared';
-import { normalizeRule } from './domain.js';
+import { CONVENTION_RULE_MAX } from '@devdigest/shared';
+import { normalizeRule, type VerifiedCandidate } from './domain.js';
 import type { ConventionLlmCandidate } from './llm-schema.js';
 import type { SampledFile } from './sample.js';
 
@@ -16,16 +16,6 @@ const NEAR_LINES = 5;
 const MIN_PARTIAL = 12;
 /** Longest evidence range kept. */
 const MAX_RANGE_LINES = 15;
-
-export interface VerifiedCandidate {
-  category: ConventionCategory;
-  rule: string;
-  evidencePath: string;
-  evidenceLineStart: number;
-  evidenceLineEnd: number;
-  evidenceSnippet: string;
-  confidence: number;
-}
 
 export interface VerifyResult {
   verified: VerifiedCandidate[];

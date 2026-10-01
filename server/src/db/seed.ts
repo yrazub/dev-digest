@@ -266,7 +266,7 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     .limit(1);
   if (!anyConvention) {
     const candidate = (
-      category: string,
+      category: (typeof t.conventions.$inferInsert)['category'],
       rule: string,
       evidencePath: string,
       line: number,

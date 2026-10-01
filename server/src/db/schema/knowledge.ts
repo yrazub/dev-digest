@@ -1,4 +1,5 @@
-import { pgTable, uuid, text, jsonb, timestamp, doublePrecision, boolean, integer, vector, index } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { pgTable, uuid, text, jsonb, timestamp, doublePrecision, boolean, integer, vector, index, check } from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { repos } from './repos';
@@ -36,17 +37,26 @@ export const conventions = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     repoId: uuid('repo_id').references(() => repos.id, { onDelete: 'cascade' }),
-    category: text('category').notNull(),
+    // Mirrors `ConventionCategory` in @devdigest/shared.
+    category: text('category', {
+      enum: ['naming', 'structure', 'imports', 'error-handling', 'typing', 'testing', 'formatting', 'api', 'other'],
+    }).notNull(),
     rule: text('rule').notNull(),
-    evidencePath: text('evidence_path'),
+    evidencePath: text('evidence_path').notNull(),
     evidenceLineStart: integer('evidence_line_start').notNull(),
     evidenceLineEnd: integer('evidence_line_end').notNull(),
-    evidenceSnippet: text('evidence_snippet'),
+    evidenceSnippet: text('evidence_snippet').notNull(),
     confidence: doublePrecision('confidence'),
     status: text('status', { enum: ['pending', 'accepted', 'rejected'] })
       .notNull()
       .default('pending'),
     createdAt: now(),
   },
-  (t) => ({ repoStatusIdx: index('conventions_repo_status_idx').on(t.repoId, t.status) }),
+  (t) => ({
+    repoStatusIdx: index('conventions_repo_status_idx').on(t.repoId, t.status),
+    evidenceRange: check(
+      'conventions_evidence_range',
+      sql`${t.evidenceLineStart} > 0 AND ${t.evidenceLineEnd} >= ${t.evidenceLineStart}`,
+    ),
+  }),
 );

@@ -16,17 +16,11 @@ const DRAFT: ConventionSkillDraft = {
 const loadDraft = vi.fn();
 const create = vi.fn();
 
-// Stable like React Query's own `mutate`, so the modal's load effect runs once.
-const draftMutation = {
-  mutate: (ids: string[], opts: { onSuccess: (d: ConventionSkillDraft) => void }) => {
-    loadDraft(ids);
-    opts.onSuccess(DRAFT);
-  },
-  isError: false,
-};
-
 vi.mock("@/lib/hooks/conventions", () => ({
-  useConventionSkillDraft: () => draftMutation,
+  useConventionSkillDraft: (_repoId: string, ids: string[]) => {
+    loadDraft(ids);
+    return { data: DRAFT, isError: false, refetch: vi.fn() };
+  },
   useCreateConventionSkill: () => ({ mutate: create, isPending: false, error: null }),
 }));
 
@@ -55,9 +49,8 @@ function renderModal() {
 }
 
 describe("CreateConventionSkillModal", () => {
-  it("loads the draft once for the accepted ids and explains where it comes from", () => {
+  it("loads the draft for the accepted ids and explains where it comes from", () => {
     renderModal();
-    expect(loadDraft).toHaveBeenCalledOnce();
     expect(loadDraft).toHaveBeenCalledWith(["a", "b"]);
     expect(screen.getByText("Create skill from conventions")).toBeInTheDocument();
     expect(screen.getByText("2 accepted conventions")).toBeInTheDocument();
@@ -67,7 +60,7 @@ describe("CreateConventionSkillModal", () => {
 
   it("sends the edited name, body and enabled flag with the candidate ids", async () => {
     const user = userEvent.setup();
-    renderModal();
+    const onCreated = renderModal();
     const name = screen.getByDisplayValue("repo-conventions");
     await user.clear(name);
     await user.type(name, "api-house-rules");
@@ -86,6 +79,7 @@ describe("CreateConventionSkillModal", () => {
     });
     const skill = { id: "s1", name: "api-house-rules" } as Skill;
     (opts as { onSuccess: (s: Skill) => void }).onSuccess(skill);
+    expect(onCreated).toHaveBeenCalledWith(skill);
   });
 
   it("an invalid name disables Create skill", async () => {

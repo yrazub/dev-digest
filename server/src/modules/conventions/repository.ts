@@ -1,9 +1,10 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
-import type { ConventionCategory, Skill } from '@devdigest/shared';
+import { z } from 'zod';
+import type { Skill } from '@devdigest/shared';
 import { skillRowToDto } from '../_shared/skill-dto.js';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { ConventionRecord } from './domain.js';
+import type { ConventionRecord, VerifiedCandidate } from './domain.js';
 import type {
   ConventionChanges,
   ConventionStore,
@@ -12,7 +13,6 @@ import type {
   ScanInfoRecord,
   ScanRepo,
 } from './ports.js';
-import type { VerifiedCandidate } from './verify.js';
 
 /**
  * L02 — conventions data-access. Owns `conventions`; reads `repos` and
@@ -26,15 +26,18 @@ type Row = typeof t.conventions.$inferSelect;
 
 const scanKey = (repoId: string) => `conventions_scan:${repoId}`;
 
+/** The jsonb value stored under `conventions_scan:<repoId>`. */
+const StoredScanInfo = z.object({ last_scan_at: z.string(), sampled_files: z.number().int() });
+
 function toRecord(row: Row): ConventionRecord {
   return {
     id: row.id,
-    category: row.category as ConventionCategory,
+    category: row.category,
     rule: row.rule,
-    evidencePath: row.evidencePath ?? '',
+    evidencePath: row.evidencePath,
     evidenceLineStart: row.evidenceLineStart,
     evidenceLineEnd: row.evidenceLineEnd,
-    evidenceSnippet: row.evidenceSnippet ?? '',
+    evidenceSnippet: row.evidenceSnippet,
     confidence: row.confidence ?? 0,
     status: row.status,
   };
@@ -79,7 +82,10 @@ export class ConventionsRepository implements ConventionStore {
       .select()
       .from(t.conventions)
       .where(and(eq(t.conventions.workspaceId, workspaceId), eq(t.conventions.id, id)));
-    return row?.repoId ? { record: toRecord(row), repoId: row.repoId } : undefined;
+    if (!row) return undefined;
+    // Every candidate is written with its repo; a row without one is not reachable from any page.
+    if (!row.repoId) throw new Error(`Convention ${id} has no repo`);
+    return { record: toRecord(row), repoId: row.repoId };
   }
 
   async update(workspaceId: string, id: string, changes: ConventionChanges): Promise<void> {
@@ -123,9 +129,9 @@ export class ConventionsRepository implements ConventionStore {
       .select({ value: t.settings.value })
       .from(t.settings)
       .where(and(eq(t.settings.workspaceId, workspaceId), eq(t.settings.key, scanKey(repoId))));
-    const v = row?.value as { last_scan_at?: unknown; sampled_files?: unknown } | undefined;
-    if (typeof v?.last_scan_at !== 'string' || typeof v.sampled_files !== 'number') return undefined;
-    return { lastScanAt: v.last_scan_at, sampledFiles: v.sampled_files };
+    const parsed = StoredScanInfo.safeParse(row?.value);
+    if (!parsed.success) return undefined;
+    return { lastScanAt: parsed.data.last_scan_at, sampledFiles: parsed.data.sampled_files };
   }
 
   async saveScanInfo(

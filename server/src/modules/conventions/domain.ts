@@ -4,6 +4,17 @@ import type { ConventionCandidate, ConventionCategory, ConventionStatus } from '
  * L02 — conventions domain rules: pure, no I/O.
  */
 
+/** A candidate whose evidence was found in the real file (`verify.ts`), ready to store. */
+export interface VerifiedCandidate {
+  category: ConventionCategory;
+  rule: string;
+  evidencePath: string;
+  evidenceLineStart: number;
+  evidenceLineEnd: number;
+  evidenceSnippet: string;
+  confidence: number;
+}
+
 /** A stored candidate, before the repo-specific `evidence_url` is attached. */
 export interface ConventionRecord {
   id: string;

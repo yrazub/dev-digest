@@ -7,8 +7,7 @@ import type {
   Skill,
   SkillType,
 } from '@devdigest/shared';
-import type { ConventionRecord } from './domain.js';
-import type { VerifiedCandidate } from './verify.js';
+import type { ConventionRecord, VerifiedCandidate } from './domain.js';
 
 /**
  * Ports for the conventions service. Persistence is `repository.ts`; the

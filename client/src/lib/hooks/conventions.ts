@@ -65,13 +65,22 @@ export function useUpdateConvention(repoId: string) {
   });
 }
 
-/** The merged draft for the Create skill modal. Stores nothing. */
-export function useConventionSkillDraft(repoId: string) {
-  return useMutation({
-    mutationFn: (candidateIds: string[]) =>
+/**
+ * The merged draft for the Create skill modal. A POST because the ids travel
+ * in the body, but it stores nothing, so it is cached like a read. Always
+ * refetched on open: a candidate may have been edited since.
+ */
+export function useConventionSkillDraft(repoId: string, candidateIds: string[]) {
+  return useQuery({
+    queryKey: ["convention-skill-draft", repoId, candidateIds],
+    queryFn: () =>
       api.post<ConventionSkillDraft>(`/repos/${repoId}/conventions/skill-draft`, {
         candidate_ids: candidateIds,
       }),
+    enabled: candidateIds.length > 0,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
   });
 }
 

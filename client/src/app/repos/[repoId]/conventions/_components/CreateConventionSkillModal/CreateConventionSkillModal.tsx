@@ -15,6 +15,8 @@ import { useConventionSkillDraft, useCreateConventionSkill } from "@/lib/hooks/c
 import { SKILL_TYPES, isValidSkillName } from "@/lib/skill-rules";
 import { s } from "./styles";
 
+type Form = ConventionSkillDraft & { enabled: boolean };
+
 export function CreateConventionSkillModal({
   repoId,
   repoName,
@@ -29,21 +31,17 @@ export function CreateConventionSkillModal({
   onClose: () => void;
 }) {
   const t = useTranslations("conventions");
-  const draft = useConventionSkillDraft(repoId);
-  const create = useCreateConventionSkill(repoId);
-  const [form, setForm] = React.useState<ConventionSkillDraft & { enabled: boolean }>();
-
   // The selection the modal opened with; later changes on the page do not move it.
   const [ids] = React.useState(candidateIds);
-  const { mutate: loadDraft } = draft;
-  const fetchDraft = React.useCallback(
-    () => loadDraft(ids, { onSuccess: (d) => setForm({ ...d, enabled: true }) }),
-    [loadDraft, ids],
-  );
-  React.useEffect(fetchDraft, [fetchDraft]);
+  const draft = useConventionSkillDraft(repoId, ids);
+  const create = useCreateConventionSkill(repoId);
+  // The user's edits; until the first one, the form shows the server's draft.
+  const [edited, setEdited] = React.useState<Form>();
+  const form: Form | undefined = edited ?? (draft.data && { ...draft.data, enabled: true });
 
-  const set = <K extends keyof NonNullable<typeof form>>(key: K, value: NonNullable<typeof form>[K]) =>
-    setForm((f) => f && { ...f, [key]: value });
+  const set = <K extends keyof Form>(key: K, value: Form[K]) => {
+    if (form) setEdited({ ...form, [key]: value });
+  };
 
   const nameOk = !!form && isValidSkillName(form.name);
   const valid = nameOk && !!form && form.description.trim().length > 0 && form.body.trim().length > 0;
@@ -66,7 +64,7 @@ export function CreateConventionSkillModal({
 
   let content: React.ReactNode;
   if (draft.isError) {
-    content = <ErrorState body={t("create.draftError")} onRetry={fetchDraft} />;
+    content = <ErrorState body={t("create.draftError")} onRetry={() => draft.refetch()} />;
   } else if (!form) {
     content = (
       <div style={s.loading}>
