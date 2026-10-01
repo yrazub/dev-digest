@@ -17,6 +17,7 @@ import { useConventions, useExtractConventions, useUpdateConvention } from "@/li
 import { useToast } from "@/lib/toast";
 import { ConventionCard } from "../ConventionCard";
 import { CreateConventionSkillModal } from "../CreateConventionSkillModal";
+import { IndexStatus } from "../IndexStatus";
 import { s } from "./styles";
 
 export function ConventionsView({ repoId }: { repoId: string }) {
@@ -154,6 +155,7 @@ export function ConventionsView({ repoId }: { repoId: string }) {
               </p>
             )}
             {extract.isPending && scanned && <p style={s.scanning}>{t("page.scanHint")}</p>}
+            <IndexStatus repoId={repoId} />
           </div>
           {scanned && (
             <Button size="sm" icon="RefreshCw" onClick={scan} loading={extract.isPending}>

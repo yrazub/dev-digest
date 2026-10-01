@@ -71,5 +71,14 @@
     "cancel": "Cancel",
     "submit": "Create skill",
     "draftError": "Could not build the skill draft."
+  },
+  "index": {
+    "loading": "Index: loading…",
+    "at": "Index: {sha} · updated {ago}",
+    "none": "Index: not indexed yet",
+    "resync": "Resync index",
+    "resyncing": "Index: resyncing — fetching the branch and re-indexing changed files…",
+    "updated": "Index updated to {sha}. ReScan to use it.",
+    "unchanged": "The index did not change: it is already up to date, or the repo has no clone."
   }
 }

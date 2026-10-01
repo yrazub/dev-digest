@@ -42,6 +42,11 @@ Detected from 14 sample files · last scan 1h ago
   empty state's Run Scan. Both show a spinner and disable while the synchronous request runs
   (up to 2 min). After the scan, the stats line reads *"… sampled · N proposed · N verified ·
   N dropped · model"*.
+- **Index line**: under the title, *"Index: <sha7> · updated <ago>"* with **Resync index**
+  (`POST /repos/:id/resync`). The scan reads DevDigest's clone, so a stale index means a scan
+  of old code. Resync runs in the background; the line polls `index-state` until the index row
+  changes (then a toast says to ReScan) or 60 s pass (the index was already current, or the
+  repo has no clone). A never-indexed repo shows *"not indexed yet"*.
 - **Cards (#46 #47)**: category chip, rule, evidence as a mono button
   `path:start-end` that opens `evidence_url` in a new tab, the snippet in a code block, and
   *Confidence NN%*. **Accept** becomes **Accepted** (filled) on click, and clicking again

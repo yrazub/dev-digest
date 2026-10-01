@@ -16,6 +16,7 @@ vi.mock("@/lib/repo-context", () => ({
   useRepoNotFound: () => false,
 }));
 vi.mock("@/lib/toast", () => ({ useToast: () => ({ success: vi.fn() }) }));
+vi.mock("../IndexStatus", () => ({ IndexStatus: () => null }));
 vi.mock("../CreateConventionSkillModal", () => ({
   CreateConventionSkillModal: ({ candidateIds }: { candidateIds: string[] }) => (
     <div>create modal for {candidateIds.join(",")}</div>
