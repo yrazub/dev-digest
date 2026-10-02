@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { OpenRouterProvider } from '../src/llm/openrouter.js';
 
-type Body = { max_tokens?: number; provider?: { ignore?: string[] } };
+type Body = { max_tokens?: number; provider?: { sort?: string; ignore?: string[] } };
 type Options = { signal?: AbortSignal };
 
 /**
@@ -76,14 +76,14 @@ describe('OpenRouterProvider deadlines and output cap', () => {
     expect(res.data).toEqual({ ok: true });
   });
 
-  it('asks OpenRouter to skip the ignored upstream providers', async () => {
+  it('asks OpenRouter for the fastest provider, skipping the ignored ones', async () => {
     const ok = () => ({ choices: [{ finish_reason: 'stop', message: { content: '{"ok": true}' } }] });
     const skipping = provider({ reply: ok, ignore: ['open-inference'] });
     await skipping.p.completeStructured(request);
-    expect(skipping.calls[0]!.body.provider).toEqual({ ignore: ['open-inference'] });
+    expect(skipping.calls[0]!.body.provider).toEqual({ sort: 'throughput', ignore: ['open-inference'] });
 
     const all = provider({ reply: ok });
     await all.p.completeStructured(request);
-    expect(all.calls[0]!.body.provider).toBeUndefined();
+    expect(all.calls[0]!.body.provider).toEqual({ sort: 'throughput' });
   });
 });

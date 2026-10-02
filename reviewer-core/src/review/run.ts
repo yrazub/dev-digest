@@ -31,13 +31,17 @@ export const DEFAULT_MAP_THRESHOLD_LINES = 400;
 /** Default structured-output reprompt retries (matches REVIEW_MAX_RETRIES). */
 export const DEFAULT_REVIEW_MAX_RETRIES = 2;
 /**
- * Output cap for one review call. A real review answer is a few thousand
- * tokens; without a cap a provider that never closes its JSON keeps
- * generating (and billing) for minutes.
+ * Output cap for one review call. Normal reviews used up to ~7k output tokens
+ * (reasoning models count their thinking as output, and it grows with the
+ * diff); runaway generations ran to 17k–135k. 16k leaves ~2× headroom and
+ * still stops a provider that never closes its JSON.
  */
-export const DEFAULT_REVIEW_MAX_TOKENS = 8_000;
-/** Longest a single review call may take, response body included. */
-export const DEFAULT_REVIEW_CALL_TIMEOUT_MS = 180_000;
+export const DEFAULT_REVIEW_MAX_TOKENS = 16_000;
+/**
+ * Longest a single review call may take, response body included. Sized for a
+ * large diff on a slow provider (~16k tokens at ~50 tok/s).
+ */
+export const DEFAULT_REVIEW_CALL_TIMEOUT_MS = 300_000;
 
 export type ReviewStrategy = 'auto' | 'single-pass' | 'map-reduce';
 export type ReviewMode = 'single-pass' | 'map-reduce';

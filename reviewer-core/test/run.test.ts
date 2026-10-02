@@ -224,6 +224,6 @@ describe('reviewPullRequest (engine)', () => {
       llm,
       signal,
     });
-    expect(seen[0]).toEqual({ maxTokens: 8000, timeoutMs: 180_000, signal });
+    expect(seen[0]).toEqual({ maxTokens: 16_000, timeoutMs: 300_000, signal });
   });
 });

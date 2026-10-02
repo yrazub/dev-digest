@@ -116,9 +116,15 @@ export class OpenRouterProvider implements LLMProvider {
         // OpenRouter usage accounting — ask it to return the REAL generation
         // cost (USD) in `usage.cost`, instead of estimating from a price book.
         ...(this.id === 'openrouter' ? { usage: { include: true } } : {}),
-        // Provider routing preference: skip upstreams known to misbehave.
-        ...(this.id === 'openrouter' && this.ignoreProviders.length > 0
-          ? { provider: { ignore: this.ignoreProviders } }
+        // Provider routing: fastest upstream first (the same model ran at 27 vs
+        // 100 tok/s on different providers), skipping ones known to misbehave.
+        ...(this.id === 'openrouter'
+          ? {
+              provider: {
+                sort: 'throughput',
+                ...(this.ignoreProviders.length > 0 ? { ignore: this.ignoreProviders } : {}),
+              },
+            }
           : {}),
       }, { signal }));
 

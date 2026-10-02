@@ -46,3 +46,9 @@ guard; `src/review/run.ts` `DEFAULT_REVIEW_MAX_TOKENS`; `test/openrouter.test.ts
   with `ignore: ["Open Inference"]` was still routed there. Verify an ignore entry with a few
   live calls and read `provider` in the response (`src/llm/openrouter.ts` `ignoreProviders`;
   the default lives in `../server/src/platform/config.ts` `OPENROUTER_IGNORED_PROVIDERS`).
+- **2026-10-02** — Review limits re-sized from measured runs: `DEFAULT_REVIEW_MAX_TOKENS` 8k → 16k
+  and `DEFAULT_REVIEW_CALL_TIMEOUT_MS` 3 → 5 min. DeepSeek V4 Flash counts reasoning as output, so
+  output grows with the diff even with zero findings (6,815 tokens on an 82-file PR); at a slow
+  provider's ~27 tok/s a 3-minute call caps output near 4,800 tokens. OpenRouter calls also send
+  `provider.sort: 'throughput'` (the same model ran at 27 vs 100 tok/s across providers)
+  (`src/review/run.ts`, `src/llm/openrouter.ts`).
