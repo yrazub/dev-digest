@@ -44,6 +44,7 @@ describe("ConventionCard", () => {
     expect(link).toHaveAttribute("target", "_blank");
     expect(screen.getByText(CANDIDATE.evidence_snippet)).toBeInTheDocument();
     expect(screen.getByText("91%")).toBeInTheDocument();
+    expect(screen.getByText("high")).toBeInTheDocument();
   });
 
   it("a one-line range shows path:line, and no link without an indexed sha", () => {

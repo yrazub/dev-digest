@@ -10,7 +10,7 @@ import type { ConventionCandidate, ConventionCategory } from "@devdigest/shared"
 import { Badge, Button, Icon, ProgressBar, SelectInput, Textarea } from "@devdigest/ui";
 import { CONVENTION_CATEGORIES, CONVENTION_RULE_MAX } from "@/lib/convention-rules";
 import { useToast } from "@/lib/toast";
-import { confidenceColor, evidenceLabel } from "./helpers";
+import { confidenceColor, confidenceLevel, evidenceLabel } from "./helpers";
 import { s } from "./styles";
 
 export interface ConventionEdit {
@@ -117,6 +117,9 @@ export function ConventionCard({
             <ProgressBar value={candidate.confidence * 100} color={confidenceColor(candidate.confidence)} height={5} />
           </div>
           <span className="mono tnum">{Math.round(candidate.confidence * 100)}%</span>
+          <span style={s.levelChip(confidenceLevel(candidate.confidence))}>
+            {t(`card.level.${confidenceLevel(candidate.confidence)}`)}
+          </span>
         </div>
 
         {editing && (

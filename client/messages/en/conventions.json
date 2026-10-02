@@ -42,7 +42,12 @@
     "openEvidence": "Open {path} on GitHub",
     "copySnippet": "Copy snippet",
     "copied": "Snippet copied",
-    "ruleRequired": "The rule cannot be empty."
+    "ruleRequired": "The rule cannot be empty.",
+    "level": {
+      "low": "low",
+      "medium": "medium",
+      "high": "high"
+    }
   },
   "category": {
     "naming": "naming",
