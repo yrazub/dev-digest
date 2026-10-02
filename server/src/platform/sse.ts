@@ -22,11 +22,25 @@ export class RunBus {
   private seq = new Map<string, number>();
   private completed = new Set<string>();
   private cancelled = new Set<string>();
+  private aborts = new Map<string, AbortController>();
 
   /** Request cancellation of an in-flight run. The runner checks `isCancelled`
-   *  at its next checkpoint (between map-reduce files) and stops. */
+   *  at its next checkpoint (between map-reduce files), and the run's signal
+   *  aborts any model call that is in flight. */
   cancel(runId: string): void {
     this.cancelled.add(runId);
+    this.aborts.get(runId)?.abort(new Error('Run cancelled'));
+  }
+
+  /** Aborted when the run is cancelled; hand it to in-flight work (model calls). */
+  signalFor(runId: string): AbortSignal {
+    let c = this.aborts.get(runId);
+    if (!c) {
+      c = new AbortController();
+      if (this.cancelled.has(runId)) c.abort(new Error('Run cancelled'));
+      this.aborts.set(runId, c);
+    }
+    return c.signal;
   }
 
   /** Whether cancellation has been requested for a run. */
@@ -77,6 +91,7 @@ export class RunBus {
     const e = this.emitters.get(runId);
     this.completed.add(runId);
     this.cancelled.delete(runId);
+    this.aborts.delete(runId);
     e?.emit('done');
     // Keep the buffer briefly available for late subscribers; clear emitter.
     this.emitters.delete(runId);

@@ -67,6 +67,11 @@ export interface StructuredRequest<T> {
    * the `session_id` body field; ignored by providers that don't support it.
    */
   sessionId?: string;
+  /**
+   * Aborts the call, including a response body that is still streaming
+   * (cancellation, run deadline). The provider rejects with `signal.reason`.
+   */
+  signal?: AbortSignal;
 }
 
 export interface StructuredResult<T> {

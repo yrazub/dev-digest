@@ -17,3 +17,32 @@ Traps we have already hit in the engine. Append-only. See the root
   `../server/src/vendor/shared/contracts/trace.ts:68` — `RunStats.grounding: z.string()`;
   `../server/test/reviews.it.test.ts:203` asserts `'1/2 passed'`; `src/review/run.ts:101` —
   `dropped`.
+
+## Recurring Errors & Fixes
+
+### A review run on OpenRouter stays "running" for 10–30+ minutes and then fails or is cancelled
+**Date:** 2026-10-02
+**Cause:** two gaps together. (1) Review calls sent no `max_tokens`, and some upstream
+providers (OpenInference for `deepseek/deepseek-v4-flash`) occasionally never close the
+structured JSON: the OpenRouter logs showed 17,794 and 38,684 output tokens for one review
+(normally ~3k) with an empty finish reason, at ~35 tok/s, i.e. 8–17 minutes of billed
+generation. (2) The OpenAI SDK's `timeout` stops at response headers
+(`fetch(...).finally(() => clearTimeout(timeout))` in `openai/core.js`), and OpenRouter
+sends headers at once and keeps the body open while the model runs, so no timer ever fired.
+**Fix / rule:** every review call carries `maxTokens` (`DEFAULT_REVIEW_MAX_TOKENS`) and
+`timeoutMs` (`DEFAULT_REVIEW_CALL_TIMEOUT_MS`), and `OpenRouterProvider.withDeadline` passes an
+`AbortSignal` that covers the body. A capped reply that is still invalid JSON
+(`finish_reason === 'length'`) fails at once instead of being re-prompted. The server adds a
+run deadline and aborts the in-flight call on Cancel (`RunBus.signalFor`). Check
+openrouter.ai/logs (output tokens, finish reason, provider) before blaming "slowness".
+**Evidence:** `src/llm/openrouter.ts` `withDeadline` and the `finish_reason === 'length'`
+guard; `src/review/run.ts` `DEFAULT_REVIEW_MAX_TOKENS`; `test/openrouter.test.ts`.
+
+## Tool & Library Notes
+
+- **2026-10-02** — OpenRouter's `provider.ignore` matches the provider slug (`open-inference`,
+  the `tag` prefix from `GET /api/v1/models/<id>/endpoints`) or the API name (`OpenInference`),
+  but silently ignores the logs page's display name with a space (`Open Inference`): a request
+  with `ignore: ["Open Inference"]` was still routed there. Verify an ignore entry with a few
+  live calls and read `provider` in the response (`src/llm/openrouter.ts` `ignoreProviders`;
+  the default lives in `../server/src/platform/config.ts` `OPENROUTER_IGNORED_PROVIDERS`).

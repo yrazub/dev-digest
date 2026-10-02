@@ -195,4 +195,35 @@ describe('reviewPullRequest (engine)', () => {
       expect((await run([null, 0.002, 0.003])).costUsd).toBeNull();
     });
   });
+
+  it('caps each review call and forwards the caller signal', async () => {
+    const seen: { maxTokens?: number; timeoutMs?: number; signal?: AbortSignal }[] = [];
+    const llm = {
+      id: 'openrouter',
+      listModels: async () => [],
+      complete: async () => ({ text: '', model: 'm', tokensIn: 0, tokensOut: 0, costUsd: null }),
+      embed: async () => [],
+      async completeStructured<T>(req: { maxTokens?: number; timeoutMs?: number; signal?: AbortSignal; model: string }): Promise<StructuredResult<T>> {
+        seen.push({ maxTokens: req.maxTokens, timeoutMs: req.timeoutMs, signal: req.signal });
+        return {
+          data: { verdict: 'approve', summary: 'ok', score: 100, findings: [] } as unknown as T,
+          model: req.model,
+          tokensIn: 0,
+          tokensOut: 0,
+          costUsd: 0,
+          raw: '{}',
+          attempts: 1,
+        };
+      },
+    } as unknown as LLMProvider;
+    const signal = new AbortController().signal;
+    await reviewPullRequest({
+      systemPrompt: 'Review.',
+      model: 'm',
+      diff: await new MockGitClient().diff(),
+      llm,
+      signal,
+    });
+    expect(seen[0]).toEqual({ maxTokens: 8000, timeoutMs: 180_000, signal });
+  });
 });

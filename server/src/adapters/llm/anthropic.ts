@@ -62,15 +62,20 @@ export class AnthropicProvider implements LLMProvider {
    * `messages.create`, sending `temperature` only to models that accept it.
    * A model that rejects it is retried once without it and remembered.
    */
-  private async create(params: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message> {
+  private async create(
+    params: Anthropic.MessageCreateParamsNonStreaming,
+    signal?: AbortSignal,
+  ): Promise<Anthropic.Message> {
     const { temperature, ...rest } = params;
-    if (rejectsTemperature.has(params.model)) return this.client.messages.create(rest);
+    const options = signal ? { signal } : undefined;
+    if (rejectsTemperature.has(params.model)) return this.client.messages.create(rest, options);
     try {
-      return await this.client.messages.create(params);
+      return await this.client.messages.create(params, options);
     } catch (err) {
+      if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : err;
       if (temperature === undefined || !isTemperatureRejection(err)) throw err;
       rejectsTemperature.add(params.model);
-      return this.client.messages.create(rest);
+      return this.client.messages.create(rest, options);
     }
   }
 
@@ -141,7 +146,7 @@ export class AnthropicProvider implements LLMProvider {
               },
             ],
             tool_choice: { type: 'tool', name: toolName },
-          }),
+          }, req.signal),
           req.timeoutMs ?? DEFAULT_TIMEOUT,
         ),
       );
