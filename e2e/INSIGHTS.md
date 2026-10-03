@@ -6,6 +6,21 @@ Traps we have already hit in the browser suite. Append-only. See the root
 
 ---
 
+## Tool & Library Notes
+
+- **2026-10-02** — `agent-browser record start <file.mp4> --cursor` records a demo video but needs
+  ffmpeg with libx264/libvpx on PATH (`agent-browser doctor` checks it). With no Homebrew, `npm i
+  ffmpeg-static` in a scratch dir and symlinking its binary onto PATH works; that build also has
+  libass, so `-vf subtitles=x.srt` burns captions in. To leave LLM waits out of the video, `record
+  stop` before the wait and `record start` a new segment after, then concat the segments and shift
+  each caption by the summed segment durations. No repo line governs this; the suite's browser
+  config is `agent-browser.json:3` (`"headed": false`).
+- **2026-10-02** — `agent-browser set viewport 1440 900` sent before any page is open does not stick:
+  a session launched by the next `open` records at its default 1280×578. Run `open about:blank`
+  first, then `set viewport`. Also `fill <sel> ''` does not fire React's `onChange` (the filter keeps
+  its old text); clear with `press Backspace` instead. External-tool behaviour, no repo line;
+  browser config is `agent-browser.json:3`.
+
 ## Recurring Errors & Fixes
 
 ### Flows `02`, `04` and `05` fail locally but pass in CI
@@ -68,3 +83,4 @@ separate dist dir. **See also:** `../client/INSIGHTS.md` — the same shared-`.n
 
 - **2026-09-30** — added `08-skills` (create skill → link to agent → persists) and fixed the `04`/`05` click race.
 - **2026-10-01** — added `09-conventions` (reject/accept seeded candidates → reload → create skill) and three seeded convention candidates; fixed the `08` tab-click race.
+- **2026-10-02** — recorded the HW2 demo video with `agent-browser record` + `ffmpeg-static` and burned-in SRT subtitles; noted the ffmpeg, viewport and `fill ''` quirks.
