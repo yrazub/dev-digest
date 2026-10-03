@@ -104,7 +104,7 @@ export class OpenAIProvider implements LLMProvider {
               type: 'json_schema',
               json_schema: { name: req.schemaName, schema: jsonSchema.schema, strict: true },
             },
-          }),
+          }, req.signal ? { signal: req.signal } : undefined),
           req.timeoutMs ?? DEFAULT_TIMEOUT,
         ),
       );

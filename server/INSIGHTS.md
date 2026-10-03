@@ -74,6 +74,14 @@ Traps we have already hit in the server. Append-only. See the root
   repo-relative paths. See `toRepoPath` and the `severity !== 'ignore'` filter in
   `.claude/skills/pr-self-review/scripts/arch-check.mjs:16` and `:44`.
 
+- **2026-10-01** — `pnpm db:generate` (drizzle-kit) stops on an interactive prompt when one
+  migration drops a column and adds others on the same table: it asks whether each new column
+  is created or renamed from the dropped one. In a non-TTY shell it shows nothing and hangs
+  until killed (seen dropping `conventions.accepted` while adding `status`, `category`, …,
+  `src/db/schema/knowledge.ts` `conventions`). Run it under `expect`, answering Enter, which picks
+  the first option ("+ … create column"). Then read the generated SQL and confirm it has no
+  `RENAME COLUMN` (`src/db/migrations/0013_flat_blue_marvel.sql`).
+
 ## Decisions
 
 - **2026-09-26** — the PR list's `cost_usd` is the **total** over a PR's completed runs, and one
@@ -201,3 +209,5 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
   `modules/_shared/finding-dto.ts`. The baseline went from 33 to 28, and the `pulls-*.it` tests passed unedited.
   Plan: `specs/architecture-refactor.md`.
 - **2026-09-29** — L02 skills module; URL-import SSRF hardening (connect-time lookup); skill version bumps serialised with `SELECT … FOR UPDATE`.
+- **2026-10-01** — L02 conventions module (extract pipeline, candidate routes); `feature-models` moved to `modules/_shared/repository/feature-models.repo.ts` taking `Db`, which removed its two baselined violations.
+- **2026-10-02** — review runs: per-run deadline (`RUN_DEADLINE_MS`) and Cancel now abort the in-flight model call via `RunBus.signalFor`; OpenRouter skips `open-inference` by default (`OPENROUTER_IGNORED_PROVIDERS`). **See also:** `../reviewer-core/INSIGHTS.md` (runaway generation, provider slugs).

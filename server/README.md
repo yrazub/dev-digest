@@ -78,6 +78,7 @@ flowchart TB
   subgraph Agents["Agents & skills (Skills Lab)"]
     agents["agents<br/>/agents · /agents/:id · /agents/:id/skills (link + order)"]
     skills["skills<br/>/skills · /skills/:id · /skills/:id/versions · /versions/:v/restore<br/>/skills/import/(file|url)"]
+    conventions["conventions<br/>/repos/:id/conventions · /extract · /skill-draft · /skill<br/>/conventions/:id (accept · reject · edit)"]
   end
   subgraph Intel["Repo intelligence"]
     repoIntel["repo-intel<br/>/repos/:id/index-state · /resync"]

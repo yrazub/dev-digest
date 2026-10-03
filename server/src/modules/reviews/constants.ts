@@ -10,3 +10,10 @@
  * model's context.
  */
 export const REVIEW_STRATEGY = 'single-pass' as const;
+
+/**
+ * The longest one agent run may take. Past it the in-flight model call is
+ * aborted and the run is marked failed, so a provider that never finishes
+ * cannot leave a run "running" indefinitely.
+ */
+export const RUN_DEADLINE_MS = 10 * 60_000;

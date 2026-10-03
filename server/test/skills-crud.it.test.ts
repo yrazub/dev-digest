@@ -64,7 +64,7 @@ d('skills module', () => {
   });
 
   const body = {
-    name: 'edge-cases',
+    name: 'boundary-values',
     description: 'Flag tests that skip boundary values.',
     type: 'custom',
     body: '# Edge cases\n\nv1 body',
@@ -74,7 +74,7 @@ d('skills module', () => {
     const res = await app.inject({ method: 'POST', url: '/skills', payload: body });
     expect(res.statusCode).toBe(201);
     const skill = res.json();
-    expect(skill).toMatchObject({ name: 'edge-cases', source: 'manual', version: 1, agent_count: 0, enabled: true });
+    expect(skill).toMatchObject({ name: 'boundary-values', source: 'manual', version: 1, agent_count: 0, enabled: true });
 
     const versions = await pg.handle.db
       .select()

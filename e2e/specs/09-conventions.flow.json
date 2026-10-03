@@ -1,0 +1,27 @@
+{
+  "name": "Review convention candidates and turn the accepted ones into a skill",
+  "description": "Opens Conventions from the sidebar on the seeded demo repo, rejects one candidate and accepts the other two, confirms the decisions survive a reload (the rejected card stays hidden), then creates the merged skill from the accepted ones and finds it on /skills. Exercises GET /repos/:id/conventions, PATCH /conventions/:id, the skill-draft and skill routes. No model call: the seed supplies the candidates, and the scan itself is covered by server tests.",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "landed on the demo repo" },
+    { "cmd": ["find", "role", "link", "click", "--name", "Conventions"], "label": "open Conventions from the sidebar" },
+    { "cmd": ["wait", "--url", "/conventions"], "label": "conventions route reached" },
+    { "cmd": ["wait", "--text", "0 of 3 accepted"], "label": "the three seeded candidates are listed" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Reject", "--exact"], "label": "reject the first candidate" },
+    { "cmd": ["wait", "--text", "0 of 2 accepted"], "label": "the rejected card is hidden" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Accept", "--exact"], "label": "accept the next candidate" },
+    { "cmd": ["wait", "--text", "1 of 2 accepted"], "label": "one accepted" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Accept", "--exact"], "label": "accept the last candidate" },
+    { "cmd": ["wait", "--text", "2 of 2 accepted"], "label": "both remaining candidates accepted" },
+    { "cmd": ["reload"], "label": "reload the page" },
+    { "cmd": ["wait", "--text", "2 of 2 accepted"], "label": "the decisions persisted on the server" },
+    { "cmd": ["wait", "--text", "Show rejected (1)"], "label": "the rejected candidate stays hidden after a reload" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Create skill", "--exact"], "label": "open Create skill" },
+    { "cmd": ["wait", "--text", "Create skill from conventions"], "label": "the merged-skill modal opens" },
+    { "cmd": ["wait", "--text", "Merged from 2 accepted conventions"], "label": "the draft is merged from the two accepted candidates" },
+    { "cmd": ["find", "testid", "create-convention-skill", "click"], "label": "create the skill" },
+    { "cmd": ["wait", "--text", "Link it to an agent"], "label": "creation is confirmed by the banner" },
+    { "cmd": ["open", "{BASE}/skills"], "label": "load the Skills page" },
+    { "cmd": ["wait", "--text", "repo-conventions"], "label": "the new skill is listed" }
+  ]
+}

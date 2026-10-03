@@ -98,9 +98,31 @@ note, as `src/lib/feature-models.ts` and `src/lib/skill-rules.ts` do.
 **Evidence:** `src/lib/feature-models.ts:6-11` (the original note), `src/lib/skill-rules.ts`
 (`SKILL_TYPES`, `isValidSkillName`).
 
+### `vitest run` hangs with no output after a component test that mocks a mutation hook
+**Date:** 2026-10-01
+**Cause:** the mock returned a fresh object, with a fresh `mutate`, on every call
+(`useX: () => ({ mutate: (...) => {...} })`). The component loads data in an effect that
+depends on `mutate`, and the mocked `mutate` sets state synchronously, so every render made a
+new `mutate`, re-ran the effect and rendered again: an endless render loop. vitest printed
+nothing, not even the file name, and never exited. React Query's real `mutate` is stable, so
+the component itself was fine.
+**Fix / rule:** when a component depends on a hook's function identity (an effect or
+`useCallback` dependency), the mock must return the same object every time: build it once at
+module level and return that from the mocked hook. Run a new test with a time limit
+(`perl -e 'alarm 120; exec @ARGV' pnpm exec vitest run …`) so a loop fails fast instead of
+blocking the shell.
+**Evidence:** `src/app/repos/[repoId]/conventions/_components/CreateConventionSkillModal/CreateConventionSkillModal.test.tsx`
+`draftMutation` (the stable mock) and `CreateConventionSkillModal.tsx` `fetchDraft` /
+`React.useEffect(fetchDraft, [fetchDraft])` (the dependency).
+**Evidence moved 2026-10-01:** the self-review then replaced that effect with a query
+(`useConventionSkillDraft` in `src/lib/hooks/conventions.ts` is now `useQuery`), so the modal
+no longer has the effect or `draftMutation`. The rule still holds for any mocked hook whose
+function identity a component depends on; the original code is in commit `54e2b1e`.
+
 ## Session Notes
 
 - **2026-09-28** — diagnosed and fixed the unstyled-app breakage caused by `next build` overwriting the dev server's `.next`.
 - **2026-09-28** — moved sidebar menu ownership from the vendored kit to `components/app-shell/nav.ts` (injected via `ShellContext.nav`).
 - **2026-09-28** — built the Skills screens (L02 phase 5); client code must import only types from `@devdigest/shared`.
 - **2026-09-30** — L02 Skills UI done (skills, agents Skills tab, trace); L02 tests moved to `userEvent`.
+- **2026-10-01** — L02 Conventions page, candidate cards and the Create-skill-from-conventions modal.

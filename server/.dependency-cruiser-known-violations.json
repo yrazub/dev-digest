@@ -115,20 +115,6 @@
   },
   {
     "type": "dependency",
-    "from": "src/modules/settings/feature-models.ts",
-    "to": "src/db/schema.ts",
-    "unresolvedTo": "../../db/schema.js",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "db-only-in-repository"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "src/modules/settings/routes.ts",
     "to": "src/db/schema.ts",
     "unresolvedTo": "../../db/schema.js",
@@ -306,21 +292,6 @@
   {
     "type": "dependency",
     "from": "src/modules/reviews/service.ts",
-    "to": "src/platform/container.ts",
-    "unresolvedTo": "../../platform/container.js",
-    "dependencyTypes": [
-      "local",
-      "type-only",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "di-narrow-deps"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/modules/settings/feature-models.ts",
     "to": "src/platform/container.ts",
     "unresolvedTo": "../../platform/container.js",
     "dependencyTypes": [

@@ -5,7 +5,7 @@ import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
-import { REVIEW_STRATEGY } from './constants.js';
+import { REVIEW_STRATEGY, RUN_DEADLINE_MS } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { renderSkillBlocks, rollupSeverities } from './domain.js';
@@ -153,6 +153,14 @@ export class ReviewRunExecutor {
 
     runLog.info(`Starting review with agent "${agent.name}" (${agent.provider}/${agent.model})`);
 
+    // Aborts the in-flight model call on Cancel or when the run deadline passes.
+    const deadline = new AbortController();
+    const deadlineTimer = setTimeout(
+      () => deadline.abort(new Error(`Run exceeded the ${RUN_DEADLINE_MS / 60_000}-minute deadline`)),
+      RUN_DEADLINE_MS,
+    );
+    const runSignal = AbortSignal.any([this.container.runBus.signalFor(runId), deadline.signal]);
+
     try {
       // Resolve the agent's LLM provider. (container.llm throws if the provider
       // key is missing — caught below and persisted as a failed run.)
@@ -223,6 +231,7 @@ export class ReviewRunExecutor {
         checkCancelled: () => {
           if (this.container.runBus.isCancelled(runId)) throw new RunCancelledError();
         },
+        signal: runSignal,
       });
       const { tokensIn, tokensOut, costUsd, grounding } = outcome;
 
@@ -314,7 +323,8 @@ export class ReviewRunExecutor {
     } catch (err) {
       // Failure/cancel: persist status + the error text + the log-so-far so the
       // run (and WHY it failed) is visible on the UI after a reload.
-      const cancelled = err instanceof RunCancelledError;
+      // A cancel aborts the model call mid-flight, which surfaces as that call's error.
+      const cancelled = err instanceof RunCancelledError || this.container.runBus.isCancelled(runId);
       const status = cancelled ? 'cancelled' : 'failed';
       const msg = cancelled ? 'Cancelled by user' : (err as Error).message;
       runLog.error(cancelled ? 'Run cancelled by user' : `Run failed: ${msg}`);
@@ -334,6 +344,8 @@ export class ReviewRunExecutor {
         .catch(() => undefined);
       this.container.runBus.complete(runId);
       throw err;
+    } finally {
+      clearTimeout(deadlineTimer);
     }
   }
 

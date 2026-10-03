@@ -102,6 +102,9 @@ describe('structured review pipeline (mock LLM → grounding)', () => {
 describe('pricing / cost discipline', () => {
   it('estimates cost for known models and returns null for unknown', () => {
     expect(estimateCost('gpt-4o-mini', 1_000_000, 0)).toBeCloseTo(0.15, 5);
+    // Current Claude ids as the Anthropic API lists them (dashes, not OpenRouter's dots).
+    expect(estimateCost('claude-sonnet-5', 14_144, 1_607)).toBeCloseTo(0.044358, 6);
+    expect(estimateCost('claude-haiku-4-5-20251001', 1_000_000, 0)).toBeCloseTo(1.0, 5);
     expect(estimateCost('some-future-model', 1000, 1000)).toBeNull();
   });
 });

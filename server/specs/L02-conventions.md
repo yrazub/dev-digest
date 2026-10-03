@@ -32,11 +32,13 @@ the table is empty in every starter database. Add an index on `(repo_id, status)
 |---|---|
 | `ConventionCategory` | `naming` `structure` `imports` `error-handling` `typing` `testing` `formatting` `api` `other` |
 | `ConventionStatus` | `pending` `accepted` `rejected` |
-| `ConventionCandidate` | `id`, `category`, `rule`, `evidence_path`, `evidence_line_start`, `evidence_line_end`, `evidence_snippet`, `evidence_url`, `confidence` (0–1), `status`. **Remove `accepted`** |
+| `ConventionCandidate` | `id`, `category`, `rule`, `evidence_path`, `evidence_line_start`, `evidence_line_end`, `evidence_snippet`, `evidence_url` (nullable: no index sha), `confidence` (0–1), `status`. **Remove `accepted`** |
 | `ConventionExtractResult` | `candidates: ConventionCandidate[]`, `stats: { sampled_files, proposed, verified, dropped, model, scanned_at }` |
 | `ConventionScanInfo` | `last_scan_at: string \| null`, `sampled_files: number \| null`, the header's "Detected from N sample files · last scan 1h ago" |
-| `ConventionUpdate` | `status?`, `rule?`, `category?` |
-| `ConventionSkillCreate` | `candidate_ids` (1+), `name`, `description`, `body`, `enabled` |
+| `ConventionList` | `scan: ConventionScanInfo`, `candidates` — the `GET` response |
+| `ConventionUpdate` | `status?`, `rule?`, `category?`; at least one field |
+| `ConventionSkillDraftRequest` | `candidate_ids` (1+) |
+| `ConventionSkillCreate` | `candidate_ids` (1+), `name`, `description`, `type`, `body`, `enabled` |
 | `ConventionSkillDraft` | `name`, `description`, `type: 'convention'`, `body` |
 
 The LLM's own output schema (`{ candidates: [{ category, rule, evidence: { path, line,
@@ -72,8 +74,9 @@ not a wire contract.
    line and check that the rest follow. On a hit, set `evidence_line_start` and
    `evidence_line_end` to the real range. On a miss, drop it. Also drop duplicates, meaning the same normalized rule text.
 4. **Persist.** In one transaction, delete the repo's `pending` rows and insert the
-   survivors, **except** those whose normalized rule matches an existing `rejected` or
-   `accepted` row (#48). Build `evidence_url` on read from `repos.owner/name`,
+   survivors, **except** those whose normalized rule, or whose evidence `path` + start line,
+   matches an existing `rejected` or `accepted` row (#48). The evidence match keeps an edited
+   rule's original wording from coming back. Build `evidence_url` on read from `repos.owner/name`,
    `last_indexed_sha`, `evidence_path` and the range (`#L<start>-L<end>`, or `#L<start>`
    when the range is a single line).
 
@@ -86,10 +89,13 @@ Follows the design's merged body:
 ````
 # repo-conventions
 
-House conventions for `<name>`. Flag changes that violate any rule below and cite the
+House conventions for `<owner/name>`. Flag changes that violate any rule below and cite the
 offending `file:line`.
 
-## <rule-slug>
+## <Category>
+
+### <rule-slug>
+
 <rule>
 
 Detected in `<path>:<start>-<end>`:
@@ -99,7 +105,8 @@ Detected in `<path>:<start>-<end>`:
 ```
 ````
 
-Rules are grouped by category in enum order, and by confidence within each category.
+Rules are grouped under a `## <Category>` heading in enum order, and by confidence within
+each category. The snippet fence is longer than any backtick run inside the snippet.
 `rule-slug` is the first 4 words of the rule, kebab-cased. The default name is
 `repo-conventions`, or `<name>-conventions` if that name is taken. The description is
 `<N> house conventions extracted from <name>`.

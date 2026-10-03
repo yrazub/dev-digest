@@ -4,7 +4,7 @@
   "steps": [
     { "cmd": ["open", "{BASE}/skills"], "label": "load the Skills page" },
     { "cmd": ["wait", "--url", "/skills"], "label": "skills route reached" },
-    { "cmd": ["wait", "--text", "No skills yet"], "label": "a fresh DB has no skills" },
+    { "cmd": ["wait", "--text", "breaking-change"], "label": "the six seeded skills are listed" },
     { "cmd": ["find", "role", "button", "click", "--name", "Add Skill"], "label": "open the Add Skill menu" },
     { "cmd": ["find", "text", "Create skill", "click"], "label": "choose Create" },
     { "cmd": ["find", "placeholder", "edge-cases", "fill", "e2e-rule"], "label": "fill the skill name" },
@@ -17,11 +17,12 @@
     { "cmd": ["wait", "--text", "Test Quality Reviewer"], "label": "seeded Test Quality Reviewer is listed" },
     { "cmd": ["find", "text", "Test Quality Reviewer", "click"], "label": "open the agent" },
     { "cmd": ["wait", "--url", "/agents/"], "label": "agent editor route reached" },
+    { "cmd": ["wait", "--text", "Configuration"], "label": "the agent editor has rendered" },
     { "cmd": ["find", "role", "button", "click", "--name", "Skills", "--exact"], "label": "switch to the Skills tab" },
-    { "cmd": ["wait", "--text", "0 of 1 enabled"], "label": "the skill is listed but not linked" },
+    { "cmd": ["wait", "--text", "2 of 7 enabled"], "label": "the new skill is listed next to the two seeded links, not linked" },
     { "cmd": ["find", "role", "checkbox", "click", "--name", "e2e-rule"], "label": "link the skill to the agent" },
-    { "cmd": ["wait", "--text", "1 of 1 enabled"], "label": "the link is shown" },
+    { "cmd": ["wait", "--text", "3 of 7 enabled"], "label": "the link is shown" },
     { "cmd": ["reload"], "label": "reload the editor" },
-    { "cmd": ["wait", "--text", "1 of 1 enabled"], "label": "the link persisted on the server" }
+    { "cmd": ["wait", "--text", "3 of 7 enabled"], "label": "the link persisted on the server" }
   ]
 }

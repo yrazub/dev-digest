@@ -1,6 +1,6 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
-import { join } from 'node:path';
-import { mkdir, readFile, access, rm } from 'node:fs/promises';
+import { join, sep } from 'node:path';
+import { mkdir, readFile, access, rm, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import type {
   GitClient,
@@ -126,8 +126,19 @@ export class SimpleGitClient implements GitClient {
     }));
   }
 
+  /**
+   * A file's content from the clone. The path is resolved through symlinks
+   * first and must stay inside the clone: an imported repo can commit a
+   * symlink to any file on this machine (e.g. the secrets file), and the
+   * content may be sent to an LLM.
+   */
   async readFile(repo: RepoRef, path: string): Promise<string> {
-    return readFile(join(this.clonePathFor(repo), path), 'utf8');
+    const root = await realpath(this.clonePathFor(repo));
+    const target = await realpath(join(root, path));
+    if (!target.startsWith(root + sep)) {
+      throw new Error(`Refusing to read ${path}: it resolves outside the clone`);
+    }
+    return readFile(target, 'utf8');
   }
 }
 

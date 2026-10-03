@@ -30,6 +30,18 @@ import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
 export const DEFAULT_MAP_THRESHOLD_LINES = 400;
 /** Default structured-output reprompt retries (matches REVIEW_MAX_RETRIES). */
 export const DEFAULT_REVIEW_MAX_RETRIES = 2;
+/**
+ * Output cap for one review call. Normal reviews used up to ~7k output tokens
+ * (reasoning models count their thinking as output, and it grows with the
+ * diff); runaway generations ran to 17k–135k. 16k leaves ~2× headroom and
+ * still stops a provider that never closes its JSON.
+ */
+export const DEFAULT_REVIEW_MAX_TOKENS = 16_000;
+/**
+ * Longest a single review call may take, response body included. Sized for a
+ * large diff on a slow provider (~16k tokens at ~50 tok/s).
+ */
+export const DEFAULT_REVIEW_CALL_TIMEOUT_MS = 300_000;
 
 export type ReviewStrategy = 'auto' | 'single-pass' | 'map-reduce';
 export type ReviewMode = 'single-pass' | 'map-reduce';
@@ -90,6 +102,12 @@ export interface ReviewInput {
    * type, e.g. the server's RunCancelledError); the engine stays agnostic.
    */
   checkCancelled?: () => void;
+  /** Aborts an in-flight model call (cancellation, the caller's run deadline). */
+  signal?: AbortSignal;
+  /** Override the per-call output cap (tokens). */
+  maxTokens?: number;
+  /** Override the per-call time limit (ms). */
+  callTimeoutMs?: number;
 }
 
 export interface ReviewOutcome {
@@ -177,7 +195,10 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
       schemaName: 'Review',
       messages: a.messages,
       maxRetries,
+      maxTokens: input.maxTokens ?? DEFAULT_REVIEW_MAX_TOKENS,
+      timeoutMs: input.callTimeoutMs ?? DEFAULT_REVIEW_CALL_TIMEOUT_MS,
       ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+      ...(input.signal ? { signal: input.signal } : {}),
     });
     tokensIn += res.tokensIn;
     tokensOut += res.tokensOut;
