@@ -1,17 +1,31 @@
 import 'dotenv/config';
+import { readFileSync } from 'node:fs';
 import { createDb, type Db } from './client.js';
 import * as t from './schema.js';
 import { eq, and } from 'drizzle-orm';
+import { parseSkillMarkdown } from '../modules/skills/import/parse.js';
 import {
   GENERAL_REVIEWER_PROMPT,
   SECURITY_REVIEWER_PROMPT,
   PERFORMANCE_REVIEWER_PROMPT,
   TEST_QUALITY_REVIEWER_PROMPT,
+  API_CONTRACT_REVIEWER_PROMPT,
 } from './seed-prompts.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
 const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
+
+/** L02 reviewer skills: `docs/skills/<folder>/<skill>/SKILL.md`, linked to `agent` in this order. */
+const SKILLS_DIR = new URL('../../../docs/skills/', import.meta.url);
+const SEED_SKILLS = [
+  { agent: 'Test Quality Reviewer', folder: 'test-quality', skills: ['branch-coverage', 'edge-cases'] },
+  {
+    agent: 'API Contract Reviewer',
+    folder: 'api-contract',
+    skills: ['breaking-change', 'response-schema', 'semver-discipline', 'deprecation-policy'],
+  },
+];
 
 /**
  * Seed the starter's demo data. Idempotent: re-running upserts the default
@@ -22,9 +36,10 @@ const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
  * with a few findings, and the three built-in agents (General + Security +
  * Performance), all on the default openrouter/deepseek-v4-flash provider+model.
  *
- * L02 adds the Test Quality Reviewer agent and three pending convention
- * candidates for the demo repo (fixtures for the e2e flow). Other lesson
- * tables (skills, memory, eval, …) start empty here.
+ * L02 adds the Test Quality and API Contract Reviewer agents, their six skills
+ * from docs/skills/ (linked in order), and three pending convention candidates
+ * for the demo repo (fixtures for the e2e flow). Other lesson tables (memory,
+ * eval, …) start empty here.
  */
 
 export const DEFAULT_WORKSPACE_NAME = 'default';
@@ -200,7 +215,7 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     ]);
   }
 
-  // ---- built-in agents (the three starter presets + L02's Test Quality Reviewer) ----
+  // ---- built-in agents (the three starter presets + L02's Test Quality and API Contract Reviewers) ----
   // Prompt bodies live in ./seed-prompts.ts (mirrored in docs/agent-prompts/*.md).
   const seedAgents: Array<typeof t.agents.$inferInsert> = [
     {
@@ -247,6 +262,17 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       version: 1,
       createdBy: userId,
     },
+    {
+      workspaceId,
+      name: 'API Contract Reviewer',
+      description: 'Finds changes to routes and response shapes that break API consumers.',
+      provider: DEFAULT_PROVIDER,
+      model: DEFAULT_MODEL,
+      systemPrompt: API_CONTRACT_REVIEWER_PROMPT,
+      enabled: true,
+      version: 1,
+      createdBy: userId,
+    },
   ];
   for (const a of seedAgents) {
     const [existing] = await db
@@ -254,6 +280,49 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       .from(t.agents)
       .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, a.name)));
     if (!existing) await db.insert(t.agents).values(a);
+  }
+
+  // ---- L02 Skills: the reviewer skills from docs/skills, linked to their agents ----
+  // A skill is inserted only when no skill of that name exists, and an agent is
+  // linked only while it has no skills, so a re-seed never undoes the user's edits.
+  for (const group of SEED_SKILLS) {
+    const [agent] = await db
+      .select({ id: t.agents.id })
+      .from(t.agents)
+      .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, group.agent)));
+    if (!agent) continue;
+    const skillIds: string[] = [];
+    for (const file of group.skills) {
+      const text = readFileSync(new URL(`${group.folder}/${file}/SKILL.md`, SKILLS_DIR), 'utf8');
+      const parsed = parseSkillMarkdown(text, file);
+      let [skill] = await db
+        .select({ id: t.skills.id })
+        .from(t.skills)
+        .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.name, parsed.name)));
+      if (!skill) {
+        [skill] = await db
+          .insert(t.skills)
+          .values({
+            workspaceId,
+            name: parsed.name,
+            description: parsed.description,
+            type: parsed.type,
+            source: 'imported_file',
+            body: parsed.body,
+          })
+          .returning({ id: t.skills.id });
+        await db.insert(t.skillVersions).values({ skillId: skill!.id, version: 1, body: parsed.body, note: null });
+      }
+      skillIds.push(skill!.id);
+    }
+    const [anyLink] = await db
+      .select({ skillId: t.agentSkills.skillId })
+      .from(t.agentSkills)
+      .where(eq(t.agentSkills.agentId, agent.id))
+      .limit(1);
+    if (!anyLink) {
+      await db.insert(t.agentSkills).values(skillIds.map((skillId, order) => ({ agentId: agent.id, skillId, order })));
+    }
   }
 
   // ---- L02 Conventions: three pending candidates for the demo repo ----
