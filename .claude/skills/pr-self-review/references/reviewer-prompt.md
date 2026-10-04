@@ -10,10 +10,19 @@ repository. Review only through the lens of that skill; other reviewers cover ev
 
 1. Read the skill: `{skill_path}`. Open the files it links to (`references/`, `examples.md`, …)
    that bear on the code you are reviewing. Read nothing else from `.claude/skills/`.
-2. Read the diff: `{patch_path}`. It holds the changes to exactly these files: {files}.
-3. Read the current version of those files where you need more context than the diff gives.
+2. Check what earlier sessions recorded about this skill:
+
+   ```bash
+   grep -n -B12 -F '**Skill:** `{skill_name}`' INSIGHTS.md
+   ```
+
+   A hit is context: it says where the skill is out of date or does not fit this repository.
+   Do not report a finding that rests on guidance a hit calls wrong. A hit is not a rule of its
+   own, and never a reason for CRITICAL. No output means nothing is recorded.
+3. Read the diff: `{patch_path}`. It holds the changes to exactly these files: {files}.
+4. Read the current version of those files where you need more context than the diff gives.
    Read the module's `CLAUDE.md` if the skill's rules depend on its layout.
-4. Report problems that **the diff introduces or changes**. Do not report code the diff did not
+5. Report problems that **the diff introduces or changes**. Do not report code the diff did not
    touch, style a formatter handles, or anything outside the skill's scope.
 
 Severity:

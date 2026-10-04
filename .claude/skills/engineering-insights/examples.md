@@ -115,6 +115,16 @@ is two entries: one in `server/INSIGHTS.md` from the producer's side, one in
 
 **`docker compose down -v` wiping the volume.** Belongs to no package → root `INSIGHTS.md`.
 
+**The installed `next-best-practices` skill describing Next 16 while the client runs Next 15.**
+The lesson is about the skill, not about `client/` code — delete the skill and there is nothing
+left to say → root `INSIGHTS.md`, with ``**Skill:** `next-best-practices` `` beneath the entry.
+Not a file inside `.claude/skills/next-best-practices/`.
+
+**A skill rule that led to a wrong fix in `server/`.** Two entries: the mechanics of the fix in
+`server/INSIGHTS.md` with no tag, and "this rule does not hold for X" at the root with the
+`**Skill:**` line. Each carries a `**See also:**` to the other, and the reply tells the user
+which rule in the skill is wrong.
+
 ---
 
 ## Collisions: skip, extend, or resolve

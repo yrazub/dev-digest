@@ -62,6 +62,7 @@ An entry is never reworded or deleted. Everything goes *beneath* it, dated:
 | `**Disputed YYYY-MM-DD:** <the other entry, and why>` | a later finding contradicts it and neither could be proved |
 | `**See also:** <path>` | the general rule lives at the root and the mechanics in a module file, or the reverse |
 | `**Evidence YYYY-MM-DD:** <path:line — what it shows>` | the entry was written without a `path:line`, or its anchor has moved |
+| ``**Skill:** `<name>` `` | the entry is about how a skill under `.claude/skills/` behaves; root file only, `<name>` is the skill's folder |
 
 The file must never carry two entries that disagree without one of those lines. The next
 session believes whichever it reads first.
@@ -164,6 +165,7 @@ be obvious to anyone reading the code, it does not belong here.
   diffed against the last upstream version.
   **Evidence 2026-09-27:** `skills-lock.json:28-29` — `"source": "vercel-labs/next-skills"`. The
   retirement itself is external; see `.claude/skills/frontend-ui-architecture/research/notes/tooling_and_ai_skills.md`.
+  **Skill:** `next-best-practices`
 
 - **2026-09-27** — Node's `path.matchesGlob` never lets `*` or `**` match a path segment that
   starts with a dot, so `**/*.md` does **not** match `.claude/skills/x/SKILL.md`, and
@@ -242,6 +244,20 @@ be obvious to anyone reading the code, it does not belong here.
   Quoted text and heredoc bodies are data; `&&` `;` `|` and subshells split commands; env assignments
   and git global options are skipped. Rejected: keeping the regex and adding exceptions, which cannot
   tell a quoted mention from a real command. Accepted limit: `eval` and scripts that push are not seen.
+
+- **2026-10-04** — a finding about how a skill behaves goes to the root file with a
+  ``**Skill:** `<name>` `` line beneath it, not into a per-skill insights file. Rejected: an
+  `INSIGHTS.md` inside each `.claude/skills/<name>/` folder. A file next to `SKILL.md` is read
+  only if `SKILL.md` links to it, six of the folders are installed from upstream
+  (`skills-lock.json`) so that link would fork them, and whether `npx skills update` keeps an
+  extra file there was not verified. A grep before writing found one skill-level entry in all
+  five files, too few to justify fourteen new ones. The tag is a line beneath the entry because
+  entries are never reworded. Review subagents read it through the grep in their prompt
+  (`{skill_name}`, `.claude/skills/pr-self-review/scripts/prepare.mjs:45`). Revisit with a tree
+  outside the skill folders if tagged entries pile up here.
+  **Evidence 2026-10-04:** `.claude/skills/engineering-insights/SKILL.md:50` — the routing row;
+  `.claude/skills/pr-self-review/references/reviewer-prompt.md:15` — the grep step.
+  **Skill:** `engineering-insights`
 
 ## Recurring Errors & Fixes
 
@@ -334,3 +350,4 @@ schema.
   `.claude/skills/frontend-ui-architecture/SKILL.md:1`.
 - **2026-09-27** — built the `pr-self-review` skill (manifest routing of changed files to skills, `arch:check`, subagent reviewers, a CRITICAL gate on `gh pr create`). Recorded the dot-segment glob quirk, pnpm `-s`, the hook self-modification denial and the content-hash decision.
 - **2026-09-27** — pr-self-review now gates `git push` as well as `gh pr create`, and the hook is registered in `.claude/settings.json`. The command check is a tokenizer (entry under Decisions). Architecture refactor S1/C1 reviewed over `f108012..HEAD` and pushed. **See also:** `server/INSIGHTS.md`.
+- **2026-10-04** — added skill-level routing to `engineering-insights`: a `**Skill:**` line on root entries, read by `pr-self-review` reviewers through a grep step in their prompt and by a new row in the root `CLAUDE.md` gate. Tagged the existing `next-best-practices` entry. Decision recorded above.

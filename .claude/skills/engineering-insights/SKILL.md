@@ -47,10 +47,11 @@ worse than a short one.
 | `reviewer-core/**` | `reviewer-core/INSIGHTS.md` |
 | `e2e/**` | `e2e/INSIGHTS.md` |
 | two or more packages, or none of them — git, CI, Docker, secrets, `scripts/`, the agent workflow itself | root `INSIGHTS.md` |
+| a skill under `.claude/skills/` — how it behaves, what it covers, where its guidance is wrong or out of date | root `INSIGHTS.md`, with a `**Skill:**` line |
 
 Check with `git diff --name-only` (add `HEAD` for committed work) rather than from memory.
 
-Two rules the table does not cover:
+Three rules the table does not cover:
 
 - **A session that touched two modules writes one entry in each**, each stated from that
   module's side. Do not merge them into one file, and do not promote to the root — the root is
@@ -58,6 +59,14 @@ Two rules the table does not cover:
   inconvenient to split.
 - **`*/src/vendor/**` belongs to nobody.** Vendored code is not edited here, so record the
   finding against the package that consumes it.
+- **A finding about a skill is tagged, not filed in the skill's folder.** Add
+  ``**Skill:** `<name>` `` beneath the entry, using the skill's folder name, so a session about
+  to apply that skill can grep for it. The test for "about the skill": if the lesson would
+  still hold with the skill deleted, it is a module finding and takes no tag. When a skill gave
+  wrong advice about module code, that is two entries — the module's, and a tagged one at the
+  root — each with a `**See also:**` to the other. Never write into `.claude/skills/<name>/`:
+  an installed skill's folder belongs to its upstream, and changing a skill's own text is the
+  user's decision (see "When a finding contradicts an instruction elsewhere").
 
 ## 2–3. Read, then resolve the collision
 
@@ -165,7 +174,9 @@ An entry ships only if it passes all three.
    that shows the claim, paired with the symbol (`tableCard`, `dockerAvailable`) so it can be
    found again after the line moves. For a finding about an external tool rather than repo
    code, cite the line of the repo config that governs that tool (`.mcp.json:10`), say so if
-   that file is local-only, and keep the exact error string. If nothing in the repo shows it,
+   that file is local-only, and keep the exact error string. For a finding about a skill, cite
+   the line of its `SKILL.md` or reference file that the finding is about, or its
+   `skills-lock.json` entry when the point is where it came from. If nothing in the repo shows it,
    write that plainly — never invent a line. An entry that could have been written without
    doing the work is not a finding.
 
@@ -176,7 +187,8 @@ Calibration, with examples from this repo: [`examples.md`](examples.md).
 - **Append-only.** The text of an existing entry is never reworded or deleted, even when it
   has turned out to be wrong. Everything goes *beneath* it as a dated line —
   `**Superseded …**`, `**Disputed …**`, `**See also:** …`, `**Evidence …:**` (a `path:line`
-  for an entry that lacks one, or whose anchor moved), or a further detail. This is what
+  for an entry that lacks one, or whose anchor moved), ``**Skill:** `<name>` `` (the entry is
+  about that skill), or a further detail. This is what
   "extend an entry" means above; it is not a licence to rewrite one. Deleting destroys the
   record of why the rule existed, which is usually the point of the entry.
 - **Add, never reorder.** If the target section heading is missing, add that one heading in
