@@ -17,6 +17,7 @@ The table below is a routing map, not a substitute for reading the file.
 | a reviewer system prompt, or choosing a model | `docs/agent-prompts/README.md` |
 | a course-lesson feature (L01–L08) | `specs/` — see its README for the index |
 | a bug that smells like one we've seen | the module's `INSIGHTS.md`, then the root one |
+| building a feature with the `planner` / `implementer` agents, or editing an agent | `.claude/agents/README.md` — "Feature workflow": the plan is saved to `specs/` and handed over by you, not by the agents |
 | applying or editing a skill under `.claude/skills/` | root `INSIGHTS.md` — grep for ``**Skill:** `<name>` `` |
 
 Subdirectory auto-load is unreliable in the VS Code extension

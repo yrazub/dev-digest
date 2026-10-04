@@ -259,6 +259,24 @@ be obvious to anyone reading the code, it does not belong here.
   `.claude/skills/pr-self-review/references/reviewer-prompt.md:15` — the grep step.
   **Skill:** `engineering-insights`
 
+- **2026-10-04** — the `planner` and `implementer` agents (`.claude/agents/`) share skills
+  through the plan, not through the `skills:` frontmatter field. `skills:` injects each listed
+  skill's full body into every run and is not an allowlist, so both leave it empty: the planner
+  maps each planned file to skills through the globs in
+  `.claude/skills/pr-self-review/routing.json` and copies the matching `critical_rules` IDs into
+  the plan's "Rules to respect" column, and the implementer loads the named skills per phase
+  with the Skill tool. Both set an explicit `tools` allowlist, because omitting `tools` inherits
+  every tool. The planner has `Read, Grep, Glob` only and returns the plan as text; the main
+  session saves it to `specs/<feature>-plan.md` after the user approves it. The implementer has
+  no Agent tool and does not commit, push or review. Rejected: `Write` for the planner
+  (read-only would then rest on prose); a `PreToolUse` path-guard hook on the implementer (user
+  chose prompt-only protection of migrations, lock files and `client/src/vendor/**` — revisit
+  if it ever edits one); `model: inherit` for the implementer.
+  **Evidence 2026-10-04:** `.claude/agents/planner.md:61` — "Step 3 — map the files to skills";
+  `.claude/agents/implementer.md:33` — "Load skills per phase". The `skills:` and `tools`
+  behaviour is from code.claude.com/docs/en/sub-agents, read through a WebFetch summary, not
+  verified against the raw page.
+
 ## Recurring Errors & Fixes
 
 ### CI passes on an already-migrated database and fails on a fresh one
@@ -351,3 +369,4 @@ schema.
 - **2026-09-27** — built the `pr-self-review` skill (manifest routing of changed files to skills, `arch:check`, subagent reviewers, a CRITICAL gate on `gh pr create`). Recorded the dot-segment glob quirk, pnpm `-s`, the hook self-modification denial and the content-hash decision.
 - **2026-09-27** — pr-self-review now gates `git push` as well as `gh pr create`, and the hook is registered in `.claude/settings.json`. The command check is a tokenizer (entry under Decisions). Architecture refactor S1/C1 reviewed over `f108012..HEAD` and pushed. **See also:** `server/INSIGHTS.md`.
 - **2026-10-04** — added skill-level routing to `engineering-insights`: a `**Skill:**` line on root entries, read by `pr-self-review` reviewers through a grep step in their prompt and by a new row in the root `CLAUDE.md` gate. Tagged the existing `next-best-practices` entry. Decision recorded above.
+- **2026-10-04** — added the `planner` and `implementer` agents under `.claude/agents/` after a `researcher` pass over the Claude Code sub-agent and skill docs; recorded how they share skills under Decisions. Neither agent has been run on a real feature yet.
