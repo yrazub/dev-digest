@@ -276,6 +276,40 @@ be obvious to anyone reading the code, it does not belong here.
   `.claude/agents/implementer.md:33` — "Load skills per phase". The `skills:` and `tools`
   behaviour is from code.claude.com/docs/en/sub-agents, read through a WebFetch summary, not
   verified against the raw page.
+  **Evidence 2026-10-04 (anchors moved):** `.claude/agents/planner.md:67` — "Step 3 — map the
+  files to skills"; `.claude/agents/implementer.md:62` — "Load skills per phase".
+  **Superseded 2026-10-04 in part:** "one implementer run builds the plan and writes its tests"
+  no longer holds — see the next entry. The skills-through-the-plan rule and the tool sets stand.
+
+- **2026-10-04** — `test-writer` owns every test; `implementer` writes none and builds one phase
+  per run. User decision, against the planner's recommendation to leave planned tests with the
+  implementer. The order per phase is implementer → `test-writer`, and the phase is closed (and
+  committed) only when `test-writer`'s `Verify (phase)` run is green, so the tree is red on
+  purpose in between. `test-writer` may change an existing test's expectation only when it can
+  quote a plan or spec item that changes that behaviour; a failure no item explains is left
+  failing and reported as a suspected regression (`repair the existing tests`,
+  `.claude/agents/test-writer.md:89`). `plan-verifier` traces every edited or deleted existing
+  test back to such an item. The implementer runs `typecheck` and `test` once before the first
+  phase and stops on a red baseline (`establish the baseline`, `.claude/agents/implementer.md:31`);
+  a baseline with skipped integration files is `incomplete`, not a stop, because those files skip
+  by design without Docker. Two consequences found in the repo: the client's `typecheck` covers
+  its test files, so an implementer phase can end with `typecheck` red inside `*.test.tsx` — its
+  bar is "clean outside test files"; and testability seams (`server/src/adapters/mocks.ts`,
+  accessible names, seed data) are production code, planned as implementer work. Rejected:
+  test-first for planned features (phases would start red and the plan would have to pin every
+  signature); `test-writer` forbidden to touch existing tests (nobody would own the tests a
+  planned behaviour change breaks).
+  **See also:** `specs/agents-lab-plan.md` — the plan, with sources.
+
+- **2026-10-04** — `architecture-reviewer` (`tools: Read, Grep, Glob`) is advisory and gates
+  nothing; `/pr-self-review` stays the only push gate and `pnpm arch:check` stays the owner of
+  import-graph facts. The agent reuses the rule IDs and the CRITICAL bar from
+  `.claude/skills/pr-self-review/routing.json`, so it cannot introduce a second severity scale.
+  It has no `Bash`, so the main session hands it the file list, a patch file and the `arch:check`
+  result. `plan-verifier` has `Bash` to re-run `Verify` commands, so its read-only behaviour is
+  prompt-level, like `researcher`'s. Both are required for a plan with more than one phase.
+  Rejected: `Bash` for the reviewer (read-only would rest on prose).
+  **Evidence 2026-10-04:** `.claude/agents/architecture-reviewer.md:4`, `.claude/agents/plan-verifier.md:4` — the `tools:` lines.
 
 ## Recurring Errors & Fixes
 
@@ -370,3 +404,4 @@ schema.
 - **2026-09-27** — pr-self-review now gates `git push` as well as `gh pr create`, and the hook is registered in `.claude/settings.json`. The command check is a tokenizer (entry under Decisions). Architecture refactor S1/C1 reviewed over `f108012..HEAD` and pushed. **See also:** `server/INSIGHTS.md`.
 - **2026-10-04** — added skill-level routing to `engineering-insights`: a `**Skill:**` line on root entries, read by `pr-self-review` reviewers through a grep step in their prompt and by a new row in the root `CLAUDE.md` gate. Tagged the existing `next-best-practices` entry. Decision recorded above.
 - **2026-10-04** — added the `planner` and `implementer` agents under `.claude/agents/` after a `researcher` pass over the Claude Code sub-agent and skill docs; recorded how they share skills under Decisions. Neither agent has been run on a real feature yet.
+- **2026-10-04** — added `test-writer`, `architecture-reviewer`, `plan-verifier` and `doc-writer` from `specs/agents-lab-plan.md` (planner → implementer → plan-verifier, the first real run of that chain) and moved test ownership to `test-writer`; decisions recorded above. A subagent type added mid-session is not available to the `Agent` tool until the session reloads it — `plan-verifier` was run by pointing a general-purpose agent at its file. Its verdict was FAIL on one item: the overlap paragraph in `architecture-reviewer.md` is longer than the "two or three sentences" the plan asked for.
