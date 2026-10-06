@@ -2,18 +2,43 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
-import type { FindingRecord, PrDetail, PrFile, PrReviewComment, ReviewRecord } from "@devdigest/shared";
+import type {
+  FindingRecord,
+  PrDetail,
+  PrFile,
+  PrReviewComment,
+  ReviewRecord,
+  SmartDiffResponse,
+  SmartDiffRole,
+} from "@devdigest/shared";
 import shell from "../../../../../../../../messages/en/shell.json";
 import prReview from "../../../../../../../../messages/en/prReview.json";
 
 // Hook modules are mocked with stable objects: a fresh object per call would change the
 // identity of `mutateAsync` / `mutate` on every render (client/INSIGHTS.md, "vitest run hangs").
-// Per-test data goes through `hookData`, which is read when a hook is called. Later phases add
-// their own `vi.mock` here (the smart-diff hook, `next/navigation`) and their own `hookData` field.
-const hookData: { comments: PrReviewComment[]; reviews: ReviewRecord[] } = { comments: [], reviews: [] };
+// Per-test data goes through `hookData`, which is read when a hook is called; each hook returns
+// the same object until a test replaces it. Later phases add their own `hookData` field.
+interface SmartDiffQuery {
+  data: SmartDiffResponse | undefined;
+  isError: boolean;
+}
+
+const hookData: {
+  comments: PrReviewComment[];
+  reviews: ReviewRecord[];
+  smartDiff: SmartDiffQuery;
+  search: URLSearchParams;
+} = {
+  comments: [],
+  reviews: [],
+  smartDiff: { data: undefined, isError: false },
+  search: new URLSearchParams(),
+};
 
 const createComment = { mutateAsync: vi.fn(), isPending: false };
 const findingAction = { mutate: vi.fn(), isPending: false };
+const router = { replace: vi.fn(), push: vi.fn() };
+const PATHNAME = "/repos/r1/pulls/482";
 
 vi.mock("@/lib/hooks/reviews", () => ({
   usePrComments: () => ({ data: hookData.comments }),
@@ -22,11 +47,37 @@ vi.mock("@/lib/hooks/reviews", () => ({
   useFindingAction: () => findingAction,
 }));
 
+vi.mock("@/lib/hooks/smart-diff", () => ({
+  useSmartDiff: () => hookData.smartDiff,
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => router,
+  usePathname: () => PATHNAME,
+  useSearchParams: () => hookData.search,
+}));
+
 import { DiffTab } from "./DiffTab";
+
+/** A successful smart-diff answer: one group per [role, paths] entry, in the order given. */
+function smartResponse(groups: [SmartDiffRole, string[]][]): SmartDiffResponse {
+  return {
+    groups: groups.map(([role, paths]) => ({
+      role,
+      files: paths.map((path) => ({ path, additions: 1, deletions: 0, finding_lines: [] })),
+    })),
+    split_suggestion: { too_big: false, total_lines: 0, proposed_splits: [] },
+  };
+}
 
 beforeEach(() => {
   hookData.comments = [];
   hookData.reviews = [];
+  // Every test starts from a loaded grouping that puts both default files into core, which
+  // starts open: a finding under their lines is visible without a click.
+  hookData.smartDiff = { data: smartResponse([["core", [CONFIG, USERS]]]), isError: false };
+  hookData.search = new URLSearchParams();
+  router.replace.mockClear();
 });
 
 afterEach(cleanup);
@@ -209,6 +260,9 @@ describe("DiffTab — the comments switch", () => {
 
 describe("DiffTab — header", () => {
   it("labels the section and reads the totals row from the PR", () => {
+    // The flat list carries the plain "Files changed" label; with groups shown it reads
+    // "Smart Diff · grouped by role" (plan, phase 7, DiffTab.tsx row).
+    hookData.search = new URLSearchParams("order=original");
     renderTab();
     expect(screen.getByText("Files changed")).toBeInTheDocument();
     expect(screen.getByText("2 files · +5 −1")).toBeInTheDocument();
@@ -217,5 +271,263 @@ describe("DiffTab — header", () => {
   it("uses the singular for one file", () => {
     renderTab({ ...PR, files: [CONFIG_FILE], files_count: 1, additions: 3, deletions: 1 });
     expect(screen.getByText("1 file · +3 −1")).toBeInTheDocument();
+  });
+});
+
+// ---- Phase 7: groups by role and the order switch ----
+
+const RATELIMIT_TEST = "src/middleware/ratelimit.test.ts";
+const PUBLIC_INDEX = "src/api/public/index.ts";
+const README = "README.md";
+const LOCK = "package-lock.json";
+const LOCK_PATCH = '@@ -1,2 +1,2 @@\n {\n-"lockfileVersion": 2,\n+"lockfileVersion": 3,';
+const LOCK_LINE = '"lockfileVersion": 3,';
+
+function file(path: string, patch: string | null = PATCH): PrFile {
+  return { path, additions: 2, deletions: 1, patch };
+}
+
+// `pr.files` deliberately differs from the grouped order: the original order is the one below.
+const ORIGINAL_ORDER = [LOCK, README, CONFIG, RATELIMIT_TEST, USERS, PUBLIC_INDEX];
+const GROUPED_PR: PrDetail = {
+  ...PR,
+  files_count: 6,
+  additions: 12,
+  deletions: 6,
+  files: [
+    file(LOCK, LOCK_PATCH),
+    file(README),
+    file(CONFIG),
+    file(RATELIMIT_TEST),
+    file(USERS),
+    file(PUBLIC_INDEX),
+  ],
+};
+
+function fullResponse(): SmartDiffResponse {
+  return smartResponse([
+    ["core", [CONFIG, USERS]],
+    ["tests", [RATELIMIT_TEST]],
+    ["wiring", [PUBLIC_INDEX]],
+    ["docs", [README]],
+    ["boilerplate", [LOCK]],
+  ]);
+}
+
+/** The group headers: the only buttons that carry `aria-expanded`. */
+function groupHeaders(): HTMLElement[] {
+  return screen.getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
+}
+
+function queryGroupHeaders(): HTMLElement[] {
+  return screen.queryAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
+}
+
+/** Header at `index`, failing the test with a clear message when it is missing. */
+function headerAt(index: number): HTMLElement {
+  const header = groupHeaders()[index];
+  if (!header) throw new Error(`no group header at index ${index}`);
+  return header;
+}
+
+function pathsInDomOrder(paths: string[]): boolean {
+  const nodes = paths.map((p) => screen.getByText(p));
+  return nodes.every((node, i) => {
+    const prev = nodes[i - 1];
+    return !prev || Boolean(prev.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+}
+
+describe("DiffTab — groups by role", () => {
+  it("renders one header per group in the response order, with label, hint and file count", () => {
+    hookData.smartDiff = { data: fullResponse(), isError: false };
+    renderTab(GROUPED_PR);
+
+    const headers = groupHeaders();
+    expect(headers).toHaveLength(5);
+    const expected: [string, string, string][] = [
+      ["Core", "The substance of the change — review closely", "2 files"],
+      ["Tests", "Checks for the change", "1 file"],
+      ["Wiring", "Hooks the core into the app", "1 file"],
+      ["Docs", "Explains the change — read for context", "1 file"],
+      ["Boilerplate", "Generated or mechanical — skim", "1 file"],
+    ];
+    expected.forEach(([label, hint, count], i) => {
+      const header = headerAt(i);
+      expect(within(header).getByText(label)).toBeInTheDocument();
+      expect(within(header).getByText(hint)).toBeInTheDocument();
+      expect(within(header).getByText(count)).toBeInTheDocument();
+    });
+    expect(screen.getByText("Smart Diff · grouped by role")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Smart order", pressed: true })).toBeInTheDocument();
+  });
+
+  it("renders no header for a group with no files, nor for one whose files are not in the PR", () => {
+    hookData.smartDiff = {
+      data: smartResponse([
+        ["core", [CONFIG, USERS]],
+        ["tests", [RATELIMIT_TEST]],
+        ["wiring", []],
+        ["docs", ["docs/not-in-this-pr.md"]],
+        ["boilerplate", [LOCK]],
+      ]),
+      isError: false,
+    };
+    renderTab(GROUPED_PR);
+
+    const headers = groupHeaders();
+    expect(headers).toHaveLength(3);
+    expect(headers.map((h) => h.textContent)).toEqual([
+      expect.stringContaining("Core"),
+      expect.stringContaining("Tests"),
+      expect.stringContaining("Boilerplate"),
+    ]);
+    expect(screen.queryByText("Wiring")).not.toBeInTheDocument();
+    expect(screen.queryByText("Docs")).not.toBeInTheDocument();
+    expect(screen.queryByText("docs/not-in-this-pr.md")).not.toBeInTheDocument();
+  });
+
+  it("starts Docs and Boilerplate collapsed with their files absent, and a click opens Boilerplate onto a collapsed card", async () => {
+    const user = userEvent.setup();
+    hookData.smartDiff = { data: fullResponse(), isError: false };
+    renderTab(GROUPED_PR);
+
+    expect(headerAt(0)).toHaveAttribute("aria-expanded", "true");
+    expect(headerAt(1)).toHaveAttribute("aria-expanded", "true");
+    expect(headerAt(2)).toHaveAttribute("aria-expanded", "true");
+    expect(headerAt(3)).toHaveAttribute("aria-expanded", "false");
+    expect(headerAt(4)).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(README)).not.toBeInTheDocument();
+    expect(screen.queryByText(LOCK)).not.toBeInTheDocument();
+    // an open group shows its file, expanded by the size rule
+    expect(screen.getByText(CONFIG)).toBeInTheDocument();
+    expect(screen.getAllByText("const b = 3;").length).toBeGreaterThan(0);
+
+    await user.click(headerAt(4));
+
+    expect(headerAt(4)).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(LOCK)).toBeInTheDocument();
+    // the card itself starts collapsed: its patch is not drawn
+    expect(screen.queryByText(LOCK_LINE)).not.toBeInTheDocument();
+    // Docs stays as it was
+    expect(headerAt(3)).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(README)).not.toBeInTheDocument();
+
+    await user.click(screen.getByText(LOCK));
+    expect(screen.getByText(LOCK_LINE)).toBeInTheDocument();
+  });
+
+  it("marks a group by its number of files with a counted finding, and a group without one gets no mark", () => {
+    hookData.smartDiff = { data: fullResponse(), isError: false };
+    hookData.reviews = [
+      review("r", "a1", "2026-10-03T10:00:00Z", [
+        finding({ id: "c1", file: CONFIG, severity: "SUGGESTION" }),
+        finding({ id: "c2", file: CONFIG, start_line: 3, severity: "WARNING" }),
+        finding({ id: "u1", file: USERS, severity: "CRITICAL" }),
+        // the tests group only has a dismissed finding: no counted one, so no mark
+        finding({ id: "t1", file: RATELIMIT_TEST, dismissed_at: "2026-10-04T00:00:00Z" }),
+      ]),
+    ];
+    renderTab(GROUPED_PR);
+
+    // three findings in two files: the mark counts files
+    expect(within(headerAt(0)).getByRole("img", { name: "2 files with findings" })).toBeInTheDocument();
+    for (const i of [1, 2, 3, 4]) {
+      expect(within(headerAt(i)).queryByRole("img")).not.toBeInTheDocument();
+    }
+  });
+
+  it("lists a PrFile that the response does not mention after the last group, without a header", () => {
+    const stray = "src/stray.ts";
+    hookData.smartDiff = { data: fullResponse(), isError: false };
+    renderTab({ ...GROUPED_PR, files: [...GROUPED_PR.files, file(stray)], files_count: 7 });
+
+    expect(groupHeaders()).toHaveLength(5);
+    const lastHeader = headerAt(4);
+    const strayPath = screen.getByText(stray);
+    expect(lastHeader.compareDocumentPosition(strayPath) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // and not inside any group's body
+    expect(screen.getAllByText(CONFIG).length).toBeGreaterThan(0);
+    expect(strayPath.closest("button")).toBeNull();
+  });
+});
+
+describe("DiffTab — the order switch", () => {
+  it("writes order=original with router.replace, keeping the other parameters", async () => {
+    const user = userEvent.setup();
+    hookData.smartDiff = { data: fullResponse(), isError: false };
+    hookData.search = new URLSearchParams("tab=diff");
+    renderTab(GROUPED_PR);
+
+    await user.click(screen.getByRole("button", { name: "Original order" }));
+
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    const target = new URL(String(router.replace.mock.calls[0]?.[0]), "http://localhost");
+    expect(target.pathname).toBe(PATHNAME);
+    expect(target.searchParams.get("order")).toBe("original");
+    expect(target.searchParams.get("tab")).toBe("diff");
+  });
+
+  it("with order=original lists every file flat in the order of the PR, still draws findings, and presses Original order", () => {
+    hookData.smartDiff = { data: fullResponse(), isError: false };
+    hookData.search = new URLSearchParams("tab=diff&order=original");
+    hookData.reviews = [
+      review("r", "a1", "2026-10-03T10:00:00Z", [finding({ id: "f", title: "Still drawn" })]),
+    ];
+    renderTab(GROUPED_PR);
+
+    expect(queryGroupHeaders()).toHaveLength(0);
+    expect(pathsInDomOrder(ORIGINAL_ORDER)).toBe(true);
+    expect(screen.getByText("Still drawn")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Original order", pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Smart order", pressed: false })).toBeInTheDocument();
+    expect(screen.getByText("Files changed")).toBeInTheDocument();
+  });
+
+  it("brings the groups back: a click on Smart order replaces the URL without order", async () => {
+    const user = userEvent.setup();
+    hookData.smartDiff = { data: fullResponse(), isError: false };
+    hookData.search = new URLSearchParams("tab=diff&order=original");
+    renderTab(GROUPED_PR);
+
+    await user.click(screen.getByRole("button", { name: "Smart order" }));
+
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    const target = new URL(String(router.replace.mock.calls[0]?.[0]), "http://localhost");
+    expect(target.pathname).toBe(PATHNAME);
+    expect(target.searchParams.has("order")).toBe(false);
+    expect(target.searchParams.get("tab")).toBe("diff");
+  });
+});
+
+describe("DiffTab — smart-diff states", () => {
+  it("while the grouping loads keeps the totals row and the switch, and lists no file", () => {
+    hookData.smartDiff = { data: undefined, isError: false };
+    renderTab(GROUPED_PR);
+
+    expect(screen.getByText("6 files · +12 −6")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Smart order" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Original order" })).toBeInTheDocument();
+    expect(queryGroupHeaders()).toHaveLength(0);
+    for (const path of ORIGINAL_ORDER) expect(screen.queryByText(path)).not.toBeInTheDocument();
+    expect(screen.queryByText("No changed files.")).not.toBeInTheDocument();
+  });
+
+  it("when the grouping fails shows the flat list in the order of the PR and says grouping is unavailable", () => {
+    hookData.smartDiff = { data: undefined, isError: true };
+    renderTab(GROUPED_PR);
+
+    expect(screen.getByText("Grouping is unavailable — showing the original order")).toBeInTheDocument();
+    expect(queryGroupHeaders()).toHaveLength(0);
+    expect(pathsInDomOrder(ORIGINAL_ORDER)).toBe(true);
+    expect(screen.getByText("Files changed")).toBeInTheDocument();
+  });
+
+  it("with no files prints No changed files and no group header", () => {
+    hookData.smartDiff = { data: fullResponse(), isError: false };
+    renderTab({ ...PR, files: [], files_count: 0, additions: 0, deletions: 0 });
+
+    expect(screen.getByText("No changed files.")).toBeInTheDocument();
+    expect(queryGroupHeaders()).toHaveLength(0);
   });
 });

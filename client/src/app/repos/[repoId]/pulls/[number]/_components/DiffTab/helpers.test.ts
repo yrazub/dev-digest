@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { FindingRecord, PrFile, ReviewRecord } from "@devdigest/shared";
-import { countedInDiff, findingsOfLatestReviews } from "./helpers";
+import type { FindingRecord, PrFile, ReviewRecord, SmartDiffGroup } from "@devdigest/shared";
+import { countedInDiff, findingsOfLatestReviews, groupFindingMark, joinGroups } from "./helpers";
 
 function finding(id: string, over: Partial<FindingRecord> = {}): FindingRecord {
   return {
@@ -126,5 +126,98 @@ describe("countedInDiff", () => {
     ];
     expect(countedInDiff(list, files)).toBe(1);
     expect(countedInDiff([], files)).toBe(0);
+  });
+});
+
+function prFile(path: string): PrFile {
+  return { path, additions: 1, deletions: 0, patch: null };
+}
+
+function group(role: SmartDiffGroup["role"], paths: string[]): SmartDiffGroup {
+  return {
+    role,
+    files: paths.map((path) => ({ path, additions: 1, deletions: 0, finding_lines: [] })),
+  };
+}
+
+const paths = (list: PrFile[]) => list.map((f) => f.path);
+
+describe("joinGroups", () => {
+  it("keeps the groups in the order of the response, and the files inside a group in the response order", () => {
+    const files = [prFile("a.ts"), prFile("b.ts"), prFile("c.test.ts")];
+    const joined = joinGroups(
+      [group("tests", ["c.test.ts"]), group("core", ["b.ts", "a.ts"])],
+      files,
+    );
+    expect(joined.groups.map((g) => g.role)).toEqual(["tests", "core"]);
+    expect(paths(joined.groups[1]?.files ?? [])).toEqual(["b.ts", "a.ts"]);
+    expect(joined.ungrouped).toEqual([]);
+  });
+
+  it("skips a response path that has no PrFile", () => {
+    const joined = joinGroups([group("core", ["a.ts", "gone.ts"])], [prFile("a.ts")]);
+    expect(paths(joined.groups[0]?.files ?? [])).toEqual(["a.ts"]);
+    expect(joined.ungrouped).toEqual([]);
+  });
+
+  it("puts a PrFile the response does not mention into ungrouped, in the order of the PR", () => {
+    const files = [prFile("z.ts"), prFile("a.ts"), prFile("m.ts")];
+    const joined = joinGroups([group("core", ["a.ts"])], files);
+    expect(paths(joined.groups[0]?.files ?? [])).toEqual(["a.ts"]);
+    expect(paths(joined.ungrouped)).toEqual(["z.ts", "m.ts"]);
+  });
+
+  it("puts every file into ungrouped when the response has no group", () => {
+    const files = [prFile("a.ts"), prFile("b.ts")];
+    expect(joinGroups([], files)).toEqual({ groups: [], ungrouped: files });
+  });
+});
+
+describe("groupFindingMark", () => {
+  const files = [prFile("src/a.ts"), prFile("src/b.ts"), prFile("src/c.ts")];
+
+  it("counts files, not findings: five findings in two files give 2", () => {
+    const list = [
+      finding("1", { file: "src/a.ts" }),
+      finding("2", { file: "src/a.ts" }),
+      finding("3", { file: "src/a.ts" }),
+      finding("4", { file: "src/b.ts" }),
+      finding("5", { file: "src/b.ts" }),
+    ];
+    expect(groupFindingMark(files, list)?.files).toBe(2);
+  });
+
+  it("does not count a file whose only finding is dismissed", () => {
+    const list = [
+      finding("live", { file: "src/a.ts" }),
+      finding("dismissed", { file: "src/b.ts", dismissed_at: "2026-10-04T00:00:00Z" }),
+    ];
+    expect(groupFindingMark(files, list)).toEqual({ files: 1, severity: "WARNING" });
+  });
+
+  it("takes the most severe counted finding, ignoring a more severe dismissed one", () => {
+    const list = [
+      finding("s", { file: "src/a.ts", severity: "SUGGESTION" }),
+      finding("w", { file: "src/b.ts", severity: "WARNING" }),
+      finding("c-dismissed", {
+        file: "src/c.ts",
+        severity: "CRITICAL",
+        dismissed_at: "2026-10-04T00:00:00Z",
+      }),
+    ];
+    expect(groupFindingMark(files, list)).toEqual({ files: 2, severity: "WARNING" });
+
+    list.push(finding("c", { file: "src/c.ts", severity: "CRITICAL" }));
+    expect(groupFindingMark(files, list)).toEqual({ files: 3, severity: "CRITICAL" });
+  });
+
+  it("gives null when no file of the group has a counted finding", () => {
+    expect(groupFindingMark(files, [])).toBeNull();
+    expect(
+      groupFindingMark(files, [
+        finding("dismissed", { file: "src/a.ts", dismissed_at: "2026-10-04T00:00:00Z" }),
+        finding("elsewhere", { file: "src/other.ts" }),
+      ]),
+    ).toBeNull();
   });
 });
