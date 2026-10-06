@@ -47,6 +47,8 @@
     "rerun": "Re-run intent detection",
     "derive": "Derive intent",
     "emptyTitle": "Intent not derived yet",
-    "emptyHint": "Derive it now to check the understanding, or run a review."
+    "emptyHint": "Derive it now to check the understanding, or run a review.",
+    "loadFailed": "The intent could not be loaded.",
+    "retry": "Try again"
   }
 }

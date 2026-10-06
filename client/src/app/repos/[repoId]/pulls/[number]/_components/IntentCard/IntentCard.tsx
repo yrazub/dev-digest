@@ -15,7 +15,7 @@ import { s } from "./styles";
 
 export function IntentCard({ prId, poll }: { prId: string | null; poll: boolean }) {
   const t = useTranslations("brief");
-  const { data, isLoading } = usePrIntent(prId, { poll });
+  const { data, isLoading, isError, refetch } = usePrIntent(prId, { poll });
   const regenerate = useRegenerateIntent(prId);
   const record = data?.intent ?? null;
   const rerun = () => {
@@ -32,6 +32,17 @@ export function IntentCard({ prId, poll }: { prId: string | null; poll: boolean 
           </div>
         ) : record ? (
           <IntentBody record={record} onRerun={rerun} />
+        ) : isError ? (
+          // Not the empty state: an intent may exist, so the card must not invite a new derivation.
+          <div style={s.empty}>
+            <SectionLabel icon="Target">{t("block.intent")}</SectionLabel>
+            <p style={s.emptyTitle}>{t("intent.loadFailed")}</p>
+            <div style={s.emptyAction}>
+              <Button size="sm" onClick={() => void refetch()}>
+                {t("intent.retry")}
+              </Button>
+            </div>
+          </div>
         ) : (
           <div style={s.empty}>
             <SectionLabel icon="Target">{t("block.intent")}</SectionLabel>

@@ -168,7 +168,10 @@ export class IntentRepository implements IntentStore {
     const rows = await this.db
       .select({ value: t.settings.value })
       .from(t.settings)
-      .where(and(eq(t.settings.workspaceId, workspaceId), eq(t.settings.key, 'feature_models')));
+      .where(and(eq(t.settings.workspaceId, workspaceId), eq(t.settings.key, 'feature_models')))
+      // A workspace can hold one row per user for this key; without an order "the last row"
+      // would depend on the plan Postgres picks.
+      .orderBy(asc(t.settings.id));
     const value = z.record(z.string(), z.unknown()).safeParse(rows.at(-1)?.value);
     const parsed = FeatureModelChoice.safeParse(value.data?.review_intent);
     return parsed.success ? parsed.data : undefined;

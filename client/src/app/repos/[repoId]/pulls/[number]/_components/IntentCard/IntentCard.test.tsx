@@ -7,7 +7,12 @@ import messages from "../../../../../../../../messages/en/brief.json";
 
 // The hook module is the seam: the card reads the stored intent and calls the mutation.
 const mocks = vi.hoisted(() => ({
-  state: { data: undefined as PrIntentResponse | undefined, isLoading: false },
+  state: {
+    data: undefined as PrIntentResponse | undefined,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  },
   mutation: { mutate: vi.fn(), isPending: false },
 }));
 vi.mock("@/lib/hooks/intent", () => ({
@@ -41,7 +46,7 @@ const RECORD: PrIntentRecord = {
 };
 
 function show(overrides: Partial<PrIntentRecord> = {}) {
-  mocks.state = { data: { intent: { ...RECORD, ...overrides } }, isLoading: false };
+  mocks.state = { data: { intent: { ...RECORD, ...overrides } }, isLoading: false, isError: false, refetch: vi.fn() };
 }
 
 function renderCard() {
@@ -55,7 +60,7 @@ function renderCard() {
 }
 
 beforeEach(() => {
-  mocks.state = { data: undefined, isLoading: false };
+  mocks.state = { data: undefined, isLoading: false, isError: false, refetch: vi.fn() };
   mocks.mutation.mutate.mockClear();
   mocks.mutation.isPending = false;
 });
@@ -238,7 +243,7 @@ describe("IntentCard", () => {
 
   it("shows the empty state and derives the intent on click", async () => {
     const user = userEvent.setup();
-    mocks.state = { data: { intent: null }, isLoading: false };
+    mocks.state = { data: { intent: null }, isLoading: false, isError: false, refetch: vi.fn() };
     renderCard();
 
     expect(screen.getByText("Intent not derived yet")).toBeInTheDocument();
@@ -261,12 +266,32 @@ describe("IntentCard", () => {
   });
 
   it("renders no summary while loading", () => {
-    mocks.state = { data: undefined, isLoading: true };
+    mocks.state = { data: undefined, isLoading: true, isError: false, refetch: vi.fn() };
     renderCard();
 
     expect(screen.getByRole("region", { name: "Intent" })).toBeInTheDocument();
     expect(screen.queryByText(/Add rate limiting/)).not.toBeInTheDocument();
     expect(screen.queryByText("Intent not derived yet")).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+  it("shows a load failure with a retry, not the empty state that invites a new derivation", async () => {
+    const refetch = vi.fn();
+    mocks.state = { data: undefined, isLoading: false, isError: true, refetch };
+    renderCard();
+
+    expect(screen.getByText("The intent could not be loaded.")).toBeInTheDocument();
+    expect(screen.queryByText("Intent not derived yet")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Derive intent" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(mocks.mutation.mutate).not.toHaveBeenCalled();
+  });
+
+  it("keeps showing a stored intent when a background refetch fails", () => {
+    mocks.state = { data: { intent: RECORD }, isLoading: false, isError: true, refetch: vi.fn() };
+    renderCard();
+    expect(screen.getByText(/Add rate limiting to the public API/)).toBeInTheDocument();
+    expect(screen.queryByText("The intent could not be loaded.")).not.toBeInTheDocument();
   });
 });
