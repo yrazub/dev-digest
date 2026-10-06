@@ -61,6 +61,28 @@ depends on; only this document does).
 expects exactly one skill ("0 of 1 enabled") on the agent's Skills tab. Seeding a
 skill breaks both assertions.
 
+## PR #482 has a seeded intent
+
+`09-pr-intent` opens PR #482 and waits for the Intent card to render **from the
+seeded `pr_intent` row, with no model call** — the flow never presses `Derive intent`
+or `Re-run intent detection`. `seed.ts` inserts that row in its own
+`onConflictDoNothing()` statement outside the `if (!pr)` block, so an
+already-seeded dev database gets it on the next `pnpm db:seed` too. The literal
+strings a flow may assert on:
+
+- In scope: `Return 429 with Retry-After header` (the other two items are
+  `Token-bucket rate limiter middleware` and `Apply the limiter to the public webhook routes`).
+- Risk area: `Auth surface touched` (kind `security`).
+- Confidence: `medium`, rendered as `Medium confidence`.
+- Sources: `title`, `description`, `changed_files`, all `used`; `missing_context` false.
+- The summary equals the seeded PR description. A flow does not assert on it,
+  because the description on the page contains the same sentence.
+
+**Contract:** changing any of these strings in `seed.ts` changes what flow `09`
+waits for, so the flow's `wait --text` lines are updated in the same change. The
+row's `source_hash` is null, so `GET /pulls/:id/intent` reports `stale: false`
+and a review run recomputes it.
+
 ## None of this data is real GitHub data
 
 All of it — the repo, the PR, its diff, its review, its findings, the

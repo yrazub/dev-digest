@@ -38,8 +38,12 @@ flowchart LR
   API --> CLONE
   INDEX -->|"repo map = review context"| ENGINE
 
-  ENGINE["reviewer-core/<br/>diff + repo map → prompt → LLM<br/>→ structured findings → grounding gate"]
+  INTENT["intent classifier<br/>title · description · linked issue/spec · hunk headers<br/>→ the PR's intent"]
+  ENGINE["reviewer-core/<br/>diff + repo map + intent → prompt → LLM<br/>→ structured findings → grounding gate → scope filter"]
   LLM["LLM<br/>OpenAI · Anthropic · OpenRouter"]
+  API -->|"run review"| INTENT
+  INTENT -->|"cheap model call"| LLM
+  INTENT -->|"intent block"| ENGINE
   API -->|"run review"| ENGINE
   ENGINE --> LLM
 
@@ -51,10 +55,12 @@ flowchart LR
 
 The review flow end to end: **add a repo** → server clones it and `repo-intel`
 indexes it (the **Indexed** badge) → **import PRs** from GitHub → open a PR and
-**Review** → `reviewer-core` assembles a prompt from the diff + the repo map,
-calls the LLM, validates every finding against the diff (the **grounding gate**
-drops hallucinated line references), and persists structured findings with a
-severity and score. All local; the only outbound calls are to GitHub (PR data)
+**Review** → the server first has a cheap classifier model derive the PR's
+**intent** (shown in the Intent card), then `reviewer-core` assembles a prompt
+from the diff, the repo map and that intent, calls the LLM, validates every
+finding against the diff (the **grounding gate** drops hallucinated line
+references), drops non-serious findings the reviewer tagged out of the PR's
+scope, and persists structured findings with a severity and score. All local; the only outbound calls are to GitHub (PR data)
 and the LLM (via OpenRouter).
 
 Each package has its own README with deeper diagrams:

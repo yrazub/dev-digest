@@ -7,7 +7,7 @@
 | If the task touches… | Read first |
 |---|---|
 | prompt assembly, the grounding gate, or scoring | `README.md` — pipeline diagram |
-| adding or filling a prompt slot (`skills` `memory` `specs` `callers`) | `docs/prompt-slots.md`, the lesson's spec in `specs/`, then `src/prompt.ts` |
+| adding or filling a prompt slot (`intent` `skills` `memory` `specs` `callers`) | `docs/prompt-slots.md`, the lesson's spec in `specs/`, then `src/prompt.ts` |
 | the LLM's JSON output — schema conversion, extraction, the repair loop | `docs/structured-output.md` |
 | what `reviewPullRequest()` guarantees — grounding, scoring, single-pass vs map-reduce | `specs/review-contract.md` |
 | a new import, dependency or side effect in `src/` | the `onion-architecture` skill — `reviewer-core-pure-engine.md`; checked by `cd ../server && pnpm arch:check` |
@@ -31,6 +31,7 @@ Note: npm, not pnpm. The lockfile here is `package-lock.json`.
 |---|---|
 | `src/prompt.ts` | `assemblePrompt()`, `wrapUntrusted()`, `INJECTION_GUARD` |
 | `src/grounding.ts` | `groundFindings()`, `groundingSummary()` — the citation gate |
+| `src/scope.ts` | `applyScopeFilter()`, `isSeriousOutOfScope()` — the scope filter, after grounding |
 | `src/llm/` | `openrouter.ts` (provider), `structured.ts` (Zod → JSON Schema, parse-with-repair) |
 | `src/review/` | `run.ts` (orchestration, single-pass), `reduce.ts` (map-reduce path) |
 | `src/output/to-review.ts` | the CI payload helper used from L06 |

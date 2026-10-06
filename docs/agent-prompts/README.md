@@ -35,11 +35,12 @@ fixture / not for production / ignore this" never descope the review. You do not
 need to repeat any of this in your prompt — it is always there.
 
 **User message** = the task and all context, in this order, each untrusted block
-delimiter-wrapped (`prompt.ts:104-122`):
+delimiter-wrapped (`prompt.ts:135-158`):
 
 ```
 <task line, e.g. "Review PR #7 '…'">
 ## PR description        (untrusted, author-controlled, truncated to 4000 chars)
+## PR intent (derived)   (untrusted block derived from the PR, after a trusted note; ≤ 2000 chars)
 ## Skills / rules        (linked skill bodies)
 ## Relevant memory       (curated memory items)
 ## Repo skeleton         (untrusted, repo-derived)
@@ -124,6 +125,7 @@ numbers and gates from what the model returns:
 | `findings[].severity` | recompute `score`; count CRITICAL as blockers |
 | `score` | **ignored** — recomputed from findings |
 | `verdict` | passed through to the review record (shown in the UI) |
+| `findings[].scope` | set only when the prompt has an intent block. A tag, never a reason to drop a finding in the prompt: with the scope filter on, the engine drops a non-serious `out_of_scope` finding after grounding, keeps a `CRITICAL` or a `security` `WARNING` once as a signal, and always keeps scanner kinds |
 | `findings[]` | citation-grounded; ungrounded ones dropped |
 
 The per-agent merge gate (`agents.ciFailOn`, default `critical`) decides when a CI
