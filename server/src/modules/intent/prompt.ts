@@ -7,6 +7,7 @@ import {
   ISSUE_TITLE_MAX_CHARS,
   MAX_REF_CHARS,
   TITLE_MAX_CHARS,
+  UNAVAILABLE_BLOCK_MAX_CHARS,
   capText,
   formatChangedFiles,
   type ChangedFileInput,
@@ -122,12 +123,9 @@ export function buildIntentMessages(input: IntentPromptInput): IntentPrompt {
   if (files.text.length > 0) add('changed-files', 'changed files', files.text, files.truncated);
 
   if (input.unavailable.length > 0) {
-    add(
-      'unavailable-references',
-      'unavailable references',
-      input.unavailable.map(unavailableLine).join('\n'),
-      false,
-    );
+    // Author-controlled like every other block, so capped like every other block.
+    const u = capText(input.unavailable.map(unavailableLine).join('\n'), UNAVAILABLE_BLOCK_MAX_CHARS);
+    add('unavailable-references', 'unavailable references', u.text, u.truncated);
   }
 
   return {

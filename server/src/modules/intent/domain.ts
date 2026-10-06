@@ -29,6 +29,14 @@ export const TITLE_MAX_CHARS = 300;
 export const DESCRIPTION_MAX_CHARS = 4000;
 /** At most this many issues and this many documents are fetched per run. */
 export const MAX_FETCHED_PER_KIND = 3;
+/**
+ * References recorded per derivation. A description is author-controlled and can name
+ * thousands of paths; each recorded reference is stored, returned by the API, listed in the
+ * classifier prompt and named in the review prompt, so the count is bounded here.
+ */
+export const MAX_RECORDED_REFERENCES = 20;
+/** Cap of the classifier prompt's `unavailable-references` block. */
+export const UNAVAILABLE_BLOCK_MAX_CHARS = 2000;
 export const ISSUE_TITLE_MAX_CHARS = 300;
 export const ISSUE_BODY_MAX_CHARS = 3000;
 /** Bytes read per document from GitHub (`getFileContent({ maxBytes })`). */
@@ -419,6 +427,18 @@ function classifyUrl(rawUrl: string, linkText: string, repo: RepoRef, pull: Refe
  *
  * Pass the sanitised description, so a reference hidden in an HTML comment is not found.
  */
+/**
+ * Keep the first `MAX_RECORDED_REFERENCES` references, in the order `extractReferences`
+ * gives them (closing-keyword issues first), and count the rest.
+ */
+export function capReferences(references: IntentReference[]): { kept: IntentReference[]; dropped: number } {
+  if (references.length <= MAX_RECORDED_REFERENCES) return { kept: references, dropped: 0 };
+  return {
+    kept: references.slice(0, MAX_RECORDED_REFERENCES),
+    dropped: references.length - MAX_RECORDED_REFERENCES,
+  };
+}
+
 export function extractReferences(body: string, repo: RepoRef, pull: ReferencePull): IntentReference[] {
   const closing: Draft[] = [];
 

@@ -48,9 +48,23 @@ function oneLine(text: string, max = INTENT_LINE_MAX_CHARS): string {
     .slice(0, max);
 }
 
+/** A source reference inside the block's closing lines, and how many of them one line names. */
+const INTENT_TAIL_REF_MAX_CHARS = 80;
+const INTENT_TAIL_MAX_NAMES = 5;
+
+/**
+ * The closing lines are not cut by the block cap, so they bound themselves: at most
+ * `INTENT_TAIL_MAX_NAMES` names of `INTENT_TAIL_REF_MAX_CHARS` each, then a count. Without
+ * that, a description naming hundreds of paths would push the summary out of the block.
+ */
+function nameList(labels: string[]): string {
+  if (labels.length <= INTENT_TAIL_MAX_NAMES) return labels.join(', ');
+  return `${labels.slice(0, INTENT_TAIL_MAX_NAMES).join(', ')} and ${labels.length - INTENT_TAIL_MAX_NAMES} more`;
+}
+
 /** How a source is named in the provenance and the missing-context lines. */
 function sourceLabel(s: IntentSource): string {
-  const ref = s.ref ? oneLine(s.ref) : '';
+  const ref = s.ref ? oneLine(s.ref, INTENT_TAIL_REF_MAX_CHARS) : '';
   switch (s.kind) {
     case 'title':
       return 'title';
@@ -89,7 +103,7 @@ export function renderIntentBlock(record: PrIntentRecord): string {
 
   const used = record.sources.filter((s) => s.status === 'used').map(sourceLabel);
   const tail: string[] = [
-    `Confidence: ${record.confidence}${used.length > 0 ? ` — derived from: ${used.join(', ')}` : ''}`,
+    `Confidence: ${record.confidence}${used.length > 0 ? ` — derived from: ${nameList(used)}` : ''}`,
   ];
   if (record.missing_context) {
     const missing = record.sources
@@ -98,7 +112,7 @@ export function renderIntentBlock(record: PrIntentRecord): string {
     tail.push(
       missing.length === 0
         ? 'Missing context: a referenced issue or document could not be read; this intent was derived without it.'
-        : `Missing context: ${missing.join(', ')} ${missing.length === 1 ? 'was' : 'were'} referenced but could not be read; this intent was derived without ${missing.length === 1 ? 'it' : 'them'}.`,
+        : `Missing context: ${nameList(missing)} ${missing.length === 1 ? 'was' : 'were'} referenced but could not be read; this intent was derived without ${missing.length === 1 ? 'it' : 'them'}.`,
     );
   }
   if (record.injection_suspected) {

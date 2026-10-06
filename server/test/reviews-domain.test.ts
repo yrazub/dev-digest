@@ -201,6 +201,55 @@ describe('renderIntentBlock', () => {
   });
 });
 
+describe('renderIntentBlock — a description that names many references', () => {
+  const many = (n: number, status: 'used' | 'unavailable') =>
+    Array.from({ length: n }, (_, i) => ({
+      kind: 'spec_document' as const,
+      ref: `docs/${'x'.repeat(200)}-${i}.md`,
+      status,
+      reason: status === 'used' ? null : ('not_found' as const),
+    }));
+
+  it('names at most five sources per closing line and counts the rest', () => {
+    const block = renderIntentBlock(
+      record({ missing_context: true, sources: [...many(9, 'used'), ...many(12, 'unavailable')] }),
+    );
+    expect(block).toMatch(/derived from: .* and 4 more\n/);
+    expect(block).toMatch(/Missing context: .* and 7 more were referenced but could not be read/);
+  });
+
+  it('keeps the summary, the scope lists and the caution line inside the 2000-character block', () => {
+    const block = renderIntentBlock(
+      record({
+        summary: 'Add rate limiting to the public API',
+        in_scope: ['Per-IP request limit'],
+        out_of_scope: ['Authentication changes'],
+        missing_context: true,
+        injection_suspected: true,
+        sources: [...many(300, 'used'), ...many(300, 'unavailable')],
+      }),
+    );
+    expect(block.length).toBeLessThanOrEqual(2000);
+    expect(block.startsWith('Summary: Add rate limiting to the public API')).toBe(true);
+    expect(block).toContain('- Per-IP request limit');
+    expect(block).toContain('- Authentication changes');
+    expect(block.trimEnd().split('\n').at(-1)).toMatch(/^Caution: /);
+  });
+
+  it('leaves a short list as it is', () => {
+    const block = renderIntentBlock(
+      record({
+        sources: [
+          { kind: 'title', ref: null, status: 'used', reason: null },
+          { kind: 'linked_issue', ref: '#471', status: 'used', reason: null },
+        ],
+      }),
+    );
+    expect(block).toContain('derived from: title, issue #471');
+    expect(block).not.toContain(' more');
+  });
+});
+
 describe('scopeFilterEnabled', () => {
   it.each(['high', 'medium'] as const)('is true for a %s-confidence intent', (confidence) => {
     expect(scopeFilterEnabled(record({ confidence }))).toBe(true);

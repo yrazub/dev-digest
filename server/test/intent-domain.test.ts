@@ -12,7 +12,9 @@ import {
   MAX_FILES_BLOCK_CHARS,
   MAX_FILES,
   MAX_HEADERS_PER_FILE,
+  MAX_RECORDED_REFERENCES,
   MAX_HEADER_CHARS,
+  capReferences,
   capWords,
   clampClassification,
   deriveConfidence,
@@ -786,6 +788,29 @@ describe('IntentClassification', () => {
         toJsonSchema(z.object({ items: z.array(inline) }), 'Probe'),
       );
     });
+  });
+});
+
+describe('capReferences', () => {
+  const reference = (i: number) => ({ kind: 'external_link' as const, ref: `https://example.com/${i}`, fetchable: false, reason: 'unsupported' as const });
+
+  it('keeps a list at or under the limit as it is', () => {
+    const refs = Array.from({ length: MAX_RECORDED_REFERENCES }, (_, i) => reference(i));
+    expect(capReferences(refs)).toEqual({ kept: refs, dropped: 0 });
+    expect(capReferences([])).toEqual({ kept: [], dropped: 0 });
+  });
+
+  it('keeps the first 20 in order and counts the rest', () => {
+    const refs = Array.from({ length: 57 }, (_, i) => reference(i));
+    const { kept, dropped } = capReferences(refs);
+    expect(kept).toEqual(refs.slice(0, 20));
+    expect(dropped).toBe(37);
+  });
+
+  it('never drops a closing-keyword issue in favour of a later path', () => {
+    const paths = Array.from({ length: 40 }, (_, i) => `docs/n${i}.md`).join(' ');
+    const { kept } = capReferences(refs(`${paths} Closes #471.`));
+    expect(kept[0]).toMatchObject({ kind: 'linked_issue', ref: '#471', fetchable: true });
   });
 });
 

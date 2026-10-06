@@ -362,6 +362,44 @@ describe('IntentService.ensure — what is read and how confident it is', () => 
 
 // ------------------------------------------------------------------ documents and the base fallback
 
+describe('IntentService.ensure — a description that names many references', () => {
+  const body = (n: number) =>
+    `${PLAIN_BODY} ${Array.from({ length: n }, (_, i) => `docs/notes/n${i}.md`).join(' ')}`;
+
+  it('records at most 20 references, reads only the first three documents, and says how many were left out', async () => {
+    const h = setup({ pull: { body: body(60) } });
+    const res = await ensure(h);
+
+    const documents = res.record!.sources.filter((s) => s.kind === 'spec_document');
+    expect(documents).toHaveLength(20);
+    expect(documents.filter((s) => s.reason === 'skipped')).toHaveLength(17);
+    // Three documents, each at the head and once more at the base.
+    expect(h.github.fileRequests).toHaveLength(6);
+    expect(h.events.map((e) => e.msg)).toContain(
+      'Intent: 40 more reference(s) in the description were not recorded (limit 20)',
+    );
+    expect(h.store.upserts[0]!.sources.length).toBe(res.record!.sources.length);
+  });
+
+  it('keeps the classifier prompt small however many paths the description names', async () => {
+    const few = setup({ pull: { body: body(25) } });
+    await ensure(few);
+    const many = setup({ pull: { body: body(3000) } });
+    await ensure(many);
+    const unavailableBlock = (h: Harness) =>
+      classifierCalls(h.llm)[0]!.user.split('<untrusted source="unavailable-references">')[1]!.split('</untrusted>')[0]!;
+    // 20 recorded references either way, so the block does not grow with the description.
+    expect(unavailableBlock(many).length).toBe(unavailableBlock(few).length);
+    expect(unavailableBlock(many).length).toBeLessThanOrEqual(2000);
+  });
+
+  it('says nothing about a limit when the description stays under it', async () => {
+    const h = setup({ pull: { body: body(5) } });
+    await ensure(h);
+    expect(h.events.some((e) => e.msg.includes('were not recorded'))).toBe(false);
+  });
+});
+
 describe('IntentService.ensure — document reads (R8)', () => {
   const bodyWithDoc = `${PLAIN_BODY} Closes #471. Plan in ${DOC_PATH}.`;
 

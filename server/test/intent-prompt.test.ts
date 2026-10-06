@@ -148,6 +148,28 @@ describe('buildIntentMessages', () => {
   });
 });
 
+describe('buildIntentMessages — many unavailable references', () => {
+  it('caps the unavailable-references block and marks it truncated', () => {
+    const lots: IntentSource[] = Array.from({ length: 500 }, (_, i) => ({
+      kind: 'spec_document',
+      ref: `docs/notes/${i}.md`,
+      status: 'unavailable',
+      reason: 'skipped',
+    }));
+    const p = buildIntentMessages(input({ unavailable: lots }));
+    const component = p.components.find((c) => c.label === 'unavailable references')!;
+    expect(component.truncated).toBe(true);
+    expect(component.chars).toBeLessThanOrEqual(2000);
+    expect(userOf(p)).toContain('docs/notes/0.md');
+    expect(userOf(p)).not.toContain('docs/notes/499.md');
+  });
+
+  it('leaves a short list whole', () => {
+    const p = buildIntentMessages(input());
+    expect(p.components.find((c) => c.label === 'unavailable references')!.truncated).toBe(false);
+  });
+});
+
 describe('buildIntentMessages — components', () => {
   it('lists the system message first, then every included block with its size', () => {
     const p = buildIntentMessages(input());

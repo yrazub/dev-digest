@@ -305,6 +305,7 @@ Kinds are `info`, `tool`, `result` only — never `error`.
 | cache hit | `info` | `Intent: cached (<tier> confidence, head <sha7>) — classifier not called` |
 | sources | `info` | `Intent sources: read title, description, issue #471, changed files · unavailable specs/x.md (not_found), https://acme.atlassian.net/… (unsupported)` |
 | gathering cost | `info` | `Intent gathered in 575 ms · 4 GitHub read(s)` — every issue read, every document read and each base-branch re-read counts |
+| references left out | `info` | `Intent: 40 more reference(s) in the description were not recorded (limit 20)` — at most 20 references are recorded per derivation (`capReferences`), in extraction order, so a closing-keyword issue is never the one left out |
 | prompt components | `info` | `Intent prompt components: system 1240 ch · title 62 ch · description 1840/4000 ch (truncated) · issue #471 2100 ch · changed files 9 paths, 14 hunk headers, 1120 ch · unavailable references 2` |
 | sanitiser removed something | `info` | `Intent sanitiser: 2 HTML comment(s), 5 invisible char(s) removed` |
 | before the call | `tool` | `Intent classifier call → openrouter/deepseek/deepseek-v4-flash · ~2950 tok estimated` |

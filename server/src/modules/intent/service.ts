@@ -23,6 +23,8 @@ import {
   clampClassification,
   deriveConfidence,
   documentMissReason,
+  MAX_RECORDED_REFERENCES,
+  capReferences,
   extractReferences,
   formatChangedFiles,
   hasMissingContext,
@@ -119,6 +121,8 @@ interface Gathered {
   removed: { html_comments: number; invisible_chars: number };
   /** GitHub requests made while gathering (issues, documents, base-branch re-reads). */
   reads: number;
+  /** References found in the description beyond `MAX_RECORDED_REFERENCES`; not recorded. */
+  droppedReferences: number;
 }
 
 interface ReferenceResult {
@@ -357,6 +361,12 @@ export class IntentService {
       `Intent sources: read ${used.join(', ') || 'nothing'}${unread.length > 0 ? ` · unavailable ${unread.join(', ')}` : ''}`,
     );
     emit('info', `Intent gathered in ${gatherMs} ms · ${gathered.reads} GitHub read(s)`);
+    if (gathered.droppedReferences > 0) {
+      emit(
+        'info',
+        `Intent: ${gathered.droppedReferences} more reference(s) in the description were not recorded (limit ${MAX_RECORDED_REFERENCES})`,
+      );
+    }
     emit('info', this.componentsLine(prompt, ctx, gathered));
     const { html_comments, invisible_chars } = gathered.removed;
     if (html_comments > 0 || invisible_chars > 0) {
@@ -507,10 +517,9 @@ export class IntentService {
 
     const title = clean(ctx.pull.title);
     const description = clean(ctx.pull.body ?? '');
-    const references = extractReferences(description, ctx.repo, {
-      branch: ctx.pull.branch,
-      base: ctx.pull.base,
-    });
+    const { kept: references, dropped: droppedReferences } = capReferences(
+      extractReferences(description, ctx.repo, { branch: ctx.pull.branch, base: ctx.pull.base }),
+    );
 
     let github: Promise<{ client: GitHubClient } | { error: 'no_token' | 'fetch_failed' }> | undefined;
     const getGithub = () =>
@@ -587,6 +596,7 @@ export class IntentService {
       sources,
       removed,
       reads,
+      droppedReferences,
     };
   }
 
