@@ -171,8 +171,8 @@ export default function PRDetailPage() {
         {tab === "diff" && (
           <DiffTab
             prId={prId}
-            filesCount={pr.files_count}
-            files={pr.files}
+            pr={pr}
+            repoFullName={repoFullName}
             canComment={pr.status === "open"}
           />
         )}

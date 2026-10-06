@@ -1,27 +1,43 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { SectionLabel, Button } from "@devdigest/ui";
-import { DiffViewer, type DiffCommentApi } from "@/components/diff-viewer";
-import { usePrComments, useCreatePrComment } from "@/lib/hooks/reviews";
+import { DiffViewer, type DiffCommentApi, type DiffFindingApi } from "@/components/diff-viewer";
+import { usePrComments, useCreatePrComment, usePrReviews } from "@/lib/hooks/reviews";
 import { notify } from "@/lib/toast";
-import type { PrFile } from "@devdigest/shared";
+import type { FindingRecord, PrDetail } from "@devdigest/shared";
+import { InlineFinding } from "./_components/InlineFinding";
+import { countedInDiff, findingsOfLatestReviews } from "./helpers";
+import { s } from "./styles";
 
 interface DiffTabProps {
   prId: string | null;
-  filesCount: number;
-  files: PrFile[];
+  pr: PrDetail;
+  repoFullName?: string | null;
   /** Inline commenting is offered only on open PRs (GitHub rejects otherwise). */
   canComment?: boolean;
 }
 
-export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
+export function DiffTab({ prId, pr, repoFullName, canComment }: DiffTabProps) {
+  const t = useTranslations("prReview");
   const { data: comments } = usePrComments(prId);
+  const { data: reviews } = usePrReviews(prId);
   const create = useCreatePrComment(prId);
-  // Comments start hidden so the diff is clean by default — toggle to reveal.
-  const [showComments, setShowComments] = React.useState(false);
+  // One switch for GitHub comments and finding cards; both start visible.
+  const [showComments, setShowComments] = React.useState(true);
 
-  const commentCount = comments?.length ?? 0;
+  const shownFindings = React.useMemo(() => findingsOfLatestReviews(reviews ?? []), [reviews]);
+  const switchCount = (comments?.length ?? 0) + countedInDiff(shownFindings, pr.files);
+
+  const headSha = pr.head_sha;
+  const renderFinding = React.useCallback(
+    (finding: FindingRecord) =>
+      prId ? (
+        <InlineFinding finding={finding} prId={prId} repoFullName={repoFullName} headSha={headSha} />
+      ) : null,
+    [prId, repoFullName, headSha],
+  );
 
   const commenting: DiffCommentApi = {
     comments: comments ?? [],
@@ -40,26 +56,41 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
     },
   };
 
+  const findings: DiffFindingApi = {
+    findings: shownFindings,
+    showFindings: showComments,
+    renderFinding,
+  };
+
   return (
     <section>
       <SectionLabel
         icon="Code"
         right={
-          commentCount > 0 ? (
+          switchCount > 0 ? (
             <Button
               kind="ghost"
               size="sm"
               icon={showComments ? "EyeOff" : "Eye"}
               onClick={() => setShowComments((v) => !v)}
             >
-              {showComments ? "Hide comments" : "Show comments"} ({commentCount})
+              {t(showComments ? "smartDiff.hideComments" : "smartDiff.showComments", {
+                count: switchCount,
+              })}
             </Button>
           ) : undefined
         }
       >
-        Files changed · {filesCount} files
+        {t("smartDiff.filesChanged")}
       </SectionLabel>
-      <DiffViewer files={files} commenting={commenting} />
+      <p style={s.totals}>
+        {t("smartDiff.totals", {
+          files: pr.files_count,
+          additions: pr.additions,
+          deletions: pr.deletions,
+        })}
+      </p>
+      <DiffViewer files={pr.files} commenting={commenting} findings={findings} />
     </section>
   );
 }
