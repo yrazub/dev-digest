@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { readFileSync } from 'node:fs';
 import { createDb, type Db } from './client.js';
 import * as t from './schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { parseSkillMarkdown } from '../modules/skills/import/parse.js';
 import {
   GENERAL_REVIEWER_PROMPT,
@@ -28,6 +28,50 @@ const SEED_SKILLS = [
 ];
 
 /**
+ * L03 Smart Diff fixture: the five extra files of PR #482 (one or more per role; the four
+ * original rows plus these sum to the PR's stored +247 −38) and the two patches. A patch is a
+ * line array joined with `\n` and has no trailing newline: the client's `parsePatch` would
+ * render a trailing empty line. The key on `src/config.ts` line 12 is a visible placeholder.
+ */
+const SMART_DIFF_EXTRA_FILES = [
+  { path: 'src/middleware/ratelimit.test.ts', additions: 40, deletions: 0 },
+  { path: 'src/api/public/index.ts', additions: 3, deletions: 0 },
+  { path: 'tsconfig.json', additions: 2, deletions: 1 },
+  { path: 'README.md', additions: 14, deletions: 2 },
+  { path: 'package-lock.json', additions: 62, deletions: 27 },
+];
+const SMART_DIFF_PATCHES: Record<string, string> = {
+  'src/config.ts': [
+    '@@ -9,3 +9,7 @@',
+    " const PORT = Number(process.env.PORT ?? 3001);",
+    " const HOST = process.env.HOST ?? '0.0.0.0';",
+    '+// Public API rate limiting',
+    "+const STRIPE_SECRET = 'sk_live_EXAMPLE_NOT_A_REAL_KEY';",
+    '+const RATE_LIMIT_MAX = 120;',
+    '+const RATE_LIMIT_WINDOW_MS = 60_000;',
+    ' export const config = loadConfig(process.env);',
+  ].join('\n'),
+  'src/api/users.ts': [
+    '@@ -41,8 +41,13 @@',
+    ' export async function usersRoutes(app: FastifyInstance) {',
+    "   app.get('/users', async (req) => {",
+    '     const limit = Number(req.query.limit ?? 50);',
+    '     const users = await listUsers(limit);',
+    '-    const result = [];',
+    '-    for (const u of users) result.push({ ...u, org: await getOrg(u.orgId) });',
+    '+    const result = [];',
+    '+    for (const u of users) {',
+    '+      const org = await getOrg(u.orgId);',
+    '+      result.push({ ...u, org });',
+    '+    }',
+    '+    reply.header(\'X-RateLimit-Limit\', 120);',
+    '+    return result;',
+    '   });',
+    ' }',
+  ].join('\n'),
+};
+
+/**
  * Seed the starter's demo data. Idempotent: re-running upserts the default
  * workspace/user and the demo fixtures.
  *
@@ -35,6 +79,11 @@ const SEED_SKILLS = [
  * demo repo (acme/payments-api), PR #482 with files/commits, a sample review
  * with a few findings, and the three built-in agents (General + Security +
  * Performance), all on the default openrouter/deepseek-v4-flash provider+model.
+ *
+ * PR #482 has nine files (L03): the four originals plus `src/middleware/ratelimit.test.ts`,
+ * `src/api/public/index.ts`, `tsconfig.json`, `README.md` and `package-lock.json`, so the
+ * smart-diff view shows all five roles, and patches on `src/config.ts` and `src/api/users.ts`
+ * for the anchored finding lines.
  *
  * L02 adds the Test Quality and API Contract Reviewer agents, their six skills
  * from docs/skills/ (linked in order), and three pending convention candidates
@@ -213,6 +262,26 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
         confidence: 0.86,
       },
     ]);
+  }
+
+  // ---- PR #482's nine files and two patches (L03 Smart Diff) ----
+  // Outside `if (!pr)` for the same reason as the intent row below. `pr_files` has no unique
+  // index on (pr_id, path), so `onConflictDoNothing()` would duplicate rows on every re-seed:
+  // check the existing paths first. Never delete a row and never overwrite a non-null patch.
+  const existingFiles = await db
+    .select({ path: t.prFiles.path })
+    .from(t.prFiles)
+    .where(eq(t.prFiles.prId, pr!.id));
+  const existingPaths = new Set(existingFiles.map((f) => f.path));
+  const missingFiles = SMART_DIFF_EXTRA_FILES.filter((f) => !existingPaths.has(f.path));
+  if (missingFiles.length > 0) {
+    await db.insert(t.prFiles).values(missingFiles.map((f) => ({ prId: pr!.id, ...f })));
+  }
+  for (const [path, patch] of Object.entries(SMART_DIFF_PATCHES)) {
+    await db
+      .update(t.prFiles)
+      .set({ patch })
+      .where(and(eq(t.prFiles.prId, pr!.id), eq(t.prFiles.path, path), isNull(t.prFiles.patch)));
   }
 
   // ---- PR #482's derived intent (L03) ----

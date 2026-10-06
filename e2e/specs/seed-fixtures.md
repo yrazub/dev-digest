@@ -42,7 +42,7 @@ workspace — there is no repo selector in this flow. That means:
   sample review's finding list changes size, this flow's assertion must be
   updated in the same change, not left to drift.
 - The Files changed tab must render at least one seeded file's diff
-  content (`05`).
+  content (`05`, `11`).
 
 ## The five built-in agents must be seeded, "Security Reviewer" and "Test Quality Reviewer" named exactly
 
@@ -96,6 +96,43 @@ strings a flow may assert on:
 waits for, so the flow's `wait --text` lines are updated in the same change. The
 row's `source_hash` is null, so `GET /pulls/:id/intent` reports `stale: false`
 and a review run recomputes it.
+
+## PR #482 has nine files, one or more per role, and two patches
+
+The Files changed tab groups a PR's files by role (L03 Smart Diff), and flows `05` and
+`11` read the seeded files. The seeded PR holds nine `pr_files` rows, summing to the
+`+247 −38` the PR header shows:
+
+| Path | Lines | Role |
+|---|---|---|
+| `src/middleware/ratelimit.ts` | +84 −0 | core |
+| `src/api/public/webhooks.ts` | +31 −6 | core |
+| `src/config.ts` | +4 −0 | core |
+| `src/api/users.ts` | +7 −2 | core |
+| `src/middleware/ratelimit.test.ts` | +40 −0 | tests |
+| `src/api/public/index.ts` | +3 −0 | wiring |
+| `tsconfig.json` | +2 −1 | wiring |
+| `README.md` | +14 −2 | docs |
+| `package-lock.json` | +62 −27 | boilerplate |
+
+- **Contract:** `src/config.ts` stays in a group that starts expanded (`core`). Flows `05`
+  and `11` wait for its name and its diff, so it must not move to a collapsed group
+  (`boilerplate`).
+- **Contract:** `package-lock.json` is the only boilerplate file and `README.md` the only
+  docs file; flow `11` asserts on exactly one file in each of those groups. Another
+  seeded file in either role breaks it.
+- **Patches:** only `src/config.ts` (`@@ -9,3 +9,7 @@`) and `src/api/users.ts`
+  (`@@ -41,8 +41,13 @@`) carry a patch; the other seven are null. The finding
+  `Hardcoded Stripe secret key in commit` is anchored at `src/config.ts` line 12, a `+`
+  line inside the seeded patch, and the `N+1 query` finding at `src/api/users.ts` lines
+  45-52. The key on line 12 is a visible placeholder (`sk_live_EXAMPLE_NOT_A_REAL_KEY`)
+  so no secret scanner reads it as a real one. Moving a patch line changes which line
+  the finding card renders under.
+- **How it reaches a database:** the block that inserts the five files and fills the two
+  null patches runs outside `if (!pr)`, like the intent row, so an already-seeded dev
+  database gets it on the next `pnpm db:seed`. It checks the existing paths first
+  (`pr_files` has no unique index), never deletes a row and never overwrites a patch that
+  is not null. A second run changes nothing.
 
 ## None of this data is real GitHub data
 

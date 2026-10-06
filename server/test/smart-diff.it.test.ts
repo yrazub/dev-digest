@@ -1,6 +1,6 @@
 /**
  * L03 — `GET /pulls/:id/smart-diff` against a real Postgres and the built app (`app.inject`). Every PR
- * here is inserted by the test; the seeded PR #482 is covered by the seed phase, not this file.
+ * in the first tests is inserted by the test; the seeded PR #482 has its own `describe` (phase 3).
  * The outside world is replaced through `overrides`: an empty `MockSecretsProvider` (so
  * `~/.devdigest/secrets.json` is never read), a GitHub double that counts every method call and a
  * `MockLLMProvider`. The route reads Postgres only (B3), so after all requests neither may have
@@ -10,6 +10,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
+import { eq, and, inArray } from 'drizzle-orm';
 import { SmartDiff } from '@devdigest/shared';
 import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
 import { buildApp } from '../src/app.js';
@@ -238,6 +239,163 @@ d('GET /pulls/:id/smart-diff (Testcontainers pg)', () => {
     const res = await get(prId);
     expect(res.statusCode).toBe(404);
     expect(res.json().error.code).toBe('not_found');
+  });
+
+  // The seeded PR #482 (phase 3, D10). `pr_files` is read from the database directly, never through
+  // `GET /pulls/:id`: with the GitHub mock that route replaces the seeded rows.
+  describe('the seeded PR #482 (D10)', () => {
+    const SEEDED_PATHS = [
+      'src/middleware/ratelimit.ts',
+      'src/api/public/webhooks.ts',
+      'src/config.ts',
+      'src/api/users.ts',
+      'src/middleware/ratelimit.test.ts',
+      'src/api/public/index.ts',
+      'tsconfig.json',
+      'README.md',
+      'package-lock.json',
+    ];
+    const PATCHED = ['src/config.ts', 'src/api/users.ts'];
+    const NEW_PATHS = [
+      'src/middleware/ratelimit.test.ts',
+      'src/api/public/index.ts',
+      'tsconfig.json',
+      'README.md',
+      'package-lock.json',
+    ];
+
+    async function seededPrId(): Promise<string> {
+      const [pr] = await pg.handle.db.select().from(t.pullRequests).where(eq(t.pullRequests.number, 482));
+      return pr!.id;
+    }
+    const rowsOf = (prId: string) => pg.handle.db.select().from(t.prFiles).where(eq(t.prFiles.prId, prId));
+
+    /** New-side line number -> content, for the `+` lines of a one-hunk patch. */
+    function addedLines(patch: string): Map<number, string> {
+      const lines = patch.split('\n');
+      const header = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(lines[0]!);
+      let n = Number(header![1]);
+      const added = new Map<number, string>();
+      for (const line of lines.slice(1)) {
+        if (line.startsWith('-')) continue;
+        if (line.startsWith('+')) added.set(n, line.slice(1));
+        n++;
+      }
+      return added;
+    }
+
+    it('groups the nine seeded files by role, anchors both findings and totals 285 lines', async () => {
+      const res = await get(await seededPrId());
+      expect(res.statusCode).toBe(200);
+      const body = SmartDiff.parse(res.json());
+
+      expect(body.groups.map((g) => g.role)).toEqual(ROLES);
+      const paths = (role: string) => body.groups.find((g) => g.role === role)!.files.map((f) => f.path);
+      expect(paths('core')).toEqual([
+        'src/api/public/webhooks.ts',
+        'src/api/users.ts',
+        'src/config.ts',
+        'src/middleware/ratelimit.ts',
+      ]);
+      expect(paths('tests')).toEqual(['src/middleware/ratelimit.test.ts']);
+      expect(paths('wiring')).toEqual(['src/api/public/index.ts', 'tsconfig.json']);
+      expect(paths('docs')).toEqual(['README.md']);
+      expect(paths('boilerplate')).toEqual(['package-lock.json']);
+
+      expect(fileOf(body, 'src/config.ts').finding_lines).toEqual([12]);
+      expect(fileOf(body, 'src/api/users.ts').finding_lines).toEqual([45]);
+      const others = body.groups.flatMap((g) => g.files).filter((f) => !PATCHED.includes(f.path));
+      expect(others.every((f) => f.finding_lines.length === 0)).toBe(true);
+
+      const all = body.groups.flatMap((g) => g.files);
+      expect(all).toHaveLength(9);
+      expect(all.reduce((sum, f) => sum + f.additions, 0)).toBe(247);
+      expect(all.reduce((sum, f) => sum + f.deletions, 0)).toBe(38);
+      expect(body.split_suggestion.total_lines).toBe(285);
+    });
+
+    it('stores a patch on src/config.ts and src/api/users.ts only, with the planned hunks and no trailing newline', async () => {
+      const rows = await rowsOf(await seededPrId());
+      expect(rows.map((r) => r.path).sort()).toEqual([...SEEDED_PATHS].sort());
+
+      const patchOf = (path: string) => rows.find((r) => r.path === path)!.patch;
+      for (const row of rows.filter((r) => !PATCHED.includes(r.path))) expect(row.patch).toBeNull();
+
+      const config = patchOf('src/config.ts')!;
+      const users = patchOf('src/api/users.ts')!;
+      expect(config.startsWith('@@ -9,3 +9,7 @@\n')).toBe(true);
+      expect(users.startsWith('@@ -41,8 +41,13 @@\n')).toBe(true);
+      for (const patch of [config, users]) {
+        expect(patch.endsWith('\n')).toBe(false);
+        expect(patch.match(/^@@ /gm)).toHaveLength(1);
+      }
+
+      const configLines = config.split('\n').slice(1);
+      expect(configLines.filter((l) => l.startsWith('+'))).toHaveLength(4);
+      expect(configLines.filter((l) => l.startsWith('-'))).toHaveLength(0);
+      const usersLines = users.split('\n').slice(1);
+      expect(usersLines.filter((l) => l.startsWith('+'))).toHaveLength(7);
+      expect(usersLines.filter((l) => l.startsWith('-'))).toHaveLength(2);
+
+      // the anchored lines are rendered `+` lines of the stored patches
+      expect(addedLines(config).get(12)).toContain('sk_live_');
+      expect(addedLines(users).has(45)).toBe(true);
+    });
+
+    it('holds no sk_live_ literal with 24 or more letters or digits after the prefix in a seeded patch', async () => {
+      const rows = await rowsOf(await seededPrId());
+      const text = rows.map((r) => r.patch ?? '').join('\n');
+      expect(text).toContain('sk_live_');
+      expect(text).not.toMatch(/sk_live_[A-Za-z0-9]{24,}/);
+    });
+
+    it('adds no row when the seed runs again', async () => {
+      const prId = await seededPrId();
+      await seed(pg.handle.db);
+      const rows = await rowsOf(prId);
+      expect(rows).toHaveLength(9);
+      expect(rows.map((r) => r.path).sort()).toEqual([...SEEDED_PATHS].sort());
+    });
+
+    it('restores the five files and both patches on a database seeded before the change', async () => {
+      const prId = await seededPrId();
+      const db = pg.handle.db;
+      const before = await rowsOf(prId);
+      const patchesBefore = Object.fromEntries(PATCHED.map((p) => [p, before.find((r) => r.path === p)!.patch]));
+      const untouchedBefore = before.filter((r) => ['src/middleware/ratelimit.ts', 'src/api/public/webhooks.ts'].includes(r.path));
+      const findingsBefore = await db.select().from(t.findings);
+
+      try {
+        await db.delete(t.prFiles).where(and(eq(t.prFiles.prId, prId), inArray(t.prFiles.path, NEW_PATHS)));
+        await db.update(t.prFiles).set({ patch: null }).where(and(eq(t.prFiles.prId, prId), inArray(t.prFiles.path, PATCHED)));
+        expect(await rowsOf(prId)).toHaveLength(4);
+
+        await seed(db);
+
+        const after = await rowsOf(prId);
+        expect(after).toHaveLength(9);
+        expect(after.map((r) => r.path).sort()).toEqual([...SEEDED_PATHS].sort());
+        for (const path of PATCHED) expect(after.find((r) => r.path === path)!.patch).toBe(patchesBefore[path]);
+        for (const row of untouchedBefore) expect(after.find((r) => r.path === row.path)).toMatchObject(row);
+        expect(await db.select().from(t.findings)).toHaveLength(findingsBefore.length);
+        expect(await db.select().from(t.pullRequests).where(eq(t.pullRequests.id, prId))).toHaveLength(1);
+      } finally {
+        await seed(db); // leave the seeded PR in its seeded state for the other tests
+      }
+    });
+
+    it('never overwrites a patch that is already set', async () => {
+      const prId = await seededPrId();
+      const db = pg.handle.db;
+      const original = (await rowsOf(prId)).find((r) => r.path === 'src/config.ts')!.patch;
+      try {
+        await db.update(t.prFiles).set({ patch: 'EDITED' }).where(and(eq(t.prFiles.prId, prId), eq(t.prFiles.path, 'src/config.ts')));
+        await seed(db);
+        expect((await rowsOf(prId)).find((r) => r.path === 'src/config.ts')!.patch).toBe('EDITED');
+      } finally {
+        await db.update(t.prFiles).set({ patch: original }).where(and(eq(t.prFiles.prId, prId), eq(t.prFiles.path, 'src/config.ts')));
+      }
+    });
   });
 
   // Keep last: it asserts over every request the tests above made.
