@@ -56,6 +56,14 @@ Traps we have already hit in the server. Append-only. See the root
 - **2026-10-05** — a shared pre-step of a review run logs with `runLog.tool` / `info`, never `runLog.step`: `step` emits an `error` event when its callback throws and the client turns every `error` event into a toast (`deriveIntent` in `src/modules/reviews/run-executor.ts:379-386`).
 - **2026-10-05** — `MockLLMProvider({ structuredBySchema })` runs a multi-call flow (classifier + review) through one app; calls are told apart by `req.schemaName`, not by order (`runAndTrace` in `test/reviews-skills.it.test.ts`, `test/reviews-intent.it.test.ts`). In an `.it` file a seeded row cannot be restored once a test corrupts it (`seed()` uses `onConflictDoNothing()`), so corrupt a row the test created; a `PUT /settings` persists for the rest of the file and is undone in `finally` (`test/intent-routes.it.test.ts`).
 
+- **2026-10-06** — `pr_files` is filled only by `GET /pulls/:id` (`PullsRepository.saveDetail`
+  deletes and re-inserts the rows on every successful GitHub refresh) and by the seed, the
+  table has no position column, and `storedFilesAndCommits` selects it without `ORDER BY`. A
+  route that reads `pr_files` therefore cannot return GitHub's file order, and it reads an
+  empty table when it is called in parallel with the first detail request of a freshly
+  imported PR. Order by `path`, and have the client wait for the detail before asking
+  (`src/modules/pulls/repository.ts:128`, `:167`; `specs/L03-smart-diff.md` D3, D9).
+
 ## Tool & Library Notes
 
 - **2026-09-27** — dependency-cruiser's `--ignore-known` takes an **optional** file argument, so
@@ -246,3 +254,4 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
 - **2026-10-01** — L02 conventions module (extract pipeline, candidate routes); `feature-models` moved to `modules/_shared/repository/feature-models.repo.ts` taking `Db`, which removed its two baselined violations.
 - **2026-10-02** — review runs: per-run deadline (`RUN_DEADLINE_MS`) and Cancel now abort the in-flight model call via `RunBus.signalFor`; OpenRouter skips `open-inference` by default (`OPENROUTER_IGNORED_PROVIDERS`). **See also:** `../reviewer-core/INSIGHTS.md` (runaway generation, provider slugs).
 - **2026-10-05** — L03 intent module, review-run pre-step and scope filter wiring; review fixes (parse on read, port-level GitHub outcomes); root cause of the `reviews-skills.it` flake; `renderIntentBlock` `map` bug found by the phase 6 tests. Plan: `specs/L03-intent-layer-plan.md` (revision 3).
+- **2026-10-06** — L03 Smart Diff specified, no code yet (`specs/L03-smart-diff.md`, `server/specs/`, `client/specs/`); `pr_files` ordering and fill-time recorded above.
