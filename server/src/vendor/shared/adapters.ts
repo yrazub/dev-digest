@@ -67,6 +67,19 @@ export interface StructuredRequest<T> {
    * the `session_id` body field; ignored by providers that don't support it.
    */
   sessionId?: string;
+  /**
+   * `false` asks a reasoning model to answer without its hidden reasoning pass. Reasoning
+   * tokens are billed and timed as output and count against `maxTokens`; a narrow
+   * extraction step does not need them. Sent as OpenRouter's `reasoning: { enabled: false }`;
+   * omitted (the model's default) when unset, and ignored by providers without the switch.
+   */
+  reasoning?: boolean;
+  /**
+   * Cancels the call. When it aborts, the in-flight HTTP request is dropped and no further
+   * attempt starts, so a caller that stops waiting also stops paying. Honoured by the
+   * OpenRouter provider; the other providers ignore it.
+   */
+  signal?: AbortSignal;
 }
 
 export interface StructuredResult<T> {
@@ -140,6 +153,25 @@ export interface CommitFilesPayload {
   files: CommitFile[];
 }
 
+/** A text file read from a repository through the GitHub contents API. */
+export interface RepoFile {
+  path: string;
+  /** The ref the content was read at (a SHA or a branch name). */
+  ref: string;
+  content: string;
+  /** Size in bytes, as GitHub reports it. */
+  size: number;
+}
+
+/** Why `getFileContent` returned no file. */
+export type RepoFileMissReason = 'not_found' | 'too_large' | 'not_a_file' | 'empty';
+
+/**
+ * Outcome of `getFileContent`: the file, or the reason there is none. A missing path is a
+ * value (`not_found`), not an exception.
+ */
+export type RepoFileResult = { file: RepoFile } | { file: null; reason: RepoFileMissReason };
+
 export interface GitHubClient {
   listPullRequests(repo: RepoRef): Promise<PrMeta[]>;
   getPullRequest(repo: RepoRef, n: number): Promise<PrDetail>;
@@ -161,7 +193,26 @@ export interface GitHubClient {
   commitFiles(repo: RepoRef, payload: CommitFilesPayload): Promise<{ branch: string }>;
   /** The open PR whose head is `branch`, if any (so re-publish reuses it). */
   findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string } | null>;
-  getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
+  /**
+   * One issue of `repo`. Resolves null when there is no such issue (HTTP 404). Any other
+   * failure (auth, rate limit, transport, timeout) is thrown as an `ExternalServiceError`
+   * (`src/platform/errors.ts`; named here only — a port file cannot import `src/platform`).
+   */
+  getIssue(repo: RepoRef, n: number): Promise<IssueMeta | null>;
+  /**
+   * Read one text file at `ref` through the contents API (never the local clone).
+   * Resolves `{ file: null, reason }` when the path is missing at that ref (`not_found`,
+   * HTTP 404), is not a regular file (`not_a_file`: directory, symlink, submodule), is
+   * larger than `opts.maxBytes` (`too_large`, default 200 000) or has no content (`empty`).
+   * Any other failure is thrown as an `ExternalServiceError` (`src/platform/errors.ts`;
+   * named here only — a port file cannot import `src/platform`).
+   */
+  getFileContent(
+    repo: RepoRef,
+    path: string,
+    ref: string,
+    opts?: { maxBytes?: number },
+  ): Promise<RepoFileResult>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;
 }

@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import type { PrIntentRecord, Provider, Review, RunTrace, ToolCall, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
@@ -8,7 +8,7 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
-import { renderSkillBlocks, rollupSeverities } from './domain.js';
+import { renderIntentBlock, renderSkillBlocks, rollupSeverities, scopeFilterEnabled } from './domain.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -25,6 +25,15 @@ export type Logger = {
   error: (obj: unknown, msg?: string) => void;
   debug: (obj: unknown, msg?: string) => void;
 };
+
+/** What the shared intent pre-step leaves for every agent run: the record (if any) and its trace entry. */
+type IntentPreWork = { record: PrIntentRecord | null; toolCall: ToolCall };
+
+type IntentEnsureResult = Awaited<ReturnType<Container['intent']['ensure']>>;
+
+function formatCost(costUsd: number | null): string {
+  return costUsd === null ? 'cost n/a' : `$${costUsd.toFixed(4)}`;
+}
 
 // A reduced "Review per file" — same schema as Review (the model returns a small
 // Review per file; we merge findings + take the worst verdict / mean score).
@@ -105,6 +114,10 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // L03 — the PR's intent is derived ONCE for the whole batch (shared pre-work), before
+    // the per-agent loop. It never fails a run: without a record the agents run as before.
+    const intentPre = await this.deriveIntent(workspaceId, pull, runLog);
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -112,7 +125,7 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog, intentPre);
         logger?.info(
           {
             runId,
@@ -144,6 +157,7 @@ export class ReviewRunExecutor {
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
+    intentPre: IntentPreWork,
   ): Promise<RunOutcome> {
     const start = Date.now();
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
@@ -195,6 +209,18 @@ export class ReviewRunExecutor {
         runLog.info(`Skill: ${s.name} v${s.version} · ~${tokenizer.count(block)} tok`);
       });
 
+      // L03 — the derived intent as one prompt block. The filter runs only for a
+      // confident, non-suspicious intent; otherwise the block still tags findings.
+      const intentRecord = intentPre.record;
+      const intentBlock = intentRecord ? renderIntentBlock(intentRecord) : undefined;
+      const scopeFilter = intentRecord ? scopeFilterEnabled(intentRecord) : false;
+      if (intentRecord && intentBlock) {
+        const filterNote = scopeFilter
+          ? 'on'
+          : `off (${intentRecord.injection_suspected ? 'injection suspected' : 'low confidence'})`;
+        runLog.info(`Intent attached · ~${tokenizer.count(intentBlock)} tok · scope filter ${filterNote}`);
+      }
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -217,6 +243,8 @@ export class ReviewRunExecutor {
         ...(pull.body ? { prDescription: pull.body } : {}),
         // L02 — omitted when empty so the slot drops out of the prompt.
         ...(skillBlocks.length > 0 ? { skills: skillBlocks } : {}),
+        // L03 — omitted without a record, so the slot, the tagging and the filter all drop out.
+        ...(intentBlock ? { intent: intentBlock, scopeFilter } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -225,6 +253,9 @@ export class ReviewRunExecutor {
         },
       });
       const { tokensIn, tokensOut, costUsd, grounding } = outcome;
+      runLog.result(
+        `Review call done ← ${agent.provider}/${agent.model} · ${tokensIn} in / ${tokensOut} out tok · ${formatCost(costUsd)} · ${outcome.chunks.length} call(s)`,
+      );
 
       const keptFindings = outcome.review.findings;
 
@@ -284,6 +315,8 @@ export class ReviewRunExecutor {
           cost_usd: costUsd,
           findings: findingRows.length,
           grounding,
+          // L03 — findings removed by the scope filter; null when the filter did not run.
+          scope_filtered: outcome.scope?.enabled ? outcome.filtered.length : null,
         },
         prompt_assembly: {
           ...outcome.assembly,
@@ -293,12 +326,16 @@ export class ReviewRunExecutor {
             ? promptSkills.map((s) => ({ name: s.name, version: s.version }))
             : null,
         },
-        tool_calls: outcome.chunks.map((c) => ({
-          tool: 'review_file',
-          args: c.label,
-          meta: outcome.mode,
-          ms: Math.round(durationMs / Math.max(outcome.chunks.length, 1)),
-        })),
+        tool_calls: [
+          // L03 — the classifier call first (shared pre-work), then the review's own calls.
+          intentPre.toolCall,
+          ...outcome.chunks.map((c) => ({
+            tool: 'review_file',
+            args: c.label,
+            meta: outcome.mode,
+            ms: Math.round(durationMs / Math.max(outcome.chunks.length, 1)),
+          })),
+        ],
         raw_output: outcome.raw,
         memory_pulled: [],
         specs_read: [],
@@ -335,6 +372,49 @@ export class ReviewRunExecutor {
       this.container.runBus.complete(runId);
       throw err;
     }
+  }
+
+  /**
+   * L03 — shared pre-work: make sure the PR has a current derived intent. Published with
+   * `runLog.tool` (not `step`): `step` emits an `error` event on throw, and the client turns
+   * every `error` event into a toast — a failed classification is not a failed run. The
+   * service never throws for a provider, GitHub or model failure; an unexpected throw is
+   * logged as `info` and the run continues without an intent.
+   */
+  private async deriveIntent(workspaceId: string, pull: PullRow, runLog: RunLogger): Promise<IntentPreWork> {
+    const started = Date.now();
+    runLog.tool('Deriving PR intent…');
+    let ensured: IntentEnsureResult;
+    try {
+      ensured = await this.container.intent.ensure(workspaceId, pull.id, {
+        // Defensive: nothing the intent service emits may surface as an `error` event.
+        onEvent: (kind, msg, data) => runLog.event(kind === 'error' ? 'info' : kind, msg, data),
+      });
+    } catch (err) {
+      runLog.info(`Intent unavailable (${(err as Error).message}) — continuing without it`);
+      return {
+        record: null,
+        toolCall: { tool: 'classify_intent', args: 'n/a', meta: 'unavailable (error)', ms: Date.now() - started },
+      };
+    }
+
+    const { record, outcome, call } = ensured;
+    const args = call ? `${call.provider}/${call.model}` : 'n/a';
+    const meta =
+      outcome === 'computed' && call
+        ? `computed · ${call.tokensIn ?? '?'} in / ${call.tokensOut ?? '?'} out tok · ${formatCost(call.costUsd)}`
+        : outcome === 'cached'
+          ? 'cached'
+          : `unavailable (${ensured.reason ?? 'unknown'})`;
+    return {
+      record,
+      toolCall: {
+        tool: 'classify_intent',
+        args,
+        meta,
+        ms: outcome === 'computed' && call ? Math.round(call.durationMs) : 0,
+      },
+    };
   }
 
   /**

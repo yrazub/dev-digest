@@ -8,6 +8,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import {
   Icon,
+  Badge,
   SeverityBadge,
   CategoryTag,
   MonoLink,
@@ -61,6 +62,11 @@ export function FindingCard({
           <div style={s.titleRow}>
             <span style={s.title(muted, dismissed)}>{f.title}</span>
             <CategoryTag category={f.category as Category} />
+            {f.scope === "out_of_scope" && (
+              <Badge color="var(--warn)" bg="var(--warn-bg)">
+                {t("finding.outOfScope")}
+              </Badge>
+            )}
             {accepted && <span style={s.acceptedTag}>{t("finding.accepted")}</span>}
             {dismissed && <span style={s.dismissedTag}>{t("finding.dismissed")}</span>}
           </div>

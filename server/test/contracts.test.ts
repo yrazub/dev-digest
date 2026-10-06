@@ -3,6 +3,10 @@ import {
   Review,
   Finding,
   Intent,
+  PrIntentRecord,
+  PrIntentResponse,
+  FEATURE_MODELS,
+  PromptAssembly,
   BlastRadius,
   Risks,
   PrHistory,
@@ -75,7 +79,7 @@ describe('AI contracts parse fixtures', () => {
 
   it('Intent / BlastRadius / Risks / PrHistory', () => {
     expect(() =>
-      Intent.parse({ intent: 'x', in_scope: ['a'], out_of_scope: ['b'] }),
+      Intent.parse({ summary: 'x', in_scope: ['a'], out_of_scope: ['b'] }),
     ).not.toThrow();
     expect(() =>
       BlastRadius.parse({
@@ -382,5 +386,126 @@ describe('L02 skills contracts', () => {
       version: 1,
     });
     expect(agent.skill_count).toBe(0);
+  });
+});
+
+describe('L03 intent layer contracts', () => {
+  const record = {
+    pr_id: 'p1',
+    summary: 'Add a rate limit to the public webhooks route.',
+    in_scope: ['rate limiting on /webhooks'],
+    out_of_scope: ['auth changes'],
+    risk_areas: [{ kind: 'security', label: 'public endpoint' }],
+    confidence: 'medium',
+    sources: [
+      { kind: 'title', ref: null, status: 'used', reason: null },
+      { kind: 'spec_document', ref: 'specs/rate-limit.md', status: 'unavailable', reason: 'not_found' },
+    ],
+    missing_context: true,
+    injection_suspected: false,
+    stale: false,
+    model: 'deepseek/deepseek-v4-flash',
+    cost_usd: 0.0004,
+    computed_at: '2026-10-05T10:00:00.000Z',
+  };
+
+  it('Intent parses { summary, in_scope, out_of_scope } and rejects the old `intent` key alone', () => {
+    const intent = Intent.parse({ summary: 's', in_scope: [], out_of_scope: [] });
+    expect(intent.summary).toBe('s');
+    expect(Intent.safeParse({ intent: 's', in_scope: [], out_of_scope: [] }).success).toBe(false);
+  });
+
+  it('PrIntentRecord parses a full record', () => {
+    const parsed = PrIntentRecord.parse(record);
+    expect(parsed.summary).toBe(record.summary);
+    expect(parsed.sources).toHaveLength(2);
+    expect(parsed.sources[1]).toEqual({
+      kind: 'spec_document',
+      ref: 'specs/rate-limit.md',
+      status: 'unavailable',
+      reason: 'not_found',
+    });
+  });
+
+  it('PrIntentRecord keeps a null model and cost (unknown, never 0)', () => {
+    const parsed = PrIntentRecord.parse({ ...record, model: null, cost_usd: null });
+    expect(parsed.model).toBeNull();
+    expect(parsed.cost_usd).toBeNull();
+  });
+
+  it.each([
+    ['confidence', { confidence: 'certain' }],
+    ['risk kind', { risk_areas: [{ kind: 'privacy', label: 'x' }] }],
+    ['source status', { sources: [{ kind: 'title', ref: null, status: 'missing', reason: null }] }],
+    ['source reason', { sources: [{ kind: 'title', ref: null, status: 'unavailable', reason: 'timeout' }] }],
+    ['source kind', { sources: [{ kind: 'commit_message', ref: null, status: 'used', reason: null }] }],
+  ])('PrIntentRecord rejects an unknown %s', (_name, override) => {
+    expect(PrIntentRecord.safeParse({ ...record, ...override }).success).toBe(false);
+  });
+
+  it.each(['sources', 'missing_context', 'stale'])('PrIntentRecord requires `%s`', (key) => {
+    const { [key]: _dropped, ...rest } = record as Record<string, unknown>;
+    expect(PrIntentRecord.safeParse(rest).success).toBe(false);
+  });
+
+  it('PrIntentResponse accepts { intent: null } and a record, and rejects a missing key', () => {
+    expect(PrIntentResponse.parse({ intent: null }).intent).toBeNull();
+    expect(PrIntentResponse.parse({ intent: record }).intent?.pr_id).toBe('p1');
+    expect(PrIntentResponse.safeParse({}).success).toBe(false);
+  });
+
+  describe('Finding.scope', () => {
+    const finding = {
+      id: 'f1',
+      severity: 'WARNING',
+      category: 'bug',
+      title: 't',
+      file: 'a.ts',
+      start_line: 1,
+      end_line: 2,
+      rationale: 'r',
+      confidence: 0.5,
+    };
+
+    it.each(['in_scope', 'out_of_scope'] as const)('parses scope %s', (scope) => {
+      expect(Finding.parse({ ...finding, scope }).scope).toBe(scope);
+    });
+
+    it('parses with scope null and with scope absent', () => {
+      expect(Finding.parse({ ...finding, scope: null }).scope).toBeNull();
+      expect(Finding.parse(finding).scope).toBeUndefined();
+    });
+
+    it('rejects another scope value', () => {
+      expect(Finding.safeParse({ ...finding, scope: 'unrelated' }).success).toBe(false);
+    });
+  });
+
+  it('PromptAssembly parses with and without `intent`', () => {
+    const base = { system: 's', user: 'u' };
+    expect(PromptAssembly.parse(base).intent).toBeUndefined();
+    expect(PromptAssembly.parse({ ...base, intent: null }).intent).toBeNull();
+    expect(PromptAssembly.parse({ ...base, intent: 'Summary: x' }).intent).toBe('Summary: x');
+  });
+
+  it('RunStats parses with and without `scope_filtered`, and keeps it an integer', () => {
+    const stats = {
+      duration_ms: 1,
+      tokens_in: 1,
+      tokens_out: 1,
+      cost_usd: null,
+      findings: 0,
+      grounding: '0/0 passed',
+    };
+    expect(RunStats.parse(stats).scope_filtered).toBeUndefined();
+    expect(RunStats.parse({ ...stats, scope_filtered: null }).scope_filtered).toBeNull();
+    expect(RunStats.parse({ ...stats, scope_filtered: 2 }).scope_filtered).toBe(2);
+    expect(RunStats.safeParse({ ...stats, scope_filtered: 1.5 }).success).toBe(false);
+  });
+
+  it('FEATURE_MODELS review_intent defaults to the cheap OpenRouter classifier', () => {
+    const entry = FEATURE_MODELS.find((m) => m.id === 'review_intent');
+    expect(entry?.defaultProvider).toBe('openrouter');
+    expect(entry?.defaultModel).toBe('deepseek/deepseek-v4-flash');
   });
 });

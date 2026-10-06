@@ -3,12 +3,18 @@ import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Review } from '@devdigest/shared';
 import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
-import { waitForPrRuns } from './helpers/runs.js';
+import { waitForPrRuns, waitForRunTrace } from './helpers/runs.js';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
 import * as t from '../src/db/schema.js';
-import { MockEmbedder, MockGitClient, MockLLMProvider } from '../src/adapters/mocks.js';
+import {
+  MockEmbedder,
+  MockGitClient,
+  MockGitHubClient,
+  MockLLMProvider,
+  MockSecretsProvider,
+} from '../src/adapters/mocks.js';
 
 const hasDocker = await dockerAvailable();
 const d = hasDocker ? describe : describe.skip;
@@ -47,7 +53,14 @@ d('skills in the review prompt', () => {
     app = await buildApp({
       config: loadConfig({ ...process.env, NODE_ENV: 'test' } as NodeJS.ProcessEnv),
       db: pg.handle.db,
-      overrides: { embedder: new MockEmbedder(), git: new MockGitClient({ diff: DIFF }), llm: { openai: llm } },
+      overrides: {
+        embedder: new MockEmbedder(),
+        git: new MockGitClient({ diff: DIFF }),
+        llm: { openai: llm },
+        // The intent pre-step must not reach a real provider or GitHub through ~/.devdigest/secrets.json.
+        secrets: new MockSecretsProvider(),
+        github: new MockGitHubClient(),
+      },
     });
 
     const [repo] = await pg.handle.db
@@ -110,8 +123,11 @@ d('skills in the review prompt', () => {
     const res = await app.inject({ method: 'POST', url: `/pulls/${prId}/review`, payload: { agentId } });
     const runId = res.json().runs[0].run_id as string;
     await waitForPrRuns(pg.handle.db, prId, { expected: 1 });
-    const trace = (await app.inject({ method: 'GET', url: `/runs/${runId}/trace` })).json();
-    const call = llm.calls.find((c) => c.method === 'completeStructured')!;
+    const trace = await waitForRunTrace(app, runId);
+    // The intent pre-step can make an earlier structured call; the prompt under test is the Review call's.
+    const call = llm.calls.find(
+      (c) => c.method === 'completeStructured' && (c.req as { schemaName: string }).schemaName === 'Review',
+    )!;
     const user = (call.req as { messages: { role: string; content: string }[] }).messages.find(
       (m) => m.role === 'user',
     )!.content;

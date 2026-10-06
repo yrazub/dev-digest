@@ -25,6 +25,8 @@ import { PriceBook } from './price-book.js';
 import { ConfigError } from './errors.js';
 import { AgentsRepository } from '../modules/agents/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
+import { IntentRepository } from '../modules/intent/repository.js';
+import { IntentService } from '../modules/intent/service.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
@@ -75,6 +77,7 @@ export class Container {
   // `container.agentsRepo` instead of reaching into another module's folder.
   private _agentsRepo?: AgentsRepository;
   private _reviewRepo?: ReviewRepository;
+  private _intent?: IntentService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -102,6 +105,19 @@ export class Container {
 
   get reviewRepo(): ReviewRepository {
     return (this._reviewRepo ??= new ReviewRepository(this.db));
+  }
+
+  /**
+   * L03 intent service. Built here (not in a module) because the `reviews` run reaches
+   * it as `container.intent` and a module never imports another module.
+   */
+  get intent(): IntentService {
+    return (this._intent ??= new IntentService({
+      store: new IntentRepository(this.db),
+      github: () => this.github(),
+      llm: (p) => this.llm(p),
+      tokenizer: this.tokenizer,
+    }));
   }
 
   get codeIndex(): CodeIndex {

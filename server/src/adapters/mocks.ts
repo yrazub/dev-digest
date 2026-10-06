@@ -17,6 +17,8 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  RepoFileMissReason,
+  RepoFileResult,
   GitClient,
   CloneOptions,
   UnifiedDiff,
@@ -58,11 +60,11 @@ export interface MockLLMOptions {
 }
 
 export class MockLLMProvider implements LLMProvider {
-  readonly id: 'openai' | 'anthropic';
+  readonly id: 'openai' | 'anthropic' | 'openrouter';
   public calls: { method: string; req: unknown }[] = [];
 
   constructor(
-    id: 'openai' | 'anthropic' = 'openai',
+    id: 'openai' | 'anthropic' | 'openrouter' = 'openai',
     private opts: MockLLMOptions = {},
   ) {
     this.id = id;
@@ -72,7 +74,7 @@ export class MockLLMProvider implements LLMProvider {
     this.calls.push({ method: 'listModels', req: null });
     return (
       this.opts.models ?? [
-        { id: 'gpt-4.1', provider: this.id === 'anthropic' ? 'anthropic' : 'openai' },
+        { id: 'gpt-4.1', provider: this.id },
       ]
     );
   }
@@ -127,6 +129,12 @@ export interface MockGitHubOptions {
   login?: string;
   /** Existing inline review comments returned by listReviewComments. */
   comments?: PrReviewComment[];
+  /** Per-issue results for getIssue: a value is returned, `null` resolves null, an `Error` is thrown. Unset → a canned issue. */
+  issues?: Record<number, IssueMeta | null | Error>;
+  /** File contents for getFileContent, keyed `"<ref>:<path>"`. A missing key → `not_found`; `''` → `empty`; above `maxBytes` → `too_large`. */
+  files?: Record<string, string>;
+  /** Forced getFileContent misses, same key as `files` and checked first: a reason resolves it, an `Error` is thrown. */
+  fileMisses?: Record<string, RepoFileMissReason | Error>;
 }
 
 export class MockGitHubClient implements GitHubClient {
@@ -134,6 +142,10 @@ export class MockGitHubClient implements GitHubClient {
   public openedPrs: OpenPrPayload[] = [];
   public committed: CommitFilesPayload[] = [];
   public createdComments: CreateReviewCommentInput[] = [];
+  /** Issue numbers requested through getIssue, in call order. */
+  public issueRequests: number[] = [];
+  /** `"<ref>:<path>"` of every getFileContent call, in call order. */
+  public fileRequests: string[] = [];
 
   constructor(private opts: MockGitHubOptions = {}) {}
 
@@ -232,8 +244,32 @@ export class MockGitHubClient implements GitHubClient {
     return pr ? { url: 'https://github.com/mock/mock/pull/1' } : null;
   }
 
-  async getIssue(_repo: RepoRef, n: number): Promise<IssueMeta> {
+  async getIssue(_repo: RepoRef, n: number): Promise<IssueMeta | null> {
+    this.issueRequests.push(n);
+    const configured = this.opts.issues?.[n];
+    if (configured instanceof Error) throw configured;
+    if (configured === null) return null;
+    if (configured) return configured;
     return { number: n, title: `Issue #${n}`, body: 'mock issue', state: 'open' };
+  }
+
+  async getFileContent(
+    _repo: RepoRef,
+    path: string,
+    ref: string,
+    opts?: { maxBytes?: number },
+  ): Promise<RepoFileResult> {
+    const key = `${ref}:${path}`;
+    this.fileRequests.push(key);
+    const miss = this.opts.fileMisses?.[key];
+    if (miss instanceof Error) throw miss;
+    if (miss !== undefined) return { file: null, reason: miss };
+    const content = this.opts.files?.[key];
+    if (content === undefined) return { file: null, reason: 'not_found' };
+    if (content === '') return { file: null, reason: 'empty' };
+    const size = Buffer.byteLength(content, 'utf-8');
+    if (size > (opts?.maxBytes ?? 200_000)) return { file: null, reason: 'too_large' };
+    return { file: { path, ref, content, size } };
   }
 
   async currentLogin(): Promise<string> {

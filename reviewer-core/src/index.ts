@@ -22,11 +22,15 @@ export {
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
 
+// Scope filter — deterministic removal of findings the model tagged out of scope.
+export { applyScopeFilter, isSeriousOutOfScope, type ScopeFilterResult } from './scope.js';
+
 // Structured-output helpers (Zod → JSON Schema + parse-with-repair).
 export {
   toJsonSchema,
   extractJson,
   parseWithRepair,
+  OutputTruncatedError,
   type JsonSchema,
   type ParseResult,
 } from './llm/structured.js';

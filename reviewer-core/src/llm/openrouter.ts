@@ -7,7 +7,7 @@ import type {
   StructuredRequest,
   StructuredResult,
 } from '@devdigest/shared';
-import { toJsonSchema, parseWithRepair } from './structured.js';
+import { toJsonSchema, parseWithRepair, OutputTruncatedError } from './structured.js';
 
 /**
  * The single OpenAI-compatible structured provider, owned by the engine because
@@ -66,22 +66,31 @@ export class OpenRouterProvider implements LLMProvider {
     let lastRaw = '';
 
     for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
-      const res = await this.client.chat.completions.create({
-        model: req.model,
-        messages,
-        temperature: req.temperature ?? 0,
-        ...(req.maxTokens ? { max_tokens: req.maxTokens } : {}),
-        response_format: {
-          type: 'json_schema',
-          json_schema: { name: req.schemaName, schema: jsonSchema.schema, strict: true },
+      // A caller that gave up (its own timeout) must not pay for another attempt.
+      req.signal?.throwIfAborted();
+      const res = await this.client.chat.completions.create(
+        {
+          model: req.model,
+          messages,
+          temperature: req.temperature ?? 0,
+          ...(req.maxTokens ? { max_tokens: req.maxTokens } : {}),
+          response_format: {
+            type: 'json_schema',
+            json_schema: { name: req.schemaName, schema: jsonSchema.schema, strict: true },
+          },
+          // OpenRouter session grouping — extra body field (spread is exempt from
+          // excess-property checks). Only sent when talking to OpenRouter.
+          ...(this.id === 'openrouter' && req.sessionId ? { session_id: req.sessionId } : {}),
+          // OpenRouter usage accounting — ask it to return the REAL generation
+          // cost (USD) in `usage.cost`, instead of estimating from a price book.
+          ...(this.id === 'openrouter' ? { usage: { include: true } } : {}),
+          // OpenRouter reasoning switch: only an explicit `false` is sent, so every other
+          // caller keeps the model's default behaviour.
+          ...(this.id === 'openrouter' && req.reasoning === false ? { reasoning: { enabled: false } } : {}),
         },
-        // OpenRouter session grouping — extra body field (spread is exempt from
-        // excess-property checks). Only sent when talking to OpenRouter.
-        ...(this.id === 'openrouter' && req.sessionId ? { session_id: req.sessionId } : {}),
-        // OpenRouter usage accounting — ask it to return the REAL generation
-        // cost (USD) in `usage.cost`, instead of estimating from a price book.
-        ...(this.id === 'openrouter' ? { usage: { include: true } } : {}),
-      });
+        // Aborting the signal drops the HTTP request itself, not only the wait for it.
+        req.signal ? { signal: req.signal } : undefined,
+      );
 
       // OpenRouter can return HTTP 200 with no `choices` (an upstream provider
       // error / moderation / free-tier limit in the body) — surface it.
@@ -108,6 +117,12 @@ export class OpenRouterProvider implements LLMProvider {
           raw: lastRaw,
           attempts: attempt,
         };
+      }
+      // Cut off at the output limit (`finish_reason: length`): a retry runs into the same
+      // limit, with the truncated text added to its input. Fail now, with the real cause.
+      // A cut-off answer that still parses was returned above.
+      if (choice.finish_reason === 'length') {
+        throw new OutputTruncatedError(req.schemaName, req.maxTokens ?? null);
       }
       messages.push({ role: 'assistant', content: lastRaw });
       messages.push({ role: 'user', content: parsed.repromptMessage });

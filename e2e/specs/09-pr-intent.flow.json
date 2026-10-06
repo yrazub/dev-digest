@@ -1,0 +1,20 @@
+{
+  "name": "PR detail shows the seeded Intent card",
+  "description": "From PR #482, confirm the Intent card renders from the seeded pr_intent row on the default Overview tab (an in-scope item, a risk area and the confidence label), then switch to the Agent runs tab and confirm the card is there too, next to the seeded run's verdict. The card is read from GET /pulls/:id/intent: no model call, because the flow never starts a review and never presses 'Derive intent' or 'Re-run intent detection'. The summary sentence is not asserted: the seeded PR description contains the same sentence. The literal strings come from e2e/specs/seed-fixtures.md ('PR #482 has a seeded intent'). Assumes a freshly-seeded DB where acme/payments-api (PR #482) is the first repo — run locally via the hermetic stack (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["wait", "--text", "Add rate limiting to public API endpoints"], "label": "seeded PR title row is visible" },
+    { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+    { "cmd": ["wait", "--text", "Return 429 with Retry-After header"], "label": "Overview: the seeded in-scope item is listed" },
+    { "cmd": ["wait", "--text", "Auth surface touched"], "label": "Overview: the seeded risk area is listed" },
+    { "cmd": ["wait", "--text", "Medium confidence"], "label": "Overview: the seeded confidence is shown" },
+    { "cmd": ["wait", "--text", "Agent runs"], "label": "the Agent runs tab is visible" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Agent runs"], "label": "switch to the Agent runs tab" },
+    { "cmd": ["wait", "--url", "tab=findings"], "label": "findings tab is active in the URL" },
+    { "cmd": ["wait", "--text", "Return 429 with Retry-After header"], "label": "Agent runs: the same in-scope item is listed" },
+    { "cmd": ["wait", "--text", "request changes"], "label": "Agent runs: the seeded run's verdict is next to the card" }
+  ]
+}

@@ -47,6 +47,24 @@ export function extractJson(text: string): string {
   return trimmed.slice(start);
 }
 
+/**
+ * The model stopped at its output limit and what it returned does not parse. Asking again
+ * with the same limit repeats the cut-off and doubles the bill — and the repair reprompt
+ * ("not valid JSON") names the wrong cause — so a provider throws this instead of retrying.
+ */
+export class OutputTruncatedError extends Error {
+  constructor(
+    readonly schemaName: string,
+    readonly maxTokens: number | null,
+  ) {
+    super(
+      `Output for ${schemaName} was cut off at the output limit` +
+        `${maxTokens === null ? '' : ` (max_tokens ${maxTokens})`} before it was complete; not retried`,
+    );
+    this.name = 'OutputTruncatedError';
+  }
+}
+
 export type ParseResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string; repromptMessage: string };

@@ -67,9 +67,16 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
         icon="Gauge"
         title={t("trace.stats")}
         right={
-          <Badge color="var(--ok)" bg="var(--ok-bg)" icon="Check">
-            {stats.grounding}
-          </Badge>
+          <>
+            <Badge color="var(--ok)" bg="var(--ok-bg)" icon="Check">
+              {stats.grounding}
+            </Badge>
+            {typeof stats.scope_filtered === "number" && stats.scope_filtered > 0 && (
+              <Badge color="var(--text-muted)">
+                {t("trace.scopeFiltered", { count: stats.scope_filtered })}
+              </Badge>
+            )}
+          </>
         }
       >
         <div style={s.statsRow}>

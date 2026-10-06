@@ -9,6 +9,7 @@ import type {
 import { Review as ReviewSchema } from '@devdigest/shared';
 import { assemblePrompt } from '../prompt.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
+import { applyScopeFilter } from '../scope.js';
 import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
 
 /**
@@ -19,7 +20,7 @@ import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
  * This is the pure core lifted out of the server's `ReviewService.runOneAgent`:
  * assemble prompt → single-pass OR map-reduce per file → reduce → SHARED
  * citation-grounding gate. It performs NO I/O beyond the injected LLM provider
- * (no DB, GitHub, fs, memory retrieval, intent, or persistence) — those stay in
+ * (no DB, GitHub, fs, memory retrieval, intent derivation, or persistence) — those stay in
  * the caller (server persists + streams SSE; runner posts + writes an artifact).
  *
  * Skill bodies / memory / specs are RESOLVED strings here: the caller turns
@@ -71,6 +72,19 @@ export interface ReviewInput {
   /** PR author's description/body (untrusted; truncated + delimiter-wrapped in
       the prompt). Empty/undefined → section omitted. */
   prDescription?: string;
+  /**
+   * The PR's derived intent block, rendered by the caller (untrusted; truncated
+   * + delimiter-wrapped in the prompt). When present the model tags each finding
+   * with a `scope`. Empty/undefined → section omitted, no tagging.
+   */
+  intent?: string;
+  /**
+   * Apply the deterministic scope filter after grounding: findings tagged
+   * `out_of_scope` are removed unless serious (CRITICAL / security WARNING) or a
+   * scanner kind. Off unless true — a tagged finding is kept when it is false or
+   * omitted.
+   */
+  scopeFilter?: boolean;
   /** Task framing line, e.g. "Review PR #482 …". */
   task?: string;
   /** Override the structured-output retry budget. */
@@ -99,6 +113,14 @@ export interface ReviewOutcome {
   grounding: string;
   /** Findings dropped by grounding, with reasons (for logs / "never go silent"). */
   dropped: { finding: Finding; reason: string }[];
+  /** Grounded findings removed by the scope filter, with reasons; empty when it is off. */
+  filtered: { finding: Finding; reason: string }[];
+  /**
+   * Scope-filter counts: `tagged` = grounded findings carrying a `scope`;
+   * `filtered` = removed; `signals` = serious out-of-scope findings kept.
+   * Null when no finding carries a tag and the filter is off.
+   */
+  scope: { enabled: boolean; tagged: number; filtered: number; signals: number } | null;
   /** Which path ran. */
   mode: ReviewMode;
   /** Prompt assembly (for the run trace). Single-pass: the one call; map-reduce: the whole-diff assembly. */
@@ -135,6 +157,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     callers: input.callers,
     repoMap: input.repoMap,
     prDescription: input.prDescription,
+    intent: input.intent,
     task: input.task,
   };
 
@@ -201,13 +224,45 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
   }
   emit('result', `Citation grounding: ${grounding}`);
 
-  // Score is derived from the findings that SURVIVED grounding (not the model's
-  // self-reported number, and not the pre-grounding set) so the score, the
-  // findings list, and the deterministic event always agree.
+  // Scope filter — once, over the merged + grounded findings, and only on request.
+  // The model only tagged; what is removed is decided in code (`scope.ts`).
+  const tagged = ground.kept.filter((f) => f.scope != null).length;
+  let kept = ground.kept;
+  let filtered: { finding: Finding; reason: string }[] = [];
+  let scope: ReviewOutcome['scope'] = null;
+  if (input.scopeFilter === true) {
+    const result = applyScopeFilter(ground.kept);
+    kept = result.kept;
+    filtered = result.filtered;
+    for (const d of filtered) {
+      emit(
+        'info',
+        `scope filtered "${d.finding.title}" (${d.finding.severity}, ${d.finding.file}:${d.finding.start_line}): ${d.reason}`,
+      );
+    }
+    emit(
+      'result',
+      `Scope filter: ${filtered.length} out-of-scope finding(s) filtered · ${result.signals.length} signal(s) kept`,
+    );
+    scope = {
+      enabled: true,
+      tagged,
+      filtered: filtered.length,
+      signals: result.signals.length,
+    };
+  } else if (tagged > 0) {
+    scope = { enabled: false, tagged, filtered: 0, signals: 0 };
+  }
+
+  // Score is derived from the findings that SURVIVED grounding and the scope
+  // filter (not the model's self-reported number, and not the pre-grounding set)
+  // so the score, the findings list, and the deterministic event always agree.
   return {
-    review: { ...merged, findings: ground.kept, score: scoreFromFindings(ground.kept) },
+    review: { ...merged, findings: kept, score: scoreFromFindings(kept) },
     grounding,
     dropped: ground.dropped,
+    filtered,
+    scope,
     mode,
     assembly,
     chunks: chunks.map((c) => ({ label: c.label })),

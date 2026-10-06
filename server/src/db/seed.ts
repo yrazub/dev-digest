@@ -199,6 +199,44 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     ]);
   }
 
+  // ---- PR #482's derived intent (L03) ----
+  // Its own idempotent insert OUTSIDE the `if (!pr)` block above: that block never runs again on
+  // an already-seeded dev database, so a row added inside it would never reach one. The card
+  // renders from this row with no model call; a review run recomputes it (null `source_hash`).
+  // The strings are the fixtures flow `09-pr-intent` asserts on (`e2e/specs/seed-fixtures.md`).
+  await db
+    .insert(t.prIntent)
+    .values({
+      prId: pr!.id,
+      intent: 'Add rate limiting to public API endpoints to prevent abuse from unauthenticated clients.',
+      inScope: [
+        'Token-bucket rate limiter middleware',
+        'Return 429 with Retry-After header',
+        'Apply the limiter to the public webhook routes',
+      ],
+      outOfScope: [
+        'Per-plan or per-user limits',
+        'Changes to authentication',
+        'An admin dashboard for limits',
+      ],
+      riskAreas: [
+        { kind: 'security', label: 'Auth surface touched' },
+        { kind: 'api', label: 'Public webhook behaviour changes' },
+        { kind: 'performance', label: 'Runs on every public request' },
+      ],
+      confidence: 'medium',
+      sources: [
+        { kind: 'title', ref: null, status: 'used', reason: null },
+        { kind: 'description', ref: null, status: 'used', reason: null },
+        { kind: 'changed_files', ref: null, status: 'used', reason: null },
+      ],
+      missingContext: false,
+      injectionSuspected: false,
+      sourceHash: null,
+      model: 'seed',
+    })
+    .onConflictDoNothing();
+
   // ---- built-in agents (the three starter presets + L02's Test Quality Reviewer) ----
   // Prompt bodies live in ./seed-prompts.ts (mirrored in docs/agent-prompts/*.md).
   const seedAgents: Array<typeof t.agents.$inferInsert> = [

@@ -19,6 +19,7 @@
   "trace": {
     "configuration": "Configuration",
     "stats": "Stats",
+    "scopeFiltered": "{count} out-of-scope filtered",
     "promptAssembly": "Prompt assembly",
     "toolCalls": "Tool calls",
     "rawOutput": "Raw output",

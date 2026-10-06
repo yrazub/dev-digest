@@ -7,11 +7,52 @@ import { z } from 'zod';
 
 // ---- Intent ----
 export const Intent = z.object({
-  intent: z.string(),
+  summary: z.string(),
   in_scope: z.array(z.string()),
   out_of_scope: z.array(z.string()),
 });
 export type Intent = z.infer<typeof Intent>;
+
+export const IntentRiskKind = z.enum(['security', 'dependency', 'performance', 'data', 'api', 'other']);
+export type IntentRiskKind = z.infer<typeof IntentRiskKind>;
+
+export const IntentRiskArea = z.object({ kind: IntentRiskKind, label: z.string() });
+export type IntentRiskArea = z.infer<typeof IntentRiskArea>;
+
+export const IntentConfidence = z.enum(['high', 'medium', 'low']);
+export type IntentConfidence = z.infer<typeof IntentConfidence>;
+
+export const IntentSourceKind = z.enum([
+  'title',
+  'description',
+  'linked_issue',
+  'spec_document',
+  'changed_files',
+  'external_link',
+]);
+export type IntentSourceKind = z.infer<typeof IntentSourceKind>;
+
+export const IntentSourceStatus = z.enum(['used', 'unavailable']);
+export type IntentSourceStatus = z.infer<typeof IntentSourceStatus>;
+
+export const IntentSourceReason = z.enum([
+  'not_found',
+  'fetch_failed',
+  'no_token',
+  'too_large',
+  'rejected',
+  'unsupported',
+  'skipped',
+]);
+export type IntentSourceReason = z.infer<typeof IntentSourceReason>;
+
+export const IntentSource = z.object({
+  kind: IntentSourceKind,
+  ref: z.string().nullable(), // '#471', 'specs/rate-limit.md', a URL, or null
+  status: IntentSourceStatus,
+  reason: IntentSourceReason.nullable(), // null when status is 'used'
+});
+export type IntentSource = z.infer<typeof IntentSource>;
 
 // ---- Blast radius ----
 export const ChangedSymbol = z.object({

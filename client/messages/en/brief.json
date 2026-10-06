@@ -15,5 +15,38 @@
     "blame": "blame",
     "noHistory": "No history available for this line.",
     "noCommits": "No commits found for this line."
+  },
+  "intent": {
+    "inScope": "In scope",
+    "outOfScope": "Out of scope",
+    "noneStated": "None stated",
+    "riskAreas": "Risk areas",
+    "derivedFrom": "Derived from",
+    "confidence": {
+      "high": "High confidence",
+      "medium": "Medium confidence",
+      "low": "Low confidence"
+    },
+    "confidenceHint": {
+      "medium": "Parts of this were inferred rather than stated in the PR.",
+      "low": "Little was stated in the PR, so this is a rough reading. Out-of-scope filtering is off for reviews."
+    },
+    "source": {
+      "title": "Title",
+      "description": "Description",
+      "linked_issue": "Issue {ref}",
+      "ticket": "Ticket {ref}",
+      "spec_document": "Document",
+      "changed_files": "Changed files",
+      "external_link": "External link"
+    },
+    "sourceNotRead": "not read",
+    "missingContext": "Derived without {sources} — the description refers to them, but they could not be read. This intent may be incomplete.",
+    "stale": "The PR changed since this was derived. Re-run intent detection.",
+    "injectionSuspected": "Instruction-like text found in the PR",
+    "rerun": "Re-run intent detection",
+    "derive": "Derive intent",
+    "emptyTitle": "Intent not derived yet",
+    "emptyHint": "Derive it now to check the understanding, or run a review."
   }
 }
