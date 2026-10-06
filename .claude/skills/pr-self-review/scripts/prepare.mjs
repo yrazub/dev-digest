@@ -42,6 +42,7 @@ for (const t of plan.tasks) {
   t.prompt_path = path.relative(root, path.join(runDir, 'prompts', `${t.id}.md`));
   const prompt = template
     .replaceAll('{skill_path}', t.skill_path)
+    .replaceAll('{skill_name}', t.skill)
     .replaceAll('{patch_path}', t.patch_path)
     .replaceAll('{files}', code(t.files))
     .replaceAll('{critical_rules}', t.critical_rules.length ? code(t.critical_rules) : '(none)')

@@ -9,6 +9,7 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | Spec | Slot / stage | Status |
 |---|---|---|
 | [`review-contract.md`](review-contract.md) | `reviewPullRequest()` — grounding, scoring, mode selection | done |
+| [`L03-intent-scope.md`](L03-intent-scope.md) | `intent` slot and the scope filter — after grounding, before scoring | implemented |
 
 The slots the engine already accepts but nothing fills yet — `skills` (L02), `specs`
 (L05), `memory` (L07), `callers` — are listed in [`../README.md`](../README.md).

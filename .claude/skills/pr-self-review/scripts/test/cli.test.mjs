@@ -39,6 +39,11 @@ test('a CRITICAL blocks the PR; a waiver releases it; any later change resets it
     const task = prep.tasks.find((t) => t.skill === 'frontend-ui-architecture');
     assert.ok(task, 'frontend-ui-architecture reviews the client file');
 
+    // The prompt is filled per task: it names the skill's INSIGHTS.md tag and leaves no placeholder.
+    const prompt = readFileSync(path.join(r.root, task.prompt_path), 'utf8');
+    assert.ok(prompt.includes("grep -n -B12 -F '**Skill:** `frontend-ui-architecture`' INSIGHTS.md"));
+    assert.doesNotMatch(prompt, /\{[a-z_]+\}/);
+
     for (const t of prep.tasks) {
       const findings = t.id !== task.id ? [] : [{
         rule_id: 'split-no-nested-definitions',

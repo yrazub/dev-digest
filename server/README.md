@@ -7,7 +7,7 @@ Adapters (LLM, GitHub, git, ast-grep, …) sit behind a DI container so they can
 swapped for mocks in tests.
 
 > This is the **starter** module set. Later course lessons add their own modules
-> (skills, intent/smart-diff, blast, brief/context/onboarding, eval/ci/hooks,
+> (skills, smart-diff, blast, brief/context/onboarding, eval/ci/hooks,
 > memory, plugins, …) — each is a self-contained `modules/<name>/` plugin plus,
 > usually, a slot it starts feeding the reviewer prompt. The DB schema already
 > contains **every** table; the unused ones simply sit empty until a lesson fills
@@ -74,6 +74,7 @@ flowchart TB
   end
   subgraph Review["Review & runs"]
     reviews["reviews<br/>/pulls/:id/review · /reviews · /findings/:id/(accept|dismiss)<br/>/runs/:id/(events|trace)"]
+    intent["intent<br/>/pulls/:id/intent (GET read · POST re-derive)"]
   end
   subgraph Agents["Agents & skills (Skills Lab)"]
     agents["agents<br/>/agents · /agents/:id · /agents/:id/skills (link + order)"]
@@ -89,6 +90,14 @@ flowchart TB
   end
   HEALTH["/health (liveness) · /health/ready (DB ping → 200/503)"]
 ```
+
+**Intent routes** ([`src/modules/intent/routes.ts`](src/modules/intent/routes.ts); the module is explained
+in [`src/modules/intent/README.md`](src/modules/intent/README.md)). Both answer `{ intent: PrIntentRecord | null }`.
+
+| Route | Behaviour |
+|---|---|
+| `GET /pulls/:id/intent` | Reads the stored intent and never computes. `stale` is computed on read. `404` for an unknown PR; `{ intent: null }` when nothing is stored, or when the stored row no longer parses |
+| `POST /pulls/:id/intent` | Always recomputes (the card's **Derive intent** and **Re-run**). Rate limit 10/min. `404` for an unknown PR; `400` code `intent_unavailable` when the configured provider has no key; `502` `external_service_error` for any other failure (model error, timeout, an answer cut off at the output limit or one that does not match the schema) |
 
 ## Environment
 
@@ -137,6 +146,20 @@ What the reviewer actually sends to the model is assembled in
 - **Grounding is mandatory.** Every finding must cite a line that exists in the
   diff or it is dropped (`groundFindings`), and the score is recomputed from the
   surviving findings — the model's self-reported score is ignored.
+- **The PR's derived intent is a second, separate model call.** Before the first agent
+  runs, the run asks `container.intent` for the PR's intent (see
+  [`docs/architecture.md`](docs/architecture.md)). A cheap classifier — the Settings
+  feature model `PR Review · Intent`, default `openrouter` / `deepseek/deepseek-v4-flash`,
+  independent of every agent's model — reads the title, the description, linked issues,
+  linked specification documents and the changed files with their hunk headers (never
+  change bodies). The result is rendered by `renderIntentBlock`
+  (`modules/reviews/domain.ts`) and reaches the prompt as the `## PR intent (derived)`
+  slot, right after the description. The reviewer model only *tags* each finding's
+  `scope`; the engine's scope filter decides what is dropped
+  ([`../reviewer-core/README.md`](../reviewer-core/README.md) → "Scope filter"). The filter
+  is switched on only for a `high` or `medium` intent that is not injection-suspected
+  (`scopeFilterEnabled`). With no key for the classifier's provider, or on any
+  classification failure, the slot is left out and agents run exactly as before.
 
 ## Testing
 

@@ -7,7 +7,7 @@ import type {
   StructuredRequest,
   StructuredResult,
 } from '@devdigest/shared';
-import { toJsonSchema, parseWithRepair } from './structured.js';
+import { toJsonSchema, parseWithRepair, OutputTruncatedError } from './structured.js';
 
 /**
  * The single OpenAI-compatible structured provider, owned by the engine because
@@ -101,6 +101,8 @@ export class OpenRouterProvider implements LLMProvider {
     let lastRaw = '';
 
     for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+      // A caller that has already given up must not pay for another attempt.
+      req.signal?.throwIfAborted();
       const res = await this.withDeadline(req, (signal) => this.client.chat.completions.create({
         model: req.model,
         messages,
@@ -116,6 +118,9 @@ export class OpenRouterProvider implements LLMProvider {
         // OpenRouter usage accounting — ask it to return the REAL generation
         // cost (USD) in `usage.cost`, instead of estimating from a price book.
         ...(this.id === 'openrouter' ? { usage: { include: true } } : {}),
+        // OpenRouter reasoning switch: only an explicit `false` is sent, so every other
+        // caller keeps the model's default behaviour.
+        ...(this.id === 'openrouter' && req.reasoning === false ? { reasoning: { enabled: false } } : {}),
         // Provider routing: fastest upstream first (the same model ran at 27 vs
         // 100 tok/s on different providers), skipping ones known to misbehave.
         ...(this.id === 'openrouter'
@@ -146,7 +151,10 @@ export class OpenRouterProvider implements LLMProvider {
       // A capped reply that is not valid JSON is a runaway generation; asking
       // again would only repeat it at the same cost.
       if (!parsed.ok && choice.finish_reason === 'length') {
-        throw new Error(
+        // Typed, so a caller can tell this from a schema failure without reading the message.
+        throw new OutputTruncatedError(
+          req.schemaName,
+          req.maxTokens ?? null,
           `OpenRouter output for ${req.schemaName} hit the ${req.maxTokens ?? 'provider'} token limit without valid JSON (provider: ${(res as { provider?: string }).provider ?? 'unknown'})`,
         );
       }

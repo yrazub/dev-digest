@@ -12,6 +12,7 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | [`L01-findings-counter.md`](L01-findings-counter.md) | `pulls` | draft |
 | [`L02-skills.md`](L02-skills.md) | `skills` (new), `agents`, `reviews` | implemented |
 | [`L02-conventions.md`](L02-conventions.md) | `conventions` | implemented |
+| [`L03-intent-layer.md`](L03-intent-layer.md) | `intent` (new), `reviews` | implemented |
 | [`architecture-refactor.md`](architecture-refactor.md) | all (S1: `pulls`, `reviews`) | draft |
 
 Use [`../src/modules/repo-intel`](../src/modules/repo-intel/README.md) as the reference

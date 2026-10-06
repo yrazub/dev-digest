@@ -47,6 +47,23 @@ export function extractJson(text: string): string {
   return trimmed.slice(start);
 }
 
+/**
+ * The model stopped at its output limit and what it returned does not parse. Asking again
+ * with the same limit repeats the cut-off and doubles the bill, so a provider throws this
+ * instead of sending the repair reprompt. A class of its own, so a caller can tell the case
+ * from a schema failure without reading the message.
+ */
+export class OutputTruncatedError extends Error {
+  constructor(
+    readonly schemaName: string,
+    readonly maxTokens: number | null,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'OutputTruncatedError';
+  }
+}
+
 export type ParseResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string; repromptMessage: string };

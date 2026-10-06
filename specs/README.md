@@ -17,6 +17,9 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | [`L02-conventions.md`](L02-conventions.md) | implemented |
 | [`L02-conventions-plan.md`](L02-conventions-plan.md) | done |
 | [`architecture-refactor.md`](architecture-refactor.md) | draft |
+| [`agents-lab-plan.md`](agents-lab-plan.md) | approved |
+| [`L03-intent-layer.md`](L03-intent-layer.md) | implemented |
+| [`L03-intent-layer-plan.md`](L03-intent-layer-plan.md) | done |
 
 The lesson roadmap (L01–L08) is in the root [`README.md`](../README.md).
 When you add a spec, add a row above.

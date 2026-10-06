@@ -11,15 +11,36 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  RepoFileResult,
 } from '@devdigest/shared';
-import { withRetry, withTimeout } from '../../platform/resilience.js';
+import { toRepoFile } from './content.js';
+import { ExternalServiceError } from '../../platform/errors.js';
+import { TimeoutError, withRetry, withTimeout } from '../../platform/resilience.js';
 
 const TIMEOUT = 30_000;
+const DEFAULT_FILE_MAX_BYTES = 200_000;
 
 function mapStatus(state: string, merged: boolean | undefined): PrStatus {
   if (merged) return 'merged';
   if (state === 'closed') return 'closed';
   return 'open';
+}
+
+/** HTTP status of an SDK error, when it has one. */
+function httpStatus(err: unknown): number | undefined {
+  const status = (err as { status?: unknown } | null)?.status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+/**
+ * An SDK or transport failure as an `ExternalServiceError`. The message names the
+ * operation, its target and the HTTP status; the SDK error itself (with its request,
+ * response and headers, which carry the token) is never attached.
+ */
+function githubFailure(operation: string, target: string, err: unknown): ExternalServiceError {
+  const status = httpStatus(err);
+  const why = err instanceof TimeoutError ? 'timed out' : status !== undefined ? `HTTP ${status}` : 'request failed';
+  return new ExternalServiceError(`GitHub ${operation} ${target} failed: ${why}`, { status: status ?? null });
 }
 
 /**
@@ -29,8 +50,12 @@ function mapStatus(state: string, merged: boolean | undefined): PrStatus {
 export class OctokitGitHubClient implements GitHubClient {
   private octokit: Octokit;
 
-  constructor(token: string) {
-    this.octokit = new Octokit({ auth: token });
+  /** `opts.fetch` replaces the SDK's HTTP (a test seam); production passes the token only. */
+  constructor(token: string, opts: { fetch?: typeof fetch } = {}) {
+    this.octokit = new Octokit({
+      auth: token,
+      ...(opts.fetch ? { request: { fetch: opts.fetch } } : {}),
+    });
   }
 
   async listPullRequests(repo: RepoRef): Promise<PrMeta[]> {
@@ -128,7 +153,7 @@ export class OctokitGitHubClient implements GitHubClient {
     const m = body.match(/(?:closes|fixes|resolves)?\s*#(\d+)/i);
     if (!m?.[1]) return undefined;
     try {
-      return await this.getIssue(repo, Number(m[1]));
+      return (await this.getIssue(repo, Number(m[1]))) ?? undefined;
     } catch {
       return undefined;
     }
@@ -348,19 +373,45 @@ export class OctokitGitHubClient implements GitHubClient {
     );
   }
 
-  async getIssue(repo: RepoRef, n: number): Promise<IssueMeta> {
-    const res = await withRetry(() =>
-      withTimeout(
-        this.octokit.rest.issues.get({ owner: repo.owner, repo: repo.name, issue_number: n }),
-        TIMEOUT,
-      ),
-    );
-    return {
-      number: res.data.number,
-      title: res.data.title,
-      body: res.data.body,
-      state: res.data.state,
-    };
+  async getIssue(repo: RepoRef, n: number): Promise<IssueMeta | null> {
+    try {
+      const res = await withRetry(() =>
+        withTimeout(
+          this.octokit.rest.issues.get({ owner: repo.owner, repo: repo.name, issue_number: n }),
+          TIMEOUT,
+        ),
+      );
+      return {
+        number: res.data.number,
+        title: res.data.title,
+        body: res.data.body,
+        state: res.data.state,
+      };
+    } catch (err) {
+      if (httpStatus(err) === 404) return null;
+      throw githubFailure('getIssue', `${repo.owner}/${repo.name}#${n}`, err);
+    }
+  }
+
+  async getFileContent(
+    repo: RepoRef,
+    path: string,
+    ref: string,
+    opts: { maxBytes?: number } = {},
+  ): Promise<RepoFileResult> {
+    const maxBytes = opts.maxBytes ?? DEFAULT_FILE_MAX_BYTES;
+    try {
+      const res = await withRetry(() =>
+        withTimeout(
+          this.octokit.rest.repos.getContent({ owner: repo.owner, repo: repo.name, path, ref }),
+          TIMEOUT,
+        ),
+      );
+      return toRepoFile(res.data, path, ref, maxBytes);
+    } catch (err) {
+      if (httpStatus(err) === 404) return { file: null, reason: 'not_found' };
+      throw githubFailure('getFileContent', `${repo.owner}/${repo.name} ${path}@${ref}`, err);
+    }
   }
 
   async currentLogin(): Promise<string> {

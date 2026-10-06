@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { OpenRouterProvider } from '../src/llm/openrouter.js';
+import { OutputTruncatedError } from '../src/llm/structured.js';
 
-type Body = { max_tokens?: number; provider?: { sort?: string; ignore?: string[] } };
+type Body = { max_tokens?: number; provider?: { sort?: string; ignore?: string[] }; reasoning?: unknown; messages?: unknown[] };
 type Options = { signal?: AbortSignal };
 
 /**
@@ -85,5 +86,96 @@ describe('OpenRouterProvider deadlines and output cap', () => {
     const all = provider({ reply: ok });
     await all.p.completeStructured(request);
     expect(all.calls[0]!.body.provider).toEqual({ sort: 'throughput' });
+  });
+});
+
+describe('OpenRouterProvider — the cut-off error, the repair loop and the reasoning switch', () => {
+  const valid = () => ({
+    choices: [{ finish_reason: 'stop', message: { content: '{"ok": true}' } }],
+    usage: { prompt_tokens: 100, completion_tokens: 50 },
+  });
+
+  it('throws a typed error for a capped reply that does not parse, so a caller need not read the message', async () => {
+    const { p, calls } = provider({
+      reply: () => ({
+        choices: [{ finish_reason: 'length', message: { content: '{"ok": tr' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 800 },
+      }),
+    });
+    const failure = await p.completeStructured({ ...request, maxTokens: 800 }).catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(OutputTruncatedError);
+    expect(failure).toMatchObject({ schemaName: 'Review', maxTokens: 800 });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('keeps a reply that reached the limit but is complete and valid', async () => {
+    const { p, calls } = provider({
+      reply: () => ({
+        choices: [{ finish_reason: 'length', message: { content: '{"ok": true}' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 800 },
+      }),
+    });
+    const res = await p.completeStructured({ ...request, maxTokens: 800 });
+    expect(res.data).toEqual({ ok: true });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('still repairs a reply that finished but does not match the schema, summing the tokens', async () => {
+    let n = 0;
+    const { p, calls } = provider({
+      reply: () =>
+        n++ === 0
+          ? { choices: [{ finish_reason: 'stop', message: { content: '{"ok": 42}' } }], usage: { prompt_tokens: 100, completion_tokens: 50 } }
+          : valid(),
+    });
+    const res = await p.completeStructured({ ...request, maxRetries: 2 });
+    expect(res.data).toEqual({ ok: true });
+    expect(res.attempts).toBe(2);
+    expect(res.tokensOut).toBe(100);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('gives up with the schema error after the last repair attempt', async () => {
+    const { p, calls } = provider({
+      reply: () => ({ choices: [{ finish_reason: 'stop', message: { content: '{"ok": 42}' } }], usage: {} }),
+    });
+    await expect(p.completeStructured({ ...request, maxRetries: 2 })).rejects.toThrow(
+      /failed schema validation for Review/,
+    );
+    expect(calls).toHaveLength(3);
+  });
+
+  it('sends the reasoning switch only when the request turns reasoning off', async () => {
+    const off = provider({ reply: valid });
+    await off.p.completeStructured({ ...request, reasoning: false });
+    expect(off.calls[0]!.body.reasoning).toEqual({ enabled: false });
+
+    for (const reasoning of [undefined, true]) {
+      const kept = provider({ reply: valid });
+      await kept.p.completeStructured({ ...request, ...(reasoning === undefined ? {} : { reasoning }) });
+      expect('reasoning' in kept.calls[0]!.body).toBe(false);
+    }
+  });
+
+  it('does not send the reasoning switch to another OpenAI-compatible endpoint', async () => {
+    const other = new OpenRouterProvider('test-key', { id: 'openai', baseURL: 'https://example.test/v1' });
+    const bodies: Body[] = [];
+    (other as unknown as { client: unknown }).client = {
+      chat: { completions: { create: (body: Body) => (bodies.push(body), Promise.resolve(valid())) } },
+    };
+    await other.completeStructured({ ...request, reasoning: false });
+    expect('reasoning' in bodies[0]!).toBe(false);
+  });
+
+  it('starts no repair attempt once the caller has aborted', async () => {
+    const cancel = new AbortController();
+    const { p, calls } = provider({
+      reply: () => {
+        cancel.abort(new Error('Caller gave up'));
+        return { choices: [{ finish_reason: 'stop', message: { content: '{"ok": 42}' } }], usage: {} };
+      },
+    });
+    await expect(p.completeStructured({ ...request, maxRetries: 2, signal: cancel.signal })).rejects.toThrow();
+    expect(calls).toHaveLength(1);
   });
 });

@@ -23,6 +23,9 @@ export const FindingKind = z.enum([
 ]);
 export type FindingKind = z.infer<typeof FindingKind>;
 
+export const FindingScope = z.enum(['in_scope', 'out_of_scope']);
+export type FindingScope = z.infer<typeof FindingScope>;
+
 export const Verdict = z.enum(['request_changes', 'approve', 'comment']);
 export type Verdict = z.infer<typeof Verdict>;
 
@@ -56,6 +59,9 @@ export const Finding = z.object({
   suggestion: z.string().nullish(), // markdown
   confidence: z.number().min(0).max(1),
   kind: FindingKind.nullish(),
+  scope: FindingScope.nullish().describe(
+    'Relation of this finding to the PR intent block; null when the prompt has no intent block.',
+  ),
   // Lethal-trifecta variant fields (present only when kind === 'lethal_trifecta')
   trifecta_components: z.array(TrifectaComponent).nullish(),
   evidence: z.array(TrifectaEvidence).nullish(),

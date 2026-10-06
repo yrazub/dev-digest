@@ -1,5 +1,15 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, uuid, text, integer, jsonb, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  text,
+  integer,
+  jsonb,
+  boolean,
+  timestamp,
+  doublePrecision,
+} from 'drizzle-orm/pg-core';
+import type { IntentRiskArea, IntentSource } from '@devdigest/shared';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
@@ -40,6 +50,8 @@ export const findings = pgTable('findings', {
   suggestion: text('suggestion'),
   confidence: doublePrecision('confidence').notNull(),
   kind: text('kind').notNull().default('finding'),
+  /** The reviewer's relation to the PR intent block: 'in_scope' | 'out_of_scope'; null with no intent block. */
+  scope: text('scope'),
   trifectaComponents: jsonb('trifecta_components').$type<string[]>(),
   acceptedAt: timestamp('accepted_at', { withTimezone: true }),
   dismissedAt: timestamp('dismissed_at', { withTimezone: true }),
@@ -52,6 +64,20 @@ export const prIntent = pgTable('pr_intent', {
   intent: text('intent').notNull(),
   inScope: jsonb('in_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   outOfScope: jsonb('out_of_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  riskAreas: jsonb('risk_areas').$type<IntentRiskArea[]>().notNull().default(sql`'[]'::jsonb`),
+  confidence: text('confidence', { enum: ['high', 'medium', 'low'] })
+    .notNull()
+    .default('low'),
+  sources: jsonb('sources').$type<IntentSource[]>().notNull().default(sql`'[]'::jsonb`),
+  missingContext: boolean('missing_context').notNull().default(false),
+  injectionSuspected: boolean('injection_suspected').notNull().default(false),
+  sourceHash: text('source_hash'),
+  provider: text('provider'),
+  model: text('model'),
+  tokensIn: integer('tokens_in'),
+  tokensOut: integer('tokens_out'),
+  costUsd: doublePrecision('cost_usd'),
+  computedAt: timestamp('computed_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const prBrief = pgTable('pr_brief', {

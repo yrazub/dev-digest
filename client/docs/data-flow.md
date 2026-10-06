@@ -32,6 +32,7 @@ A key is `[resource, id]`. The ones the PR screens depend on:
 | `["reviews", prId]` | `usePrReviews` | `GET /pulls/:id/reviews` | invalidated by run-review, a finding action, deleting a review or a run; refetched when a live run ends |
 | `["pr-runs", prId]` | `usePrRuns` | `GET /pulls/:id/runs` | polls every 4 s while any run is `running`; invalidated when a live run ends and by deleting a run |
 | `["pr-active-runs", prId]` | `usePrActiveRuns` | `GET /pulls/:id/runs/active` | polls every 4 s while non-empty; invalidated when runs start and end |
+| `["pr-intent", prId]` | `usePrIntent` | `GET /pulls/:id/intent` | polls every 4 s only while a review run is in flight (the page passes `poll`); `useRegenerateIntent` writes the `POST` response straight into it; invalidated when a live run ends |
 | `["run-trace", runId]` | `useRunTrace` | `GET /runs/:id/trace` | fetched when the drawer opens; `retry: false` |
 | `["pr-comments", prId]` | `usePrComments` | `GET /pulls/:id/comments` | invalidated by posting a comment |
 
@@ -60,10 +61,15 @@ Keep server data in the query cache. Do not copy it into `useState`; derive from
    becomes a toast, because it never passes through the query cache where the global toasts
    live.
 4. **Settle.** When every stream closes, `RunStatus` calls `onDone`, and the page invalidates
-   `pr-active-runs` and `pr-runs` and refetches `reviews`. The Timeline, the Review-runs cards
-   and their severity counters update from that.
+   `pr-active-runs`, `pr-runs` and `pr-intent` and refetches `reviews`. The Timeline, the
+   Review-runs cards and their severity counters update from that.
 5. **Converge anyway.** `pr-runs` and `pr-active-runs` poll every 4 s while something is running,
    so a missed SSE message or a mid-run reload still ends in the right state.
+
+The PR's intent is the one piece of review data that is *not* in the run's event stream. The
+server derives it as the run's first step, so the Intent card (above the run on the Agent runs
+tab) polls `pr-intent` every 4 s while a run is in flight and fills in once the server has stored it.
+A run whose intent fails still completes; the card keeps showing whatever was stored.
 
 The PR list is **not** invalidated by any of this. Its cost and findings columns catch up on the
 next fetch: on mount if the data is older than 30 s, every 60 s, or on window focus.

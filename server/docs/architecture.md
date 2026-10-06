@@ -15,11 +15,15 @@ the model is actually sent is in its "Review context" section; neither is repeat
 | Kind | Members | Notes |
 |---|---|---|
 | Built at construction | `config` `db` `secrets` `auth` `jobs` `runBus` | `runBus` is the process-wide singleton from `src/platform/sse.ts` |
-| Lazy getters | `git` `agentsRepo` `reviewRepo` `codeIndex` `repoIntel` `depgraph` `tokenizer` `priceBook` | created on first use, then reused |
+| Lazy getters | `git` `agentsRepo` `reviewRepo` `intent` `codeIndex` `repoIntel` `depgraph` `tokenizer` `priceBook` | created on first use, then reused |
 | Async, need a secret | `github()` · `llm(provider)` · `embedder()` | cached after the first call; a missing key throws `ConfigError` **at resolve time**, which is why the server boots with no keys at all |
 
 - `llm('openrouter')` is `reviewer-core`'s `OpenRouterProvider`, with the container's `priceBook`
   injected: live OpenRouter prices, falling back to the static table.
+- `intent` is the `IntentService` (`modules/intent/service.ts`), built here from narrow
+  dependencies — an `IntentRepository`, the lazy `github()` and `llm(provider)` resolvers, and
+  `tokenizer` — rather than inside its module. The `reviews` run needs it too, and a module
+  never imports another module, so the container is where the two meet.
 - `embedder()` is gated by config: when embeddings are disabled it throws before creating a
   client, so the app makes no OpenAI requests.
 - After a key changes in Settings, `invalidateSecretCaches()` drops the cached LLM, GitHub and
@@ -33,16 +37,19 @@ the model is actually sent is in its "Review context" section; neither is repeat
    effectively the same `ran_at` (queue time, milliseconds apart), not the time it started.
 2. **Detach.** `ReviewRunExecutor.executeRuns` (`run-executor.ts`) is started fire-and-forget. The
    HTTP response doesn't wait for it; if it crashes outright, that is only logged.
-3. **Shared pre-work, once per batch.** The PR diff is loaded one time. A single `RunLogger` fans
-   every event out to all queued runs, so each run's live log and trace start with the same
-   pre-work lines. If the diff can't be loaded, **every** queued run is marked `failed` with that
-   error.
+3. **Shared pre-work, once per batch.** The PR diff is loaded one time, then the PR's derived
+   intent is ensured through `container.intent` (see [Intent in a review run](#intent-in-a-review-run)).
+   A single `RunLogger` fans every event out to all queued runs, so each run's live log and trace
+   start with the same pre-work lines. If the diff can't be loaded, **every** queued run is marked
+   `failed` with that error. A failed intent never fails a run.
 4. **Agents run one after another**, in queue order, not in parallel. For each, `runOneAgent`:
    - resolves its LLM via `container.llm(agent.provider)`;
    - if the agent's `repo_intel` toggle is on, adds repo-intel context (callers of the changed
      symbols, the repo map, the "top-ranked files" note);
-   - calls `reviewer-core`'s `reviewPullRequest` (prompt → LLM → grounding → score);
-   - persists the review and its findings, marks the PR reviewed at its head SHA;
+   - renders the intent record into the prompt block and decides whether the scope filter runs;
+   - calls `reviewer-core`'s `reviewPullRequest` (prompt → LLM → grounding → scope filter → score);
+   - persists the review and its findings (each with the reviewer's `scope` tag), marks the PR
+     reviewed at its head SHA;
    - writes the per-run summary onto the `agent_runs` row in **one** `completeAgentRun` call
      (tokens, cost, findings count and per-severity breakdown, score, blockers);
    - saves the whole run log as one `run_traces` document and completes the run on the bus.
@@ -53,6 +60,67 @@ the model is actually sent is in its "Review context" section; neither is repeat
    error text. Tokens and `findingsCount` are zeroed and grounding reads `0/0 passed`; cost,
    score, blockers and the per-severity breakdown stay `null`. It then saves the trace and
    completes the run on the bus.
+
+## Intent in a review run
+
+The intent is **shared pre-work**: `ReviewRunExecutor.deriveIntent` calls
+`container.intent.ensure` once per batch, after the diff is loaded and before the first agent
+(`run-executor.ts`). The classifier is a second model call, separate from every agent's review
+call; what it reads and how it decides is in
+[`../src/modules/intent/README.md`](../src/modules/intent/README.md).
+
+```mermaid
+sequenceDiagram
+  participant EX as run-executor
+  participant IS as container.intent
+  participant ST as IntentRepository
+  participant GH as GitHubClient
+  participant CL as classifier model
+  participant EN as reviewer-core
+
+  EX->>EX: load the PR diff once
+  EX->>IS: ensure(workspaceId, prId)
+  IS->>ST: getPullContext, featureModelOverride, getIntent
+  alt stored source_hash equals the current hash
+    IS-->>EX: cached record
+  else no row, null hash or a different hash
+    IS->>IS: resolve the classifier's provider, no key ends here
+    IS->>GH: getIssue and getFileContent for each fetchable reference
+    IS->>CL: completeStructured IntentClassification
+    IS->>ST: upsertIntent
+    IS-->>EX: computed record
+  end
+  Note over EX,IS: a failure returns no record and the run goes on
+  loop each queued agent
+    EX->>EN: reviewPullRequest with intent block and scopeFilter
+    EN->>EN: ground, then scope filter, then score
+    EN-->>EX: kept findings, filtered findings, scope counts
+    EX->>EX: persist findings with scope, then the trace
+  end
+```
+
+- **Never fatal.** `ensure` returns `computed`, `cached` or `unavailable` (a missing provider key,
+  a model failure, a timeout, an answer cut off at the output limit or one that does not match the
+  schema) and does not throw for those. On `unavailable` no row is written, the prompt gets no
+  intent slot, the model is not asked to tag findings and no scope filter runs: agents run as they did before the
+  feature. The executor publishes the step with `runLog.tool`, not `runLog.step`, because
+  `step` emits an `error` event on a throw and the client turns every `error` event into a toast;
+  an `error` event from the intent service is downgraded to `info` for the same reason.
+- **Cache.** A stored intent is reused while its `source_hash` equals the hash of the prompt
+  version, the classifier's `provider/model`, the head SHA, the title and the description. The
+  seeded demo row has a null hash, so a review run always recomputes it. An edit to a linked issue
+  or document alone does not change the hash; the card's **Re-run** covers that.
+- **Per agent.** `renderIntentBlock` (`modules/reviews/domain.ts`) turns the record into the
+  prompt text, capped at 2000 characters. `scopeFilterEnabled` is true only for a `high` or
+  `medium` intent that is not injection-suspected; otherwise the block still tags findings and
+  nothing is filtered. The run log says which: `Intent attached · … · scope filter on|off (…)`.
+- **In the trace.** `tool_calls` starts with a `classify_intent` entry (`provider/model`, and
+  `computed · tokens · cost`, `cached` or `unavailable (<reason>)`), followed by the review's own
+  `review_file` entries. `stats.scope_filtered` counts the findings the filter removed and is
+  `null` when it did not run. `prompt_assembly.intent` holds the text that was fenced, or `null`.
+  The classifier's tokens and cost sit on its `pr_intent` row, not on `agent_runs`.
+- **No lock.** Two batches started at once for the same PR both derive the intent and upsert the
+  same key; the last write wins.
 
 ## Live events: the run bus
 
@@ -76,7 +144,8 @@ checking its status. (Read from the code, not reproduced; see `../INSIGHTS.md` �
 
 | Module | Writes |
 |---|---|
-| `reviews` | `agent_runs` · `run_traces` · `reviews` · `findings` · `pr_intent` · `pull_requests` (review freshness only) |
+| `reviews` | `agent_runs` · `run_traces` · `reviews` · `findings` · `pull_requests` (review freshness only) |
+| `intent` | `pr_intent` (reads `pull_requests` · `repos` · `pr_files` and the `feature_models` key of `settings`) |
 | `pulls` | `pull_requests` · `pr_files` · `pr_commits` (GitHub import and backfill) |
 | `polling` | `pull_requests` · `repos` |
 | `repos` | `repos` |

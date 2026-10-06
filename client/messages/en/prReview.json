@@ -2,6 +2,7 @@
   "finding": {
     "accepted": "accepted",
     "dismissed": "dismissed",
+    "outOfScope": "Outside PR scope",
     "suggestedFix": "Suggested fix",
     "accept": "Accept",
     "dismiss": "Dismiss",

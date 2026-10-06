@@ -118,6 +118,11 @@ blocking the shell.
 (`useConventionSkillDraft` in `src/lib/hooks/conventions.ts` is now `useQuery`), so the modal
 no longer has the effect or `draftMutation`. The rule still holds for any mocked hook whose
 function identity a component depends on; the original code is in commit `54e2b1e`.
+### `pnpm typecheck` fails with TS2307 under `.next/types/` although `src/` is clean
+**Date:** 2026-10-05
+**Cause:** `tsconfig.json` includes `.next/types/**/*.ts` (`tsconfig.json:33`), and that gitignored folder still held the generated `page.ts` and `validator.ts` entry of a route that was later deleted from `src/app` (`repos/[repoId]/conventions`). The error is `Cannot find module '../../../../../../src/app/repos/[repoId]/conventions/page.js'`.
+**Fix / rule:** errors only under `.next/` are a stale build artefact, not a code failure. Run `pnpm exec next typegen` (rewrites `validator.ts`), delete the leftover `.next/types/app/<deleted route>/` folder, and rerun. Not with `pnpm dev` running against the same folder.
+**Evidence:** `tsconfig.json:33`; nothing in the repository shows the stale file, it is gitignored.
 
 ## Session Notes
 
@@ -126,3 +131,4 @@ function identity a component depends on; the original code is in commit `54e2b1
 - **2026-09-28** — built the Skills screens (L02 phase 5); client code must import only types from `@devdigest/shared`.
 - **2026-09-30** — L02 Skills UI done (skills, agents Skills tab, trace); L02 tests moved to `userEvent`.
 - **2026-10-01** — L02 Conventions page, candidate cards and the Create-skill-from-conventions modal.
+- **2026-10-05** — L03 Intent card, `usePrIntent` / `useRegenerateIntent`, the out-of-scope badge and the trace count; a stale `.next/types` blocked the first baseline.

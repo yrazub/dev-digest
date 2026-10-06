@@ -51,6 +51,11 @@ Traps we have already hit in the server. Append-only. See the root
   `src/db/` instead would give every non-repository caller a new violation. Reference:
   `findingRowToDto` + `FindingRecord` (`src/modules/_shared/finding-dto.ts:11`).
 
+- **2026-10-05** — every `AppError` subclass keeps `name === 'AppError'` (`this.name` is set once in the base, `src/platform/errors.ts:15`), so a test asserts `instanceof ExternalServiceError` or `err.code`, never `err.name`. `ConfigError` is a 500: a service that resolves a provider lazily maps a missing key itself (`AppError('intent_unavailable', …, 400)` in `src/modules/intent/service.ts:248`).
+- **2026-10-05** — `new OctokitGitHubClient(token, { fetch })` is the adapter's test seam: the stub receives every SDK request (`request: { fetch }`, `src/adapters/github/octokit.ts:54-57`). A 403 makes exactly one request, a 429 or 5xx is retried with backoff, and Octokit percent-encodes the contents path (`contents/docs%2Fspec.md`), so a stub decodes the URL before matching. Example: `test/github-octokit.test.ts`.
+- **2026-10-05** — a shared pre-step of a review run logs with `runLog.tool` / `info`, never `runLog.step`: `step` emits an `error` event when its callback throws and the client turns every `error` event into a toast (`deriveIntent` in `src/modules/reviews/run-executor.ts:379-386`).
+- **2026-10-05** — `MockLLMProvider({ structuredBySchema })` runs a multi-call flow (classifier + review) through one app; calls are told apart by `req.schemaName`, not by order (`runAndTrace` in `test/reviews-skills.it.test.ts`, `test/reviews-intent.it.test.ts`). In an `.it` file a seeded row cannot be restored once a test corrupts it (`seed()` uses `onConflictDoNothing()`), so corrupt a row the test created; a `PUT /settings` persists for the rest of the file and is undone in `finally` (`test/intent-routes.it.test.ts`).
+
 ## Tool & Library Notes
 
 - **2026-09-27** — dependency-cruiser's `--ignore-known` takes an **optional** file argument, so
@@ -81,6 +86,13 @@ Traps we have already hit in the server. Append-only. See the root
   `src/db/schema/knowledge.ts` `conventions`). Run it under `expect`, answering Enter, which picks
   the first option ("+ … create column"). Then read the generated SQL and confirm it has no
   `RENAME COLUMN` (`src/db/migrations/0013_flat_blue_marvel.sql`).
+- **2026-10-05** — a `buildApp` test that starts a review run and passes no `secrets` override reads the developer's real keys: `secretsPath` is `join(homedir(), '.devdigest', 'secrets.json')` (`src/platform/config.ts:74`), so the intent pre-step would make a paid model call and real GitHub requests. The three files that start a run (`reviews.it`, `reviews-skills.it`, `reviews-intent.it`) pass `MockSecretsProvider` and `MockGitHubClient`; a new one must too. To run the suite with no key reachable: `HOME=<empty dir holding only a .docker symlink> DOCKER_HOST=unix://<real home>/.docker/run/docker.sock pnpm test` — without the `DOCKER_HOST` the `.it` files self-skip.
+  **See also:** "Integration files skip silently" below, under Recurring Errors & Fixes.
+- **2026-10-05** — to learn whether a flaky test pre-dates the working tree without touching it: `git archive HEAD server reviewer-core | tar -x -C <scratch>`, symlink both `node_modules`, and run `pnpm exec vitest run` there. Used to show the `reviews-skills.it` race below exists at `aa19314`.
+- **2026-10-06** — `deepseek/deepseek-v4-flash` (the intent classifier's default) is a reasoning model, and OpenRouter counts its reasoning tokens against `max_tokens`. With `maxTokens: 800` a PR with a linked document spent 577 tokens reasoning, returned `finish_reason: length` with cut-off JSON, and `completeStructured` paid for a repair attempt that then ran past the 30 s `withTimeout` — the route answered 502 while the abandoned attempt kept running (`withTimeout` does not cancel). Fixed by `CLASSIFIER_MAX_TOKENS = 2000` (`src/modules/intent/service.ts`). Measured on the same PR: 2 attempts / 24 s before, 1 attempt / 11–18 s after; with `reasoning: { enabled: false }` in the request body 7 s and 212 output tokens (not built: it needs a field on `StructuredRequest`). The upstream provider OpenRouter picks changes the price of the same call 4× ($0.00008 on StreamLake, $0.0003 on OpenInference). To see this for any structured call, wrap `llm.client.chat.completions.create` in a scratch script and print `usage` and `finish_reason`; none of it reaches `StructuredResult`.
+  **Extended 2026-10-06:** built since: `StructuredRequest.reasoning: false` and `.signal` (OpenRouter provider only), and no repair retry after `finish_reason: length` (`OutputTruncatedError`). About 40 live runs on one PR showed what a single run hides: with `temperature: 0` the same input gives `medium` in roughly five runs of six and `low` in the rest (the model's `basis: 'insufficient'` flips), and latency ranges 2–30 s for 70–1200 output tokens depending on the upstream provider — three default-reasoning runs in a row hit the 30 s budget while reasoning-off runs minutes later took 2–11 s. Judge a prompt or setting change on at least six runs per variant; two prompt wordings I compared on fewer could not be told apart.
+  **Extended 2026-10-06 (2):** a `low` tier has two model-driven causes and the tier alone does not say which: `basis: 'insufficient'` (now applied only when no linked issue or specification was read — `deriveConfidence`, `basisOverruled`) and `injection_suspected`. After the guard, 5 of 14 runs on the same PR were still `low`, every one through `injection_suspected: true`; I had first put all such runs down to `basis` after checking a single record. Read the downgrade line of the run (`basis insufficient — forced to low` / `injection suspected — forced to low`) before naming a cause.
+  **Extended 2026-10-06 (3):** the injection flag in those runs was caused by one sentence of the demo PR's own description, "Not meant to be merged" — text that addresses a reviewer. With only that sentence removed, 10 of 10 runs gave `medium` with `injection_suspected: false` (5 of 14 `low` before). So the flag was working as specified, on a borderline input, and inconsistently; a fixture for intent tests should not address the reader.
 
 ## Decisions
 
@@ -109,6 +121,9 @@ Traps we have already hit in the server. Append-only. See the root
   `127.0.0.1.nip.io` is refused only by this hook. IP literals skip DNS, so they are checked up
   front. That check also has to handle Node's hex rewrite of `[::ffff:127.0.0.1]` to
   `::ffff:7f00:1`, and the NAT64 and 6to4 forms (`hextets`, `embeddedIPv4`).
+
+- **2026-10-05** — a GitHub 404 is a value at the port, not an exception: `getIssue` resolves `null` and `getFileContent` resolves `RepoFileResult` with a miss reason (`not_found` · `too_large` · `not_a_file` · `empty`); every other failure is rethrown by the adapter as `ExternalServiceError` (`httpStatus`, `githubFailure` in `src/adapters/github/octokit.ts:30-44`), and no service reads `err.status`. Rejected: `statusOf(err) === 404` in the intent service — it decided a persisted contract value from the SDK's error shape, and the mock could not produce that shape. Only these two methods were converted; the other methods of the class still rethrow the raw SDK error.
+- **2026-10-05** — contract-shaped `jsonb` and text-enum columns of `pr_intent` are parsed on read in the repository mapper (`mapRow`, `src/modules/intent/repository.ts:35`); a row that fails is reported through the port's `onUnreadable` callback (`:151`) and returned as `undefined`, so `GET /pulls/:id/intent` answers `{ intent: null }` and the next derivation overwrites it. Rejected: throwing (a 500 on a `GET` polled every 4 s, and a row that never heals) and parsing on write (the values already passed `IntentClassification`).
 
 ## Recurring Errors & Fixes
 
@@ -174,6 +189,19 @@ still fails typecheck there.
 declarations, and in the `.set({…})` in `run.repo.ts`. The same double declaration exists for
 `createAgentRun` (`repository.ts:142`).
 
+### List items vanish or are cut to a few characters after `items.map(helper)`
+**Date:** 2026-10-05
+**Cause:** the helper had an optional second parameter (`oneLine(text, max = 160)`), and `Array.prototype.map` passes the index there: item 0 was sliced to `''` and dropped, item 1 kept one character, item 2 two. The scope lists of the intent block never reached the review prompt whole, and the integration tests still passed because they asserted on other lines.
+**Fix / rule:** never pass a function with an optional parameter bare to `map` — write `.map((item) => oneLine(item))`. Test a capped render function with three or more items; with one item the only symptom is a missing heading.
+**Evidence:** `renderIntentBlock` in `src/modules/reviews/domain.ts:80`; `test/reviews-domain.test.ts` › "keeps every list item whole, up to the 160-char cap".
+
+### `reviews-skills.it.test.ts` fails in a parallel run with `Cannot read properties of undefined (reading 'skills')` or `(reading 'skills_loaded')`
+**Date:** 2026-10-05
+**Cause:** not a failed run. The executor marks the run `done` (`completeAgentRun`, `src/modules/reviews/run-executor.ts:288`) before it writes the trace (`saveRunTrace`, `:347`). `waitForPrRuns` returns on `done`, the test reads `GET /runs/:id/trace` once (`test/reviews-skills.it.test.ts:125-126`), and inside that window the route answers the 404 error envelope, which has no `prompt_assembly`. A probe saw 3 early 404s in 60 reads under the full parallel suite and none standalone; the same failure reproduced on a `git archive HEAD` copy in 3 of 6 parallel runs, so it pre-dates L03.
+**Fix / rule:** a test that reads a trace polls until the route answers 200 (`readTrace`, `test/reviews-intent.it.test.ts:180`). Do not rerun until green and do not read this failure as a regression of the change under test.
+**Evidence:** the two line pairs above; `Tests 1 failed | 198 passed (199)` in a plain `pnpm test`, `Tests 3 passed (3)` for the file alone.
+**See also 2026-10-05:** the poll now lives in `waitForRunTrace` (`test/helpers/runs.ts`); the local `readTrace` named above was removed.
+
 ## Open Questions
 
 - **2026-09-26** — can a cancelled **single-pass** run come back as `done`? `cancelRun`
@@ -185,6 +213,12 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
   `cancelled` and persist the review. Read from the code, not reproduced. To settle it: cancel a
   single-pass run on a large diff mid-call, then check the row's final status. The fix would be a
   `status = 'running'` guard on that update.
+
+- **2026-10-05** — the trace race above is not fixed in `test/reviews-skills.it.test.ts` or `test/reviews.it.test.ts` (both read the trace once after `done`), and the product has the same window for a UI that opens the trace on `done`. Two fixes, not chosen: poll in the tests, or call `saveRunTrace` before `completeAgentRun` in `run-executor.ts`. Ruled out: a failed run returning a buffer trace (status was `done` in 60 of 60 probes).
+  **Superseded 2026-10-05:** fixed in the tests. Every server test reads a trace through `waitForRunTrace` (`test/helpers/runs.ts`), which polls `GET /runs/:id/trace` until 200; six plain parallel `pnpm test` runs in a row were green afterwards (475 tests). The executor still marks `done` before it writes the trace, by the user's decision, so a UI that opens the trace on `done` can get one 404.
+- **2026-10-05** — `extractReferences` is quadratic on runs of `[` and of `+` (`MARKDOWN_LINK_RE`, `BARE_PATH_RE` in `src/modules/intent/domain.ts:223-225`; the lookbehind of `BARE_PATH_RE` omits `+`, which its body class includes): about 1.6 s for a 65 000-character PR body, and the service passes the uncapped sanitised body (`src/modules/intent/service.ts:461`). Nothing hangs. Not fixed; either cap the text or add `+` to the lookbehind. `test/intent-domain.test.ts` bounds the hostile inputs at 10 s.
+  **Superseded 2026-10-05:** fixed without changing detection. Six scans of author text in `src/modules/intent/domain.ts` are linear now (`HTML_COMMENT_RE`, `CLOSING_ISSUE_RE`, `blankMarkdownImages`, `takeMarkdownLinks` with the sticky `LINK_TAIL_RE`, `stripTrailingPunctuation`, the fallback alternative of `BARE_PATH_RE`); the lookbehind was left alone because adding `+` drops `docs/a.md` from `x:notes+docs/a.md`. A 262 144-character hostile body takes 1–12 ms, bounded at 1 000 ms in `test/intent-domain.test.ts`. The rewrite was checked by a differential run against the pre-change file: 117 782 comparisons, 0 mismatches.
+- **2026-10-05** — the casts that pre-date the intent work still stand: `row.trace as RunTrace` (`src/modules/reviews/repository/run.repo.ts:194`) and the `severity` / `category` / `kind` casts in `src/modules/_shared/finding-dto.ts`. They break the same `zod-parse-at-boundary` rule the intent repository now follows; converting them was kept out of the L03 change.
 
 ## Session Notes
 
@@ -211,3 +245,4 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
 - **2026-09-29** — L02 skills module; URL-import SSRF hardening (connect-time lookup); skill version bumps serialised with `SELECT … FOR UPDATE`.
 - **2026-10-01** — L02 conventions module (extract pipeline, candidate routes); `feature-models` moved to `modules/_shared/repository/feature-models.repo.ts` taking `Db`, which removed its two baselined violations.
 - **2026-10-02** — review runs: per-run deadline (`RUN_DEADLINE_MS`) and Cancel now abort the in-flight model call via `RunBus.signalFor`; OpenRouter skips `open-inference` by default (`OPENROUTER_IGNORED_PROVIDERS`). **See also:** `../reviewer-core/INSIGHTS.md` (runaway generation, provider slugs).
+- **2026-10-05** — L03 intent module, review-run pre-step and scope filter wiring; review fixes (parse on read, port-level GitHub outcomes); root cause of the `reviews-skills.it` flake; `renderIntentBlock` `map` bug found by the phase 6 tests. Plan: `specs/L03-intent-layer-plan.md` (revision 3).

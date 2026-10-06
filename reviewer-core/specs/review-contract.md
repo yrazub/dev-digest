@@ -38,13 +38,15 @@ there is no "raw" review to opt into.
    finding, and the caller must not treat `dropped.length > 0` as a review
    failure.
 
-4. **`review.score` is always recomputed from the post-grounding findings
-   (`scoreFromFindings(ground.kept)`), never taken from the model's own
-   self-reported score.** This holds even in map-reduce mode, where each
-   chunk's partial `Review` carries a score the model produced for that
-   chunk alone — `reduceReviews()` merges the partials' findings, but the
-   final score assigned to the returned `Review` is still recomputed after
-   grounding, not inherited from any partial or from the merge step.
+4. **`review.score` is always recomputed from the findings that survive
+   grounding *and* the scope filter (`scoreFromFindings(kept)`), never taken
+   from the model's own self-reported score.** When the scope filter is off
+   (the default) that set is exactly the post-grounding findings. This holds
+   even in map-reduce mode, where each chunk's partial `Review` carries a
+   score the model produced for that chunk alone — `reduceReviews()` merges
+   the partials' findings, but the final score assigned to the returned
+   `Review` is still recomputed after grounding (and the scope filter), not
+   inherited from any partial or from the merge step.
 
 5. **Mode selection (`single-pass` vs `map-reduce`) does not change the
    grounding contract.** Grounding is applied exactly once, after
@@ -66,3 +68,15 @@ there is no "raw" review to opt into.
    needs sub-chunk cancellation is out of scope for this contract — the
    engine guarantees only that no *new* expensive call starts after
    cancellation is requested.
+
+8. **The scope filter is applied once, after grounding, and only when
+   `scopeFilter` is true.** It runs over the merged, grounded findings (in
+   map-reduce too), never per chunk and never before grounding, so a finding
+   that fails grounding is dropped by grounding and is never a signal. With
+   `scopeFilter` false or omitted nothing is removed, even when findings carry
+   a `scope` tag. It never removes a serious out-of-scope finding (CRITICAL,
+   or a security WARNING) — one per distinct problem is kept — and never a
+   scanner finding (`FULL_FILE_KINDS`), whatever its tag. What it removes is
+   reported in `ReviewOutcome.filtered`, never silently. The model only tags;
+   the decision is code (`src/scope.ts`). See
+   [`L03-intent-scope.md`](L03-intent-scope.md).

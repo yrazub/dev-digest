@@ -14,6 +14,7 @@
 | adding a `modules/<name>/` plugin | `specs/` for the feature, and `src/modules/repo-intel/README.md` as the reference module |
 | run cost, or the findings counter/popover data | `specs/L01-run-cost.md` · `specs/L01-findings-counter.md` |
 | repo indexing, symbols, the import graph, or the repo map | `src/modules/repo-intel/README.md` |
+| a PR's derived intent — the classifier call, its sources, confidence, cache key or failures | `src/modules/intent/README.md` |
 | any test | `../TESTING.md` |
 | a failure that smells familiar | `INSIGHTS.md` — and **append** to it through the `engineering-insights` skill |
 

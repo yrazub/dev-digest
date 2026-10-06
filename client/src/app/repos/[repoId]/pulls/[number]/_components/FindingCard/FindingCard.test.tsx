@@ -58,3 +58,26 @@ describe("FindingCard (smoke, both themes)", () => {
     expect(onAction).toHaveBeenCalledWith("dismiss");
   });
 });
+
+describe("FindingCard out-of-scope badge", () => {
+  it("shows Outside PR scope next to the category tag for an out-of-scope finding", () => {
+    renderWithIntl(<FindingCard f={{ ...FINDING, scope: "out_of_scope" }} defaultExpanded onAction={() => {}} />);
+    const badge = screen.getByText("Outside PR scope");
+    expect(badge).toBeInTheDocument();
+    // the badge follows the category tag in the title row
+    const category = screen.getByText("security");
+    expect(category.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it.each([
+    ["in_scope", "in_scope" as const],
+    ["null", null],
+    ["absent", undefined],
+  ])("shows no badge when scope is %s", (_label, scope) => {
+    const f: FindingRecord = scope === undefined ? FINDING : { ...FINDING, scope };
+    if (scope === undefined) expect("scope" in f).toBe(false);
+    renderWithIntl(<FindingCard f={f} defaultExpanded onAction={() => {}} />);
+    expect(screen.getByText("Hardcoded Stripe secret key")).toBeInTheDocument();
+    expect(screen.queryByText("Outside PR scope")).not.toBeInTheDocument();
+  });
+});

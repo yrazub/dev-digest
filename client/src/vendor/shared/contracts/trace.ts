@@ -47,6 +47,8 @@ export const PromptAssembly = z.object({
   repo_map: z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
+  /** Derived PR intent block (truncated); null when absent. */
+  intent: z.string().nullish(),
   user: z.string(),
   /** Tokens of the whole skills block (tokenizer count); null when no skills. */
   skills_tokens: z.number().int().nullish(),
@@ -69,6 +71,8 @@ export const RunStats = z.object({
   cost_usd: z.number().nullable(),
   findings: z.number().int(),
   grounding: z.string(),
+  // Findings removed by the scope filter; null when it did not run.
+  scope_filtered: z.number().int().nullish(),
 });
 export type RunStats = z.infer<typeof RunStats>;
 

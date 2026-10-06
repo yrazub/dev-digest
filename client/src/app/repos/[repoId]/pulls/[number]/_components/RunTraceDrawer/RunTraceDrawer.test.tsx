@@ -107,4 +107,39 @@ describe("A5 Run Trace drawer (smoke)", () => {
     // LiveLogStream renders its filter input
     expect(screen.getByPlaceholderText("Filter log…")).toBeInTheDocument();
   });
+
+  it("shows the count of findings the scope filter removed next to the grounding badge", () => {
+    current = { ...TRACE, stats: { ...TRACE.stats, scope_filtered: 2 } };
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+    const count = screen.getByText("2 out-of-scope filtered");
+    expect(count).toBeInTheDocument();
+    // same slot as the grounding badge, which stays
+    const grounding = screen.getByText("2/2 passed");
+    expect(grounding.compareDocumentPosition(count) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it.each([
+    ["null", { scope_filtered: null }],
+    ["0", { scope_filtered: 0 }],
+    ["absent", {}],
+  ])("shows no filtered count when scope_filtered is %s", (_label, extra) => {
+    current = { ...TRACE, stats: { ...TRACE.stats, ...extra } };
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+    expect(screen.getByText("2/2 passed")).toBeInTheDocument();
+    expect(screen.queryByText(/out-of-scope filtered/)).not.toBeInTheDocument();
+  });
+
+  it("lists a classify_intent entry before review_file", () => {
+    current = {
+      ...TRACE,
+      tool_calls: [
+        { tool: "classify_intent", args: "openai/gpt-4.1-mini", meta: "cached", ms: 0 },
+        ...TRACE.tool_calls,
+      ],
+    };
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+    const intent = screen.getByText("classify_intent");
+    const review = screen.getByText("review_file");
+    expect(intent.compareDocumentPosition(review) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

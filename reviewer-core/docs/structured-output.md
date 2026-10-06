@@ -50,3 +50,10 @@ up — lives in the LLM provider (`llm/openrouter.ts` and its studio
 equivalents), which calls `parseWithRepair` after each attempt and decides
 whether to resend `repromptMessage`. `structured.ts` only classifies
 success/failure and drafts the correction; it never retries on its own.
+
+One failure is not retried. When the model stopped at its output limit
+(`finish_reason: length`) and the text does not parse, `llm/openrouter.ts` throws
+`OutputTruncatedError` (exported from `structured.ts`) instead of sending the reprompt: a
+second call runs into the same limit with the cut-off text added to its input, and "not valid
+JSON" names the wrong cause. A cut-off answer that still parses is returned as it is. The
+studio's OpenAI and Anthropic providers do not make this distinction yet.

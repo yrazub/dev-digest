@@ -1,3 +1,4 @@
+import { FindingScope } from '@devdigest/shared';
 import type { Finding, FindingRecord } from '@devdigest/shared';
 
 /**
@@ -21,6 +22,7 @@ export interface PersistedFinding {
   suggestion: string | null;
   confidence: number;
   kind: string;
+  scope: string | null;
   trifectaComponents: string[] | null;
   acceptedAt: Date | null;
   dismissedAt: Date | null;
@@ -39,6 +41,7 @@ export function findingRowToDto(row: PersistedFinding): FindingRecord {
     suggestion: row.suggestion ?? null,
     confidence: row.confidence,
     kind: (row.kind as Finding['kind']) ?? 'finding',
+    scope: FindingScope.safeParse(row.scope).data ?? null,
     trifecta_components: (row.trifectaComponents as Finding['trifecta_components']) ?? null,
     evidence: null,
     review_id: row.reviewId,

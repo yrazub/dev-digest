@@ -62,6 +62,7 @@ An entry is never reworded or deleted. Everything goes *beneath* it, dated:
 | `**Disputed YYYY-MM-DD:** <the other entry, and why>` | a later finding contradicts it and neither could be proved |
 | `**See also:** <path>` | the general rule lives at the root and the mechanics in a module file, or the reverse |
 | `**Evidence YYYY-MM-DD:** <path:line — what it shows>` | the entry was written without a `path:line`, or its anchor has moved |
+| ``**Skill:** `<name>` `` | the entry is about how a skill under `.claude/skills/` behaves; root file only, `<name>` is the skill's folder |
 
 The file must never carry two entries that disagree without one of those lines. The next
 session believes whichever it reads first.
@@ -164,6 +165,7 @@ be obvious to anyone reading the code, it does not belong here.
   diffed against the last upstream version.
   **Evidence 2026-09-27:** `skills-lock.json:28-29` — `"source": "vercel-labs/next-skills"`. The
   retirement itself is external; see `.claude/skills/frontend-ui-architecture/research/notes/tooling_and_ai_skills.md`.
+  **Skill:** `next-best-practices`
 
 - **2026-09-27** — Node's `path.matchesGlob` never lets `*` or `**` match a path segment that
   starts with a dot, so `**/*.md` does **not** match `.claude/skills/x/SKILL.md`, and
@@ -242,6 +244,75 @@ be obvious to anyone reading the code, it does not belong here.
   Quoted text and heredoc bodies are data; `&&` `;` `|` and subshells split commands; env assignments
   and git global options are skipped. Rejected: keeping the regex and adding exceptions, which cannot
   tell a quoted mention from a real command. Accepted limit: `eval` and scripts that push are not seen.
+
+- **2026-10-04** — a finding about how a skill behaves goes to the root file with a
+  ``**Skill:** `<name>` `` line beneath it, not into a per-skill insights file. Rejected: an
+  `INSIGHTS.md` inside each `.claude/skills/<name>/` folder. A file next to `SKILL.md` is read
+  only if `SKILL.md` links to it, six of the folders are installed from upstream
+  (`skills-lock.json`) so that link would fork them, and whether `npx skills update` keeps an
+  extra file there was not verified. A grep before writing found one skill-level entry in all
+  five files, too few to justify fourteen new ones. The tag is a line beneath the entry because
+  entries are never reworded. Review subagents read it through the grep in their prompt
+  (`{skill_name}`, `.claude/skills/pr-self-review/scripts/prepare.mjs:45`). Revisit with a tree
+  outside the skill folders if tagged entries pile up here.
+  **Evidence 2026-10-04:** `.claude/skills/engineering-insights/SKILL.md:50` — the routing row;
+  `.claude/skills/pr-self-review/references/reviewer-prompt.md:15` — the grep step.
+  **Skill:** `engineering-insights`
+
+- **2026-10-04** — the `planner` and `implementer` agents (`.claude/agents/`) share skills
+  through the plan, not through the `skills:` frontmatter field. `skills:` injects each listed
+  skill's full body into every run and is not an allowlist, so both leave it empty: the planner
+  maps each planned file to skills through the globs in
+  `.claude/skills/pr-self-review/routing.json` and copies the matching `critical_rules` IDs into
+  the plan's "Rules to respect" column, and the implementer loads the named skills per phase
+  with the Skill tool. Both set an explicit `tools` allowlist, because omitting `tools` inherits
+  every tool. The planner has `Read, Grep, Glob` only and returns the plan as text; the main
+  session saves it to `specs/<feature>-plan.md` after the user approves it. The implementer has
+  no Agent tool and does not commit, push or review. Rejected: `Write` for the planner
+  (read-only would then rest on prose); a `PreToolUse` path-guard hook on the implementer (user
+  chose prompt-only protection of migrations, lock files and `client/src/vendor/**` — revisit
+  if it ever edits one); `model: inherit` for the implementer.
+  **Evidence 2026-10-04:** `.claude/agents/planner.md:61` — "Step 3 — map the files to skills";
+  `.claude/agents/implementer.md:33` — "Load skills per phase". The `skills:` and `tools`
+  behaviour is from code.claude.com/docs/en/sub-agents, read through a WebFetch summary, not
+  verified against the raw page.
+  **Evidence 2026-10-04 (anchors moved):** `.claude/agents/planner.md:67` — "Step 3 — map the
+  files to skills"; `.claude/agents/implementer.md:62` — "Load skills per phase".
+  **Superseded 2026-10-04 in part:** "one implementer run builds the plan and writes its tests"
+  no longer holds — see the next entry. The skills-through-the-plan rule and the tool sets stand.
+
+- **2026-10-04** — `test-writer` owns every test; `implementer` writes none and builds one phase
+  per run. User decision, against the planner's recommendation to leave planned tests with the
+  implementer. The order per phase is implementer → `test-writer`, and the phase is closed (and
+  committed) only when `test-writer`'s `Verify (phase)` run is green, so the tree is red on
+  purpose in between. `test-writer` may change an existing test's expectation only when it can
+  quote a plan or spec item that changes that behaviour; a failure no item explains is left
+  failing and reported as a suspected regression (`repair the existing tests`,
+  `.claude/agents/test-writer.md:89`). `plan-verifier` traces every edited or deleted existing
+  test back to such an item. The implementer runs `typecheck` and `test` once before the first
+  phase and stops on a red baseline (`establish the baseline`, `.claude/agents/implementer.md:31`);
+  a baseline with skipped integration files is `incomplete`, not a stop, because those files skip
+  by design without Docker. Two consequences found in the repo: the client's `typecheck` covers
+  its test files, so an implementer phase can end with `typecheck` red inside `*.test.tsx` — its
+  bar is "clean outside test files"; and testability seams (`server/src/adapters/mocks.ts`,
+  accessible names, seed data) are production code, planned as implementer work. Rejected:
+  test-first for planned features (phases would start red and the plan would have to pin every
+  signature); `test-writer` forbidden to touch existing tests (nobody would own the tests a
+  planned behaviour change breaks).
+  **See also:** `specs/agents-lab-plan.md` — the plan, with sources.
+
+- **2026-10-04** — `architecture-reviewer` (`tools: Read, Grep, Glob`) is advisory and gates
+  nothing; `/pr-self-review` stays the only push gate and `pnpm arch:check` stays the owner of
+  import-graph facts. The agent reuses the rule IDs and the CRITICAL bar from
+  `.claude/skills/pr-self-review/routing.json`, so it cannot introduce a second severity scale.
+  It has no `Bash`, so the main session hands it the file list, a patch file and the `arch:check`
+  result. `plan-verifier` has `Bash` to re-run `Verify` commands, so its read-only behaviour is
+  prompt-level, like `researcher`'s. Both are required for a plan with more than one phase.
+  Rejected: `Bash` for the reviewer (read-only would rest on prose).
+  **Evidence 2026-10-04:** `.claude/agents/architecture-reviewer.md:4`, `.claude/agents/plan-verifier.md:4` — the `tools:` lines.
+
+- **2026-10-05** — review findings go back into the plan as an amendment, not as loose fix instructions: `planner` returns a numbered list of exact replacements for the existing plan text plus one new "review fixes" phase, the main session applies the list with a script (line-prefix asserts, bottom-up inserts) and `implementer` / `test-writer` / `plan-verifier` then work from the revised file. Used for `specs/L03-intent-layer-plan.md` revision 3 (45 replacements, phase 10). Rejected: asking `planner` to re-emit a 650-line plan, and telling `implementer` what to fix without changing the plan — `plan-verifier` would then report every fix as a deviation.
+- **2026-10-05** — when a feature is uncommitted on a branch that already carries unrelated commits, the reviewers get `git diff HEAD` and base ref `HEAD`; the `git merge-base origin/main HEAD` patch of `.claude/agents/README.md` step 5 would have added 18 unrelated files (3192 lines) to the change. And when `test-writer` is skipped for an iteration, every later `implementer` run is told the baseline in full (which tests are known red and why): it has no Test report to start from, and `plan-verifier` returns `FAIL` by construction until the tests exist.
 
 ## Recurring Errors & Fixes
 
@@ -334,3 +405,8 @@ schema.
   `.claude/skills/frontend-ui-architecture/SKILL.md:1`.
 - **2026-09-27** — built the `pr-self-review` skill (manifest routing of changed files to skills, `arch:check`, subagent reviewers, a CRITICAL gate on `gh pr create`). Recorded the dot-segment glob quirk, pnpm `-s`, the hook self-modification denial and the content-hash decision.
 - **2026-09-27** — pr-self-review now gates `git push` as well as `gh pr create`, and the hook is registered in `.claude/settings.json`. The command check is a tokenizer (entry under Decisions). Architecture refactor S1/C1 reviewed over `f108012..HEAD` and pushed. **See also:** `server/INSIGHTS.md`.
+- **2026-10-04** — added skill-level routing to `engineering-insights`: a `**Skill:**` line on root entries, read by `pr-self-review` reviewers through a grep step in their prompt and by a new row in the root `CLAUDE.md` gate. Tagged the existing `next-best-practices` entry. Decision recorded above.
+- **2026-10-04** — added the `planner` and `implementer` agents under `.claude/agents/` after a `researcher` pass over the Claude Code sub-agent and skill docs; recorded how they share skills under Decisions. Neither agent has been run on a real feature yet.
+- **2026-10-04** — added `test-writer`, `architecture-reviewer`, `plan-verifier` and `doc-writer` from `specs/agents-lab-plan.md` (planner → implementer → plan-verifier, the first real run of that chain) and moved test ownership to `test-writer`; decisions recorded above. A subagent type added mid-session is not available to the `Agent` tool until the session reloads it — `plan-verifier` was run by pointing a general-purpose agent at its file. Its verdict was FAIL on one item: the overlap paragraph in `architecture-reviewer.md` is longer than the "two or three sentences" the plan asked for.
+
+- **2026-10-05** — L03 Intent Layer through the full agent chain: phases 1–8, first review, plan revision 3, phase 10, tests for every phase, second review. Module findings are in `server/`, `client/` and `reviewer-core/` `INSIGHTS.md`.

@@ -15,7 +15,7 @@ Drizzle over Postgres with pgvector. One file per domain in
 | `repos.ts` | `repos` | starter — add repository |
 | `pulls.ts` | `pull_requests` `pr_files` `pr_commits` | starter — import PRs |
 | `agents.ts` | `agents` | starter — two built-in reviewers, plus your own |
-| `reviews.ts` | `reviews` `findings` · `pr_intent` `pr_brief` | starter · L03 / L05 |
+| `reviews.ts` | `reviews` `findings` · `pr_intent` · `pr_brief` | starter · L03 (`pr_intent`, and the `findings.scope` tag) · L05 |
 | `runs.ts` | `agent_runs` `run_traces` `multi_agent_runs` | starter · L07 |
 | `repo-intel.ts` | `repo_index_state` | starter — the **Indexed** badge |
 | `skills.ts` | `skills` | L02 |
@@ -24,6 +24,20 @@ Drizzle over Postgres with pgvector. One file per domain in
 | `eval.ts` | `eval_cases` `eval_runs` `conformance_checks` `composed_reviews` | L06 · L07 |
 | `ci.ts` | `ci_installations` `ci_runs` | L06 — export to CI |
 | `ops.ts` | `installed_plugins` `digests` | L08 |
+
+### `pr_intent` and `findings.scope` (L03)
+
+`pr_intent` holds one derived intent per pull request, keyed on `pr_id`, written only by the
+`intent` module. The column `intent` keeps its original name and stores the contract field
+`summary`; the repository maps between them. Beyond the lists (`in_scope`, `out_of_scope`) it
+stores `risk_areas`, `confidence`, `sources`, the two flags `missing_context` and
+`injection_suspected`, the cache key `source_hash`, the classifier's `provider`, `model`,
+`tokens_in`, `tokens_out`, `cost_usd`, and `computed_at`. No source text is stored.
+
+`in_scope`, `out_of_scope`, `risk_areas`, `sources` and `confidence` hold contract shapes that
+the database does not enforce, so the repository parses them on every read; a row that fails the
+parse reads as "not derived" and the next derivation replaces it. `findings.scope` is a nullable
+text column (`in_scope` / `out_of_scope`) that persists the reviewer's tag.
 
 Shared column helpers (timestamps and the like) live in `_shared.ts` — use them instead
 of redeclaring `created_at` by hand.

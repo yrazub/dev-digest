@@ -33,12 +33,24 @@ flowchart TD
   SETTINGS["/settings/:section<br/>API keys · models"]
 
   PULLS -->|"GET /repos/:id/pulls · /repos/:id/index-state"| API
-  PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments<br/>POST /pulls/:id/review · /findings/:id/(accept|dismiss)"| API
+  PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments · /pulls/:id/intent<br/>POST /pulls/:id/review · /pulls/:id/intent · /findings/:id/(accept|dismiss)"| API
   AGENTS -->|"/agents · /agents/:id · /agents/:id/skills"| API
   SKILLS -->|"/skills · /skills/:id/versions · /skills/import/(file|url)"| API
   CONV -->|"/repos/:id/conventions · /extract · /skill-draft · /skill<br/>PATCH /conventions/:id"| API
   SETTINGS -->|"/settings · /providers"| API
 ```
+
+The PR page (`/repos/:repoId/pulls/:number`) also shows the PR's derived intent (L03):
+
+- **`IntentCard`** sits at the top of the **Overview** and **Agent runs** tabs, so it precedes
+  the review results. It shows the summary, the in-scope and out-of-scope lists, risk areas, a
+  confidence badge, the sources it was derived from (an unreadable one is marked *not read*,
+  with a warning when a linked issue or document could not be read), and a re-run button. With
+  no stored intent it shows **Derive intent**. Model-derived text is rendered as plain text
+  nodes only.
+- **`FindingCard`** shows an *Outside PR scope* badge on a finding the reviewer tagged
+  `out_of_scope` (with the filter on, only a serious one survives).
+- **The run trace drawer** adds a badge with the number of out-of-scope findings filtered.
 
 Cross-cutting chrome lives in `src/components/app-shell` (nav, breadcrumbs,
 `g`-then-key shortcuts). Pages are thin; feature logic sits in colocated
