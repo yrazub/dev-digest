@@ -311,6 +311,9 @@ be obvious to anyone reading the code, it does not belong here.
   Rejected: `Bash` for the reviewer (read-only would rest on prose).
   **Evidence 2026-10-04:** `.claude/agents/architecture-reviewer.md:4`, `.claude/agents/plan-verifier.md:4` — the `tools:` lines.
 
+- **2026-10-05** — review findings go back into the plan as an amendment, not as loose fix instructions: `planner` returns a numbered list of exact replacements for the existing plan text plus one new "review fixes" phase, the main session applies the list with a script (line-prefix asserts, bottom-up inserts) and `implementer` / `test-writer` / `plan-verifier` then work from the revised file. Used for `specs/L03-intent-layer-plan.md` revision 3 (45 replacements, phase 10). Rejected: asking `planner` to re-emit a 650-line plan, and telling `implementer` what to fix without changing the plan — `plan-verifier` would then report every fix as a deviation.
+- **2026-10-05** — when a feature is uncommitted on a branch that already carries unrelated commits, the reviewers get `git diff HEAD` and base ref `HEAD`; the `git merge-base origin/main HEAD` patch of `.claude/agents/README.md` step 5 would have added 18 unrelated files (3192 lines) to the change. And when `test-writer` is skipped for an iteration, every later `implementer` run is told the baseline in full (which tests are known red and why): it has no Test report to start from, and `plan-verifier` returns `FAIL` by construction until the tests exist.
+
 ## Recurring Errors & Fixes
 
 ### CI passes on an already-migrated database and fails on a fresh one
@@ -405,3 +408,5 @@ schema.
 - **2026-10-04** — added skill-level routing to `engineering-insights`: a `**Skill:**` line on root entries, read by `pr-self-review` reviewers through a grep step in their prompt and by a new row in the root `CLAUDE.md` gate. Tagged the existing `next-best-practices` entry. Decision recorded above.
 - **2026-10-04** — added the `planner` and `implementer` agents under `.claude/agents/` after a `researcher` pass over the Claude Code sub-agent and skill docs; recorded how they share skills under Decisions. Neither agent has been run on a real feature yet.
 - **2026-10-04** — added `test-writer`, `architecture-reviewer`, `plan-verifier` and `doc-writer` from `specs/agents-lab-plan.md` (planner → implementer → plan-verifier, the first real run of that chain) and moved test ownership to `test-writer`; decisions recorded above. A subagent type added mid-session is not available to the `Agent` tool until the session reloads it — `plan-verifier` was run by pointing a general-purpose agent at its file. Its verdict was FAIL on one item: the overlap paragraph in `architecture-reviewer.md` is longer than the "two or three sentences" the plan asked for.
+
+- **2026-10-05** — L03 Intent Layer through the full agent chain: phases 1–8, first review, plan revision 3, phase 10, tests for every phase, second review. Module findings are in `server/`, `client/` and `reviewer-core/` `INSIGHTS.md`.
