@@ -26,6 +26,12 @@ const EnvSchema = z.object({
   // Note: even when on, sections only populate once the repo is indexed; an
   // unindexed repo degrades gracefully. Per-agent override: agents.repo_intel.
   REPO_INTEL_ENABLED: z.string().optional(),
+  // OpenRouter upstream providers to skip, comma-separated provider slugs (the
+  // `tag` prefix in /models/<id>/endpoints, e.g. "open-inference"; the logs page's
+  // display name "Open Inference" is NOT matched). Default "open-inference": on
+  // 2026-10-02 it twice generated 17k–39k tokens for one DeepSeek review
+  // (normally ~3k) without finishing. Set it empty to allow all.
+  OPENROUTER_IGNORED_PROVIDERS: z.string().optional(),
   API_PORT: z.coerce.number().int().default(3001),
   WEB_PORT: z.coerce.number().int().default(3000),
   DEVDIGEST_CLONE_DIR: z.string().optional(),
@@ -59,6 +65,8 @@ export type AppConfig = {
    * EXACTLY like the ripgrep-only baseline.
    */
   repoIntelEnabled: boolean;
+  /** OpenRouter upstream providers never routed to (`provider.ignore`). */
+  openrouterIgnoredProviders: string[];
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -77,5 +85,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     webOrigin: `http://localhost:${parsed.WEB_PORT}`,
     embeddingsEnabled: parsed.EMBEDDINGS_ENABLED === 'true',
     repoIntelEnabled: parsed.REPO_INTEL_ENABLED !== 'false',
+    openrouterIgnoredProviders: (parsed.OPENROUTER_IGNORED_PROVIDERS ?? 'open-inference')
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean),
   };
 }

@@ -1,153 +1,181 @@
-/**
- * OpenRouterProvider.completeStructured — the attempt loop. Hermetic: the SDK client's
- * `create` is replaced, so no key and no network are involved.
- */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { OpenRouterProvider } from '../src/llm/openrouter.js';
 import { OutputTruncatedError } from '../src/llm/structured.js';
 
-const Answer = z.object({ summary: z.string() });
+type Body = { max_tokens?: number; provider?: { sort?: string; ignore?: string[] }; reasoning?: unknown; messages?: unknown[] };
+type Options = { signal?: AbortSignal };
 
-interface Reply {
-  content: string;
-  finish_reason: 'stop' | 'length';
-  completion_tokens?: number;
-}
-
-function providerReturning(replies: Reply[]) {
-  const provider = new OpenRouterProvider('test-key');
-  const create = vi.fn(async (_body: { messages: unknown[]; reasoning?: unknown }, _options?: { signal?: AbortSignal }) => {
-    const reply = replies[Math.min(create.mock.calls.length - 1, replies.length - 1)]!;
-    return {
-      choices: [{ message: { content: reply.content }, finish_reason: reply.finish_reason }],
-      usage: { prompt_tokens: 100, completion_tokens: reply.completion_tokens ?? 50, cost: 0.001 },
-    };
-  });
-  (provider as unknown as { client: { chat: { completions: { create: typeof create } } } }).client = {
-    chat: { completions: { create } },
+/**
+ * A fake `chat.completions.create`. `reply` decides what one call returns;
+ * `hang` makes a call behave like a response body that never completes —
+ * it settles only when its abort signal fires, as a real fetch would.
+ */
+function provider(opts: { hang?: boolean; reply?: () => unknown; timeoutMs?: number; ignore?: string[] } = {}) {
+  const calls: { body: Body; options: Options }[] = [];
+  const create = (body: Body, options: Options) => {
+    calls.push({ body, options });
+    if (opts.hang) {
+      return new Promise((_, reject) => {
+        options.signal?.addEventListener('abort', () => reject(new Error('Request was aborted.')));
+      });
+    }
+    return Promise.resolve(opts.reply?.());
   };
-  return { provider, create };
+  const p = new OpenRouterProvider('test-key', { timeoutMs: opts.timeoutMs ?? 90_000, ignoreProviders: opts.ignore });
+  (p as unknown as { client: unknown }).client = { chat: { completions: { create } } };
+  return { p, calls };
 }
 
-const request = (maxTokens?: number) => ({
-  model: 'some/model',
-  schema: Answer,
-  schemaName: 'Answer',
-  messages: [{ role: 'user' as const, content: 'go' }],
-  maxRetries: 2,
-  ...(maxTokens ? { maxTokens } : {}),
+const request = {
+  model: 'deepseek/deepseek-v4-flash',
+  schema: z.object({ ok: z.boolean() }),
+  schemaName: 'Review',
+  messages: [{ role: 'user' as const, content: 'review' }],
+};
+
+describe('OpenRouterProvider deadlines and output cap', () => {
+  it('sends max_tokens and ends a call whose body never completes at timeoutMs', async () => {
+    const { p, calls } = provider({ hang: true });
+    await expect(p.completeStructured({ ...request, maxTokens: 8000, timeoutMs: 50 })).rejects.toThrow(
+      'did not finish within 0s',
+    );
+    expect(calls[0]!.body.max_tokens).toBe(8000);
+    expect(calls[0]!.options.signal?.aborted).toBe(true);
+  });
+
+  it("rejects with the caller's reason when its signal aborts (cancel / run deadline)", async () => {
+    const { p } = provider({ hang: true });
+    const cancel = new AbortController();
+    const pending = p.completeStructured({ ...request, timeoutMs: 60_000, signal: cancel.signal });
+    cancel.abort(new Error('Run cancelled'));
+    await expect(pending).rejects.toThrow('Run cancelled');
+  });
+
+  it('does not re-prompt a capped reply that is not valid JSON', async () => {
+    const { p, calls } = provider({
+      reply: () => ({
+        provider: 'Open Inference',
+        choices: [{ finish_reason: 'length', message: { content: '{"ok": tr' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 8000 },
+      }),
+    });
+    await expect(p.completeStructured({ ...request, maxTokens: 8000 })).rejects.toThrow(
+      'hit the 8000 token limit without valid JSON (provider: Open Inference)',
+    );
+    expect(calls).toHaveLength(1);
+  });
+
+  it('still returns a valid reply normally', async () => {
+    const { p } = provider({
+      reply: () => ({
+        choices: [{ finish_reason: 'stop', message: { content: '{"ok": true}' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 3 },
+      }),
+    });
+    const res = await p.completeStructured({ ...request, maxTokens: 8000 });
+    expect(res.data).toEqual({ ok: true });
+  });
+
+  it('asks OpenRouter for the fastest provider, skipping the ignored ones', async () => {
+    const ok = () => ({ choices: [{ finish_reason: 'stop', message: { content: '{"ok": true}' } }] });
+    const skipping = provider({ reply: ok, ignore: ['open-inference'] });
+    await skipping.p.completeStructured(request);
+    expect(skipping.calls[0]!.body.provider).toEqual({ sort: 'throughput', ignore: ['open-inference'] });
+
+    const all = provider({ reply: ok });
+    await all.p.completeStructured(request);
+    expect(all.calls[0]!.body.provider).toEqual({ sort: 'throughput' });
+  });
 });
 
-describe('OpenRouterProvider.completeStructured', () => {
-  it('returns a valid answer after one call', async () => {
-    const { provider, create } = providerReturning([{ content: '{"summary":"ok"}', finish_reason: 'stop' }]);
-    const res = await provider.completeStructured(request());
-    expect(res.data).toEqual({ summary: 'ok' });
-    expect(res.attempts).toBe(1);
-    expect(create).toHaveBeenCalledTimes(1);
+describe('OpenRouterProvider — the cut-off error, the repair loop and the reasoning switch', () => {
+  const valid = () => ({
+    choices: [{ finish_reason: 'stop', message: { content: '{"ok": true}' } }],
+    usage: { prompt_tokens: 100, completion_tokens: 50 },
   });
 
-  it('does not retry an answer that was cut off at the output limit', async () => {
-    const { provider, create } = providerReturning([
-      { content: '{"summary":"this stops mid-str', finish_reason: 'length', completion_tokens: 800 },
-      { content: '{"summary":"ok"}', finish_reason: 'stop' },
-    ]);
-    const failure = await provider.completeStructured(request(800)).catch((e: unknown) => e);
+  it('throws a typed error for a capped reply that does not parse, so a caller need not read the message', async () => {
+    const { p, calls } = provider({
+      reply: () => ({
+        choices: [{ finish_reason: 'length', message: { content: '{"ok": tr' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 800 },
+      }),
+    });
+    const failure = await p.completeStructured({ ...request, maxTokens: 800 }).catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(OutputTruncatedError);
-    expect((failure as OutputTruncatedError).message).toBe(
-      'Output for Answer was cut off at the output limit (max_tokens 800) before it was complete; not retried',
-    );
-    expect(create).toHaveBeenCalledTimes(1);
+    expect(failure).toMatchObject({ schemaName: 'Review', maxTokens: 800 });
+    expect(calls).toHaveLength(1);
   });
 
-  it('names no limit in the error when the request set none', async () => {
-    const { provider } = providerReturning([{ content: '{"summary":', finish_reason: 'length' }]);
-    const failure = await provider.completeStructured(request()).catch((e: unknown) => e);
-    expect(failure).toBeInstanceOf(OutputTruncatedError);
-    expect((failure as OutputTruncatedError).maxTokens).toBeNull();
-    expect((failure as OutputTruncatedError).message).not.toContain('max_tokens');
+  it('keeps a reply that reached the limit but is complete and valid', async () => {
+    const { p, calls } = provider({
+      reply: () => ({
+        choices: [{ finish_reason: 'length', message: { content: '{"ok": true}' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 800 },
+      }),
+    });
+    const res = await p.completeStructured({ ...request, maxTokens: 800 });
+    expect(res.data).toEqual({ ok: true });
+    expect(calls).toHaveLength(1);
   });
 
-  it('keeps an answer that reached the limit but is complete and valid', async () => {
-    const { provider, create } = providerReturning([{ content: '{"summary":"ok"}', finish_reason: 'length' }]);
-    const res = await provider.completeStructured(request(800));
-    expect(res.data).toEqual({ summary: 'ok' });
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-
-  it('still repairs an answer that finished but does not match the schema', async () => {
-    const { provider, create } = providerReturning([
-      { content: '{"summary":42}', finish_reason: 'stop' },
-      { content: '{"summary":"ok"}', finish_reason: 'stop' },
-    ]);
-    const res = await provider.completeStructured(request());
-    expect(res.data).toEqual({ summary: 'ok' });
+  it('still repairs a reply that finished but does not match the schema, summing the tokens', async () => {
+    let n = 0;
+    const { p, calls } = provider({
+      reply: () =>
+        n++ === 0
+          ? { choices: [{ finish_reason: 'stop', message: { content: '{"ok": 42}' } }], usage: { prompt_tokens: 100, completion_tokens: 50 } }
+          : valid(),
+    });
+    const res = await p.completeStructured({ ...request, maxRetries: 2 });
+    expect(res.data).toEqual({ ok: true });
     expect(res.attempts).toBe(2);
     expect(res.tokensOut).toBe(100);
-    expect(create).toHaveBeenCalledTimes(2);
-    // The repair call carries the rejected answer and the reprompt.
-    expect(create.mock.calls[1]![0].messages).toHaveLength(3);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('gives up with the schema error after the last repair attempt', async () => {
+    const { p, calls } = provider({
+      reply: () => ({ choices: [{ finish_reason: 'stop', message: { content: '{"ok": 42}' } }], usage: {} }),
+    });
+    await expect(p.completeStructured({ ...request, maxRetries: 2 })).rejects.toThrow(
+      /failed schema validation for Review/,
+    );
+    expect(calls).toHaveLength(3);
   });
 
   it('sends the reasoning switch only when the request turns reasoning off', async () => {
-    const off = providerReturning([{ content: '{"summary":"ok"}', finish_reason: 'stop' }]);
-    await off.provider.completeStructured({ ...request(), reasoning: false });
-    expect(off.create.mock.calls[0]![0].reasoning).toEqual({ enabled: false });
+    const off = provider({ reply: valid });
+    await off.p.completeStructured({ ...request, reasoning: false });
+    expect(off.calls[0]!.body.reasoning).toEqual({ enabled: false });
 
     for (const reasoning of [undefined, true]) {
-      const kept = providerReturning([{ content: '{"summary":"ok"}', finish_reason: 'stop' }]);
-      await kept.provider.completeStructured({ ...request(), ...(reasoning === undefined ? {} : { reasoning }) });
-      expect('reasoning' in kept.create.mock.calls[0]![0]).toBe(false);
+      const kept = provider({ reply: valid });
+      await kept.p.completeStructured({ ...request, ...(reasoning === undefined ? {} : { reasoning }) });
+      expect('reasoning' in kept.calls[0]!.body).toBe(false);
     }
   });
 
   it('does not send the reasoning switch to another OpenAI-compatible endpoint', async () => {
-    const provider = new OpenRouterProvider('test-key', { id: 'openai', baseURL: 'https://example.test/v1' });
-    const create = vi.fn(async (_body: Record<string, unknown>) => ({
-      choices: [{ message: { content: '{"summary":"ok"}' }, finish_reason: 'stop' }],
-      usage: { prompt_tokens: 1, completion_tokens: 1 },
-    }));
-    (provider as unknown as { client: unknown }).client = { chat: { completions: { create } } };
-    await provider.completeStructured({ ...request(), reasoning: false });
-    expect('reasoning' in create.mock.calls[0]![0]).toBe(false);
+    const other = new OpenRouterProvider('test-key', { id: 'openai', baseURL: 'https://example.test/v1' });
+    const bodies: Body[] = [];
+    (other as unknown as { client: unknown }).client = {
+      chat: { completions: { create: (body: Body) => (bodies.push(body), Promise.resolve(valid())) } },
+    };
+    await other.completeStructured({ ...request, reasoning: false });
+    expect('reasoning' in bodies[0]!).toBe(false);
   });
 
-  it('hands the abort signal to the HTTP call, and passes no options without one', async () => {
-    const controller = new AbortController();
-    const withSignal = providerReturning([{ content: '{"summary":"ok"}', finish_reason: 'stop' }]);
-    await withSignal.provider.completeStructured({ ...request(), signal: controller.signal });
-    expect(withSignal.create.mock.calls[0]![1]).toEqual({ signal: controller.signal });
-
-    const without = providerReturning([{ content: '{"summary":"ok"}', finish_reason: 'stop' }]);
-    await without.provider.completeStructured(request());
-    expect(without.create.mock.calls[0]![1]).toBeUndefined();
-  });
-
-  it('starts no call once the signal is aborted, and no repair attempt after an abort', async () => {
-    const aborted = new AbortController();
-    aborted.abort();
-    const never = providerReturning([{ content: '{"summary":"ok"}', finish_reason: 'stop' }]);
-    await expect(never.provider.completeStructured({ ...request(), signal: aborted.signal })).rejects.toThrow();
-    expect(never.create).not.toHaveBeenCalled();
-
-    // The first answer needs a repair; the caller gives up while it is being produced.
-    const controller = new AbortController();
-    const { provider, create } = providerReturning([{ content: '{"summary":42}', finish_reason: 'stop' }]);
-    create.mockImplementationOnce(async () => {
-      controller.abort();
-      return {
-        choices: [{ message: { content: '{"summary":42}' }, finish_reason: 'stop' as const }],
-        usage: { prompt_tokens: 100, completion_tokens: 50, cost: 0.001 },
-      };
+  it('starts no repair attempt once the caller has aborted', async () => {
+    const cancel = new AbortController();
+    const { p, calls } = provider({
+      reply: () => {
+        cancel.abort(new Error('Caller gave up'));
+        return { choices: [{ finish_reason: 'stop', message: { content: '{"ok": 42}' } }], usage: {} };
+      },
     });
-    await expect(provider.completeStructured({ ...request(), signal: controller.signal })).rejects.toThrow();
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-
-  it('gives up with the schema error after the last repair attempt', async () => {
-    const { provider, create } = providerReturning([{ content: '{"summary":42}', finish_reason: 'stop' }]);
-    await expect(provider.completeStructured(request())).rejects.toThrow(/failed schema validation for Answer/);
-    expect(create).toHaveBeenCalledTimes(3);
+    await expect(p.completeStructured({ ...request, maxRetries: 2, signal: cancel.signal })).rejects.toThrow();
+    expect(calls).toHaveLength(1);
   });
 });

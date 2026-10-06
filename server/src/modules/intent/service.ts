@@ -150,6 +150,8 @@ function logRef(ref: string | null): string {
 
 function failureReason(err: unknown): IntentFailureReason {
   if (err instanceof TimeoutError) return 'timeout';
+  // The OpenRouter provider ends an over-long call itself (`withDeadline`) with a plain Error.
+  if (err instanceof Error && /did not finish within \d+s/.test(err.message)) return 'timeout';
   // The answer did not fit `CLASSIFIER_MAX_TOKENS`; the provider does not retry that.
   if (err instanceof OutputTruncatedError) return 'output_truncated';
   const message = err instanceof Error ? err.message : '';

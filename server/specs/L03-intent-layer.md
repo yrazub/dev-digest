@@ -349,7 +349,7 @@ and reasons only. A source `ref` is a reference the author wrote, capped at 120 
 out-of-scope items and three risk areas, `confidence: 'medium'`, sources `title`,
 `description`, `changed_files` (all `used`), `missing_context: false`, `model: 'seed'` and
 `source_hash` null (so a review run recomputes it and the card never reads it as stale). The
-strings are the fixtures flow `09-pr-intent` asserts on (`e2e/specs/seed-fixtures.md`).
+strings are the fixtures flow `10-pr-intent` asserts on (`e2e/specs/seed-fixtures.md`).
 Two `seed()` calls leave one row.
 
 ## Tests (written by `test-writer`)

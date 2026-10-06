@@ -43,6 +43,8 @@ export {
   reviewPullRequest,
   DEFAULT_MAP_THRESHOLD_LINES,
   DEFAULT_REVIEW_MAX_RETRIES,
+  DEFAULT_REVIEW_MAX_TOKENS,
+  DEFAULT_REVIEW_CALL_TIMEOUT_MS,
   type ReviewInput,
   type ReviewOutcome,
   type ReviewEvent,

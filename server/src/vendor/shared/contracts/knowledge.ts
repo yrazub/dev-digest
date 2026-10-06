@@ -210,15 +210,100 @@ export const CommunitySkill = z.object({
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
 // ---- Conventions ----
+export const ConventionCategory = z.enum([
+  'naming',
+  'structure',
+  'imports',
+  'error-handling',
+  'typing',
+  'testing',
+  'formatting',
+  'api',
+  'other',
+]);
+export type ConventionCategory = z.infer<typeof ConventionCategory>;
+
+export const ConventionStatus = z.enum(['pending', 'accepted', 'rejected']);
+export type ConventionStatus = z.infer<typeof ConventionStatus>;
+
+/** Rule text cap, shared by the extractor's output and the inline edit. */
+export const CONVENTION_RULE_MAX = 500;
+
+/** One extracted rule, backed by a verified line range in the indexed clone. */
 export const ConventionCandidate = z.object({
   id: z.string(),
+  category: ConventionCategory,
   rule: z.string(),
   evidence_path: z.string(),
+  evidence_line_start: z.number().int().min(1),
+  evidence_line_end: z.number().int().min(1),
   evidence_snippet: z.string(),
+  /** GitHub blob URL pinned to the indexed commit; null when the repo has no index sha. */
+  evidence_url: z.string().url().nullable(),
   confidence: z.number().min(0).max(1),
-  accepted: z.boolean(),
+  status: ConventionStatus,
 });
 export type ConventionCandidate = z.infer<typeof ConventionCandidate>;
+
+/** The header line: "Detected from N sample files · last scan 1h ago". */
+export const ConventionScanInfo = z.object({
+  last_scan_at: z.string().nullable(),
+  sampled_files: z.number().int().nullable(),
+});
+export type ConventionScanInfo = z.infer<typeof ConventionScanInfo>;
+
+export const ConventionList = z.object({
+  scan: ConventionScanInfo,
+  candidates: z.array(ConventionCandidate),
+});
+export type ConventionList = z.infer<typeof ConventionList>;
+
+export const ConventionExtractResult = z.object({
+  candidates: z.array(ConventionCandidate),
+  stats: z.object({
+    sampled_files: z.number().int(),
+    proposed: z.number().int(),
+    verified: z.number().int(),
+    dropped: z.number().int(),
+    model: z.string(),
+    scanned_at: z.string(),
+  }),
+});
+export type ConventionExtractResult = z.infer<typeof ConventionExtractResult>;
+
+/** Accept / reject / inline edit of one candidate. */
+export const ConventionUpdate = z
+  .object({
+    status: ConventionStatus.optional(),
+    rule: z.string().trim().min(1).max(CONVENTION_RULE_MAX).optional(),
+    category: ConventionCategory.optional(),
+  })
+  .refine((u) => Object.keys(u).length > 0, { message: 'Nothing to update' });
+export type ConventionUpdate = z.infer<typeof ConventionUpdate>;
+
+export const ConventionSkillDraftRequest = z.object({
+  candidate_ids: z.array(z.string().uuid()).min(1).max(200),
+});
+export type ConventionSkillDraftRequest = z.infer<typeof ConventionSkillDraftRequest>;
+
+/** The merged skill the Create skill modal opens with; nothing is stored yet. */
+export const ConventionSkillDraft = z.object({
+  name: SkillName,
+  description: z.string().min(1).max(500),
+  type: SkillType,
+  body: z.string().min(1).max(SKILL_BODY_MAX),
+});
+export type ConventionSkillDraft = z.infer<typeof ConventionSkillDraft>;
+
+export const ConventionSkillCreate = z.object({
+  candidate_ids: z.array(z.string().uuid()).min(1).max(200),
+  name: SkillName,
+  description: z.string().min(1).max(500),
+  type: SkillType,
+  body: z.string().min(1).max(SKILL_BODY_MAX),
+  enabled: z.boolean(),
+});
+export type ConventionSkillCreate = z.infer<typeof ConventionSkillCreate>;
 
 // ---- Agents ----
 // 'openrouter' routes through the OpenAI-compatible API (OpenAIProvider with a

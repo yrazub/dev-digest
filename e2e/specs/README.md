@@ -14,7 +14,7 @@ are the executable acceptance criteria, so there is no separate prose spec here.
 | `06-onboarding.flow.json` | add a repository |
 | `07-settings.flow.json` | settings sections |
 | `08-skills.flow.json` | create a skill, link it to an agent, the link persists |
-| `09-pr-intent.flow.json` | the seeded Intent card on the Overview and Agent runs tabs, with no model call |
+| `10-pr-intent.flow.json` | the seeded Intent card on the Overview and Agent runs tabs, with no model call |
 
 Read [`../README.md`](../README.md) before adding one — locator rules and the
 seeded-data precondition are not optional.

@@ -110,4 +110,4 @@ Colocated, real message JSON through `NextIntlClientProvider`, hook module mocke
   filtered"; null, 0 and absent show nothing; a `classify_intent` first entry is listed before
   `review_file`.
 
-Browser-level acceptance: [`../../e2e/specs`](../../e2e/specs) (flow `09-pr-intent`, phase 9).
+Browser-level acceptance: [`../../e2e/specs`](../../e2e/specs) (flow `10-pr-intent`, phase 9).

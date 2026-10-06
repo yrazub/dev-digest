@@ -27,6 +27,9 @@ import {
   SkillImportDraft,
   AgentSkill,
   Agent,
+  ConventionCandidate,
+  ConventionUpdate,
+  ConventionSkillCreate,
 } from '@devdigest/shared';
 
 /**
@@ -386,6 +389,51 @@ describe('L02 skills contracts', () => {
       version: 1,
     });
     expect(agent.skill_count).toBe(0);
+  });
+});
+
+describe('L02 conventions contracts', () => {
+  const candidate = {
+    id: 'c1',
+    category: 'error-handling',
+    rule: 'Use async/await instead of .then() chains.',
+    evidence_path: 'src/api/users.ts',
+    evidence_line_start: 23,
+    evidence_line_end: 31,
+    evidence_snippet: 'const user = await db.users.find(id);',
+    evidence_url: 'https://github.com/acme/api/blob/abc123/src/api/users.ts#L23-L31',
+    confidence: 0.91,
+    status: 'pending',
+  };
+
+  it('ConventionCandidate parses a verified candidate', () => {
+    expect(ConventionCandidate.parse(candidate).status).toBe('pending');
+  });
+
+  it('ConventionCandidate rejects an unknown category and the old accepted flag shape', () => {
+    expect(ConventionCandidate.safeParse({ ...candidate, category: 'style' }).success).toBe(false);
+    const { status: _status, ...old } = candidate;
+    expect(ConventionCandidate.safeParse({ ...old, accepted: true }).success).toBe(false);
+  });
+
+  it('ConventionUpdate needs at least one field and a non-blank rule', () => {
+    expect(ConventionUpdate.safeParse({}).success).toBe(false);
+    expect(ConventionUpdate.safeParse({ rule: '   ' }).success).toBe(false);
+    expect(ConventionUpdate.parse({ status: 'rejected' }).status).toBe('rejected');
+  });
+
+  it('ConventionSkillCreate requires candidate ids and a kebab-case name', () => {
+    const body = {
+      candidate_ids: ['6f1c2a52-6f43-4b8a-9d1e-0c8c7b7f6a11'],
+      name: 'repo-conventions',
+      description: '3 house conventions extracted from api',
+      type: 'convention',
+      body: '# repo-conventions',
+      enabled: true,
+    };
+    expect(ConventionSkillCreate.parse(body).name).toBe('repo-conventions');
+    expect(ConventionSkillCreate.safeParse({ ...body, candidate_ids: [] }).success).toBe(false);
+    expect(ConventionSkillCreate.safeParse({ ...body, name: 'Repo Conventions' }).success).toBe(false);
   });
 });
 

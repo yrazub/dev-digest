@@ -34,6 +34,12 @@ export interface OpenRouterProviderOptions {
   maxRetries?: number;
   /** Injected cost estimator; returns USD or null when the model is unknown. */
   estimateCost?: (model: string, tokensIn: number, tokensOut: number) => number | null;
+  /**
+   * Upstream providers OpenRouter must not route to (its `provider.ignore`
+   * preference, by provider slug, e.g. "open-inference"; a display name with a
+   * space is silently not matched). Only sent to OpenRouter.
+   */
+  ignoreProviders?: string[];
 }
 
 export class OpenRouterProvider implements LLMProvider {
@@ -42,18 +48,47 @@ export class OpenRouterProvider implements LLMProvider {
   private baseURL: string;
   private apiKey: string;
   private estimateCost?: OpenRouterProviderOptions['estimateCost'];
+  private timeoutMs: number;
+  private ignoreProviders: string[];
 
   constructor(apiKey: string, opts: OpenRouterProviderOptions = {}) {
     this.id = opts.id ?? 'openrouter';
     this.apiKey = apiKey;
     this.baseURL = opts.baseURL ?? 'https://openrouter.ai/api/v1';
     this.estimateCost = opts.estimateCost;
+    this.timeoutMs = opts.timeoutMs ?? 90_000;
+    this.ignoreProviders = opts.ignoreProviders ?? [];
     this.client = new OpenAI({
       apiKey,
       baseURL: this.baseURL,
       timeout: opts.timeoutMs ?? 90_000,
       maxRetries: opts.maxRetries ?? 2,
     });
+  }
+
+  /**
+   * Runs one request under a signal that fires on `req.timeoutMs` or on the
+   * caller's `req.signal`, whichever comes first. Unlike the SDK's own timeout,
+   * which stops once response headers arrive, this also ends a response body
+   * that keeps streaming (OpenRouter holds the connection open while a model
+   * generates). Rejects with the signal's reason.
+   */
+  private async withDeadline<R>(req: StructuredRequest<unknown>, call: (signal: AbortSignal) => Promise<R>): Promise<R> {
+    const ms = req.timeoutMs ?? this.timeoutMs;
+    const timer = new AbortController();
+    const handle = setTimeout(
+      () => timer.abort(new Error(`OpenRouter call for ${req.schemaName} did not finish within ${Math.round(ms / 1000)}s`)),
+      ms,
+    );
+    const signal = req.signal ? AbortSignal.any([timer.signal, req.signal]) : timer.signal;
+    try {
+      return await call(signal);
+    } catch (err) {
+      if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason));
+      throw err;
+    } finally {
+      clearTimeout(handle);
+    }
   }
 
   async completeStructured<T>(req: StructuredRequest<T>): Promise<StructuredResult<T>> {
@@ -66,31 +101,37 @@ export class OpenRouterProvider implements LLMProvider {
     let lastRaw = '';
 
     for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
-      // A caller that gave up (its own timeout) must not pay for another attempt.
+      // A caller that has already given up must not pay for another attempt.
       req.signal?.throwIfAborted();
-      const res = await this.client.chat.completions.create(
-        {
-          model: req.model,
-          messages,
-          temperature: req.temperature ?? 0,
-          ...(req.maxTokens ? { max_tokens: req.maxTokens } : {}),
-          response_format: {
-            type: 'json_schema',
-            json_schema: { name: req.schemaName, schema: jsonSchema.schema, strict: true },
-          },
-          // OpenRouter session grouping — extra body field (spread is exempt from
-          // excess-property checks). Only sent when talking to OpenRouter.
-          ...(this.id === 'openrouter' && req.sessionId ? { session_id: req.sessionId } : {}),
-          // OpenRouter usage accounting — ask it to return the REAL generation
-          // cost (USD) in `usage.cost`, instead of estimating from a price book.
-          ...(this.id === 'openrouter' ? { usage: { include: true } } : {}),
-          // OpenRouter reasoning switch: only an explicit `false` is sent, so every other
-          // caller keeps the model's default behaviour.
-          ...(this.id === 'openrouter' && req.reasoning === false ? { reasoning: { enabled: false } } : {}),
+      const res = await this.withDeadline(req, (signal) => this.client.chat.completions.create({
+        model: req.model,
+        messages,
+        temperature: req.temperature ?? 0,
+        ...(req.maxTokens ? { max_tokens: req.maxTokens } : {}),
+        response_format: {
+          type: 'json_schema',
+          json_schema: { name: req.schemaName, schema: jsonSchema.schema, strict: true },
         },
-        // Aborting the signal drops the HTTP request itself, not only the wait for it.
-        req.signal ? { signal: req.signal } : undefined,
-      );
+        // OpenRouter session grouping — extra body field (spread is exempt from
+        // excess-property checks). Only sent when talking to OpenRouter.
+        ...(this.id === 'openrouter' && req.sessionId ? { session_id: req.sessionId } : {}),
+        // OpenRouter usage accounting — ask it to return the REAL generation
+        // cost (USD) in `usage.cost`, instead of estimating from a price book.
+        ...(this.id === 'openrouter' ? { usage: { include: true } } : {}),
+        // OpenRouter reasoning switch: only an explicit `false` is sent, so every other
+        // caller keeps the model's default behaviour.
+        ...(this.id === 'openrouter' && req.reasoning === false ? { reasoning: { enabled: false } } : {}),
+        // Provider routing: fastest upstream first (the same model ran at 27 vs
+        // 100 tok/s on different providers), skipping ones known to misbehave.
+        ...(this.id === 'openrouter'
+          ? {
+              provider: {
+                sort: 'throughput',
+                ...(this.ignoreProviders.length > 0 ? { ignore: this.ignoreProviders } : {}),
+              },
+            }
+          : {}),
+      }, { signal }));
 
       // OpenRouter can return HTTP 200 with no `choices` (an upstream provider
       // error / moderation / free-tier limit in the body) — surface it.
@@ -107,6 +148,16 @@ export class OpenRouterProvider implements LLMProvider {
       if (typeof apiCost === 'number') costFromApi = (costFromApi ?? 0) + apiCost;
 
       const parsed = parseWithRepair(req.schema, lastRaw);
+      // A capped reply that is not valid JSON is a runaway generation; asking
+      // again would only repeat it at the same cost.
+      if (!parsed.ok && choice.finish_reason === 'length') {
+        // Typed, so a caller can tell this from a schema failure without reading the message.
+        throw new OutputTruncatedError(
+          req.schemaName,
+          req.maxTokens ?? null,
+          `OpenRouter output for ${req.schemaName} hit the ${req.maxTokens ?? 'provider'} token limit without valid JSON (provider: ${(res as { provider?: string }).provider ?? 'unknown'})`,
+        );
+      }
       if (parsed.ok) {
         return {
           data: parsed.data,
@@ -117,12 +168,6 @@ export class OpenRouterProvider implements LLMProvider {
           raw: lastRaw,
           attempts: attempt,
         };
-      }
-      // Cut off at the output limit (`finish_reason: length`): a retry runs into the same
-      // limit, with the truncated text added to its input. Fail now, with the real cause.
-      // A cut-off answer that still parses was returned above.
-      if (choice.finish_reason === 'length') {
-        throw new OutputTruncatedError(req.schemaName, req.maxTokens ?? null);
       }
       messages.push({ role: 'assistant', content: lastRaw });
       messages.push({ role: 'user', content: parsed.repromptMessage });

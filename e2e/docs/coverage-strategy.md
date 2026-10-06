@@ -20,7 +20,7 @@ API:
 | `05-pr-diff` | The diff viewer renders a real file from a real diff. |
 | `06-onboarding` | The add-repository form renders (form only — no submit, see below). |
 | `07-settings` | Settings sections render their titles. |
-| `09-pr-intent` | The Intent card reads `GET /pulls/:id/intent` and renders the seeded intent (an in-scope item, a risk area, the confidence label) on both the Overview and Agent runs tabs — client, API and the `pr_intent` row agreeing on the contract. The flow never presses **Derive intent** or **Re-run**, so the classifier is not called; the strings it waits for are in [`../specs/seed-fixtures.md`](../specs/seed-fixtures.md). |
+| `10-pr-intent` | The Intent card reads `GET /pulls/:id/intent` and renders the seeded intent (an in-scope item, a risk area, the confidence label) on both the Overview and Agent runs tabs — client, API and the `pr_intent` row agreeing on the contract. The flow never presses **Derive intent** or **Re-run**, so the classifier is not called; the strings it waits for are in [`../specs/seed-fixtures.md`](../specs/seed-fixtures.md). |
 
 The common thread: these are **integration seams** — places where a page's
 correctness depends on client, API, and DB agreeing on a shape — which is
@@ -33,7 +33,7 @@ mocks one side of that seam away.
   data (the demo repo, PR #482, the three built-in agents). Nothing here
   triggers a real review run, so the suite needs no API key and produces no
   cost, and a flaky model response can never make a flow flaky. That is why
-  `09-pr-intent` only reads the seeded intent: deriving one, and the scope filter
+  `10-pr-intent` only reads the seeded intent: deriving one, and the scope filter
   that uses it, call a model and are covered by the server and `reviewer-core`
   suites with a stubbed provider.
 - **No AI-driven locators.** `run.ts`'s docstring is explicit about this:

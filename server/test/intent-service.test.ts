@@ -640,7 +640,7 @@ describe('IntentService — failures', () => {
   it('an answer cut off at the output limit is unavailable / output_truncated, and nothing is stored', async () => {
     const llm = new MockLLMProvider('openrouter', { structuredBySchema: { IntentClassification: CLASSIFICATION } });
     llm.completeStructured = (async () => {
-      throw new OutputTruncatedError('IntentClassification', 2000);
+      throw new OutputTruncatedError('IntentClassification', 2000, 'output hit the 2000 token limit without valid JSON');
     }) as typeof llm.completeStructured;
     const h = setup({ llm });
     const res = await ensure(h);

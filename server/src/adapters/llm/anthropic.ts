@@ -16,6 +16,18 @@ import { ExternalServiceError } from '../../platform/errors.js';
 const DEFAULT_TIMEOUT = 60_000;
 const DEFAULT_MAX_TOKENS = 4096;
 
+/**
+ * Models that answered "`temperature` is deprecated for this model" (400).
+ * Newer Claude models reject the parameter; the first request finds out, and
+ * later ones leave it out.
+ */
+const rejectsTemperature = new Set<string>();
+
+function isTemperatureRejection(err: unknown): boolean {
+  const e = err as { status?: number; message?: string };
+  return e?.status === 400 && /`?temperature`?/i.test(String(e.message ?? ''));
+}
+
 /** Anthropic has no embeddings API; embeddings come from the OpenAI Embedder. */
 function splitSystem(messages: ChatMessage[]): {
   system: string;
@@ -46,6 +58,27 @@ export class AnthropicProvider implements LLMProvider {
     this.client = new Anthropic({ apiKey });
   }
 
+  /**
+   * `messages.create`, sending `temperature` only to models that accept it.
+   * A model that rejects it is retried once without it and remembered.
+   */
+  private async create(
+    params: Anthropic.MessageCreateParamsNonStreaming,
+    signal?: AbortSignal,
+  ): Promise<Anthropic.Message> {
+    const { temperature, ...rest } = params;
+    const options = signal ? { signal } : undefined;
+    if (rejectsTemperature.has(params.model)) return this.client.messages.create(rest, options);
+    try {
+      return await this.client.messages.create(params, options);
+    } catch (err) {
+      if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : err;
+      if (temperature === undefined || !isTemperatureRejection(err)) throw err;
+      rejectsTemperature.add(params.model);
+      return this.client.messages.create(rest, options);
+    }
+  }
+
   async listModels(): Promise<ModelInfo[]> {
     return withRetry(async () => {
       // SDK 0.33 exposes models.list()
@@ -64,7 +97,7 @@ export class AnthropicProvider implements LLMProvider {
 
   private async doComplete(req: CompletionRequest): Promise<CompletionResult> {
     const { system, rest } = splitSystem(req.messages);
-    const res = await this.client.messages.create({
+    const res = await this.create({
       model: req.model,
       system: system || undefined,
       messages: rest,
@@ -99,7 +132,7 @@ export class AnthropicProvider implements LLMProvider {
     for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
       const res = await withRetry(() =>
         withTimeout(
-          this.client.messages.create({
+          this.create({
             model: req.model,
             system: system || undefined,
             messages,
@@ -113,7 +146,7 @@ export class AnthropicProvider implements LLMProvider {
               },
             ],
             tool_choice: { type: 'tool', name: toolName },
-          }),
+          }, req.signal),
           req.timeoutMs ?? DEFAULT_TIMEOUT,
         ),
       );
@@ -138,9 +171,13 @@ export class AnthropicProvider implements LLMProvider {
         };
       }
       messages.push({ role: 'assistant', content: res.content });
+      // A tool_use block must be answered by a tool_result in the next message,
+      // or the API rejects the request; the correction rides in that result.
       messages.push({
         role: 'user',
-        content: parsed.repromptMessage,
+        content: toolUse
+          ? [{ type: 'tool_result', tool_use_id: toolUse.id, is_error: true, content: parsed.repromptMessage }]
+          : parsed.repromptMessage,
       });
     }
 

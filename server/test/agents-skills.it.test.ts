@@ -42,10 +42,31 @@ d('agent ↔ skills', () => {
     return res.json().id;
   }
 
-  it('seeds the Test Quality Reviewer as a fourth agent', async () => {
+  it('seeds the Test Quality and API Contract Reviewers as the fourth and fifth agents', async () => {
     const agents = (await app.inject({ method: 'GET', url: '/agents' })).json();
-    expect(agents.map((a: { name: string }) => a.name)).toContain('Test Quality Reviewer');
-    expect(agents).toHaveLength(4);
+    expect(agents.map((a: { name: string }) => a.name)).toEqual(
+      expect.arrayContaining(['Test Quality Reviewer', 'API Contract Reviewer']),
+    );
+    expect(agents).toHaveLength(5);
+  });
+
+  it('seeds the six docs/skills skills, linked to their agents in order', async () => {
+    const agents = (await app.inject({ method: 'GET', url: '/agents' })).json() as { id: string; name: string }[];
+    const linked = async (name: string) => {
+      const agent = agents.find((a) => a.name === name)!;
+      const list = (await app.inject({ method: 'GET', url: `/agents/${agent.id}/skills` })).json();
+      return list.filter((s: { linked: boolean }) => s.linked).map((s: { name: string; source: string }) => [s.name, s.source]);
+    };
+    expect(await linked('Test Quality Reviewer')).toEqual([
+      ['branch-coverage', 'imported_file'],
+      ['edge-cases', 'imported_file'],
+    ]);
+    expect((await linked('API Contract Reviewer')).map(([name]: string[]) => name)).toEqual([
+      'breaking-change',
+      'response-schema',
+      'semver-discipline',
+      'deprecation-policy',
+    ]);
   });
 
   it('lists every workspace skill with link state, linked first in order', async () => {
@@ -62,7 +83,8 @@ d('agent ↔ skills', () => {
     expect(set.statusCode).toBe(200);
 
     const list = (await app.inject({ method: 'GET', url: `/agents/${agent.id}/skills` })).json();
-    expect(list.map((s: { id: string; linked: boolean; order: number | null }) => [s.id, s.linked, s.order])).toEqual([
+    const mine = list.filter((s: { id: string }) => [a, b, c].includes(s.id));
+    expect(mine.map((s: { id: string; linked: boolean; order: number | null }) => [s.id, s.linked, s.order])).toEqual([
       [c, true, 0],
       [a, true, 1],
       [b, false, null],

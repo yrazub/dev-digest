@@ -44,26 +44,40 @@ workspace — there is no repo selector in this flow. That means:
 - The Files changed tab must render at least one seeded file's diff
   content (`05`).
 
-## The four built-in agents must be seeded, "Security Reviewer" and "Test Quality Reviewer" named exactly
+## The five built-in agents must be seeded, "Security Reviewer" and "Test Quality Reviewer" named exactly
 
 `03-agents` waits for the literal text `Security Reviewer` on `/agents`, and
 `08-skills` opens the agent named `Test Quality Reviewer`.
-`seed.ts` seeds four built-in agent presets (General, Security, Performance, and
-L02's Test Quality Reviewer)
+`seed.ts` seeds five built-in agent presets (General, Security, Performance, and
+L02's Test Quality and API Contract Reviewers)
 by `name`, upserting only when no agent of that name already exists for the
 workspace — so renaming the security preset in `seed.ts` breaks this flow's
 assertion silently (the flow itself gives no hint that the name is what it
 depends on; only this document does).
 
-## No skills are seeded
+## Exactly six skills are seeded, two of them linked to Test Quality Reviewer
 
-`08-skills` waits for the Skills page's empty state ("No skills yet") and then
-expects exactly one skill ("0 of 1 enabled") on the agent's Skills tab. Seeding a
-skill breaks both assertions.
+`seed.ts` seeds the six L02 skills from `docs/skills/` — `branch-coverage` and
+`edge-cases` linked to Test Quality Reviewer, the four API-contract skills linked to
+API Contract Reviewer. `08-skills` waits for `breaking-change` on the Skills page,
+then, after creating `e2e-rule`, expects `2 of 7 enabled` on Test Quality Reviewer's
+Skills tab and `3 of 7 enabled` once it links the new skill. Seeding another skill,
+or linking another one to that agent, breaks those counts.
+
+## The demo repo has exactly three pending convention candidates
+
+`09-conventions` opens Conventions on `acme/payments-api` and waits for
+`0 of 3 accepted`, then rejects the first card and accepts the other two.
+`seed.ts` inserts three `pending` candidates for that repo, only while it has
+none, ordered by confidence (0.91, 0.78, 0.55), with no `repo_index_state`
+row, so their evidence has no GitHub link. Changing the count breaks the
+`N of M accepted` assertions. The flow also expects no skill named
+`repo-conventions` to exist beforehand, because it creates one (`08-skills`
+creates only `e2e-rule`).
 
 ## PR #482 has a seeded intent
 
-`09-pr-intent` opens PR #482 and waits for the Intent card to render **from the
+`10-pr-intent` opens PR #482 and waits for the Intent card to render **from the
 seeded `pr_intent` row, with no model call** — the flow never presses `Derive intent`
 or `Re-run intent detection`. `seed.ts` inserts that row in its own
 `onConflictDoNothing()` statement outside the `if (!pr)` block, so an
@@ -78,7 +92,7 @@ strings a flow may assert on:
 - The summary equals the seeded PR description. A flow does not assert on it,
   because the description on the page contains the same sentence.
 
-**Contract:** changing any of these strings in `seed.ts` changes what flow `09`
+**Contract:** changing any of these strings in `seed.ts` changes what flow `10`
 waits for, so the flow's `wait --text` lines are updated in the same change. The
 row's `source_hash` is null, so `GET /pulls/:id/intent` reports `stale: false`
 and a review run recomputes it.

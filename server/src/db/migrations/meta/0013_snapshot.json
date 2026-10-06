@@ -1,5 +1,5 @@
 {
-  "id": "e7895653-676e-4dd0-9004-8038636e6bc9",
+  "id": "8fa39e11-4a53-4ce4-bbbe-e6a75f9ee890",
   "prevId": "4c038dbb-9fab-46ef-a8ab-1aa913b740df",
   "version": "7",
   "dialect": "postgresql",
@@ -774,12 +774,6 @@
           "notNull": true,
           "default": "'finding'"
         },
-        "scope": {
-          "name": "scope",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "trifecta_components": {
           "name": "trifecta_components",
           "type": "jsonb",
@@ -889,84 +883,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'[]'::jsonb"
-        },
-        "risk_areas": {
-          "name": "risk_areas",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "confidence": {
-          "name": "confidence",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'low'"
-        },
-        "sources": {
-          "name": "sources",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "missing_context": {
-          "name": "missing_context",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "injection_suspected": {
-          "name": "injection_suspected",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "source_hash": {
-          "name": "source_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "model": {
-          "name": "model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tokens_in": {
-          "name": "tokens_in",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tokens_out": {
-          "name": "tokens_out",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cost_usd": {
-          "name": "cost_usd",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "computed_at": {
-          "name": "computed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
         }
       },
       "indexes": {},
@@ -1550,6 +1466,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "rule": {
           "name": "rule",
           "type": "text",
@@ -1561,6 +1483,18 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "evidence_line_start": {
+          "name": "evidence_line_start",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "evidence_line_end": {
+          "name": "evidence_line_end",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
         },
         "evidence_snippet": {
           "name": "evidence_snippet",
@@ -1574,15 +1508,44 @@
           "primaryKey": false,
           "notNull": false
         },
-        "accepted": {
-          "name": "accepted",
-          "type": "boolean",
+        "status": {
+          "name": "status",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": false
+          "default": "'pending'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "conventions_repo_status_idx": {
+          "name": "conventions_repo_status_idx",
+          "columns": [
+            {
+              "expression": "repo_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "conventions_workspace_id_workspaces_id_fk": {
           "name": "conventions_workspace_id_workspaces_id_fk",

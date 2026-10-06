@@ -75,9 +75,8 @@ export interface StructuredRequest<T> {
    */
   reasoning?: boolean;
   /**
-   * Cancels the call. When it aborts, the in-flight HTTP request is dropped and no further
-   * attempt starts, so a caller that stops waiting also stops paying. Honoured by the
-   * OpenRouter provider; the other providers ignore it.
+   * Aborts the call, including a response body that is still streaming
+   * (cancellation, run deadline). The provider rejects with `signal.reason`.
    */
   signal?: AbortSignal;
 }

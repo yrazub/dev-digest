@@ -158,7 +158,7 @@ changed lines only.
 | `server` | new `intent` module (repository, service, routes), the `pr_intent` and `findings.scope` columns (one migration), `GitHubClient.getFileContent`, intent as shared pre-work in the review run, the demo seed for PR #482 | `server/specs/L03-intent-layer.md` |
 | `reviewer-core` | the `intent` prompt slot with its trusted note, the scope filter, `ReviewInput.intent` / `scopeFilter`, `ReviewOutcome.filtered` / `scope` | `reviewer-core/specs/L03-intent-scope.md` |
 | `client` | the `IntentCard` on Overview and Agent runs, the intent hook, the `Outside PR scope` badge, the filtered count in the trace drawer, the Settings default | `client/specs/L03-intent-layer.md` |
-| `e2e` | one flow on seeded data with no model call | `e2e/specs/09-pr-intent.flow.json` |
+| `e2e` | one flow on seeded data with no model call | `e2e/specs/10-pr-intent.flow.json` |
 
 ## Resolved
 

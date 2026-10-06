@@ -79,6 +79,13 @@ Traps we have already hit in the server. Append-only. See the root
   repo-relative paths. See `toRepoPath` and the `severity !== 'ignore'` filter in
   `.claude/skills/pr-self-review/scripts/arch-check.mjs:16` and `:44`.
 
+- **2026-10-01** — `pnpm db:generate` (drizzle-kit) stops on an interactive prompt when one
+  migration drops a column and adds others on the same table: it asks whether each new column
+  is created or renamed from the dropped one. In a non-TTY shell it shows nothing and hangs
+  until killed (seen dropping `conventions.accepted` while adding `status`, `category`, …,
+  `src/db/schema/knowledge.ts` `conventions`). Run it under `expect`, answering Enter, which picks
+  the first option ("+ … create column"). Then read the generated SQL and confirm it has no
+  `RENAME COLUMN` (`src/db/migrations/0013_flat_blue_marvel.sql`).
 - **2026-10-05** — a `buildApp` test that starts a review run and passes no `secrets` override reads the developer's real keys: `secretsPath` is `join(homedir(), '.devdigest', 'secrets.json')` (`src/platform/config.ts:74`), so the intent pre-step would make a paid model call and real GitHub requests. The three files that start a run (`reviews.it`, `reviews-skills.it`, `reviews-intent.it`) pass `MockSecretsProvider` and `MockGitHubClient`; a new one must too. To run the suite with no key reachable: `HOME=<empty dir holding only a .docker symlink> DOCKER_HOST=unix://<real home>/.docker/run/docker.sock pnpm test` — without the `DOCKER_HOST` the `.it` files self-skip.
   **See also:** "Integration files skip silently" below, under Recurring Errors & Fixes.
 - **2026-10-05** — to learn whether a flaky test pre-dates the working tree without touching it: `git archive HEAD server reviewer-core | tar -x -C <scratch>`, symlink both `node_modules`, and run `pnpm exec vitest run` there. Used to show the `reviews-skills.it` race below exists at `aa19314`.
@@ -236,5 +243,6 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
   `modules/_shared/finding-dto.ts`. The baseline went from 33 to 28, and the `pulls-*.it` tests passed unedited.
   Plan: `specs/architecture-refactor.md`.
 - **2026-09-29** — L02 skills module; URL-import SSRF hardening (connect-time lookup); skill version bumps serialised with `SELECT … FOR UPDATE`.
-
+- **2026-10-01** — L02 conventions module (extract pipeline, candidate routes); `feature-models` moved to `modules/_shared/repository/feature-models.repo.ts` taking `Db`, which removed its two baselined violations.
+- **2026-10-02** — review runs: per-run deadline (`RUN_DEADLINE_MS`) and Cancel now abort the in-flight model call via `RunBus.signalFor`; OpenRouter skips `open-inference` by default (`OPENROUTER_IGNORED_PROVIDERS`). **See also:** `../reviewer-core/INSIGHTS.md` (runaway generation, provider slugs).
 - **2026-10-05** — L03 intent module, review-run pre-step and scope filter wiring; review fixes (parse on read, port-level GitHub outcomes); root cause of the `reviews-skills.it` flake; `renderIntentBlock` `map` bug found by the phase 6 tests. Plan: `specs/L03-intent-layer-plan.md` (revision 3).
