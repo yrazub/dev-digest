@@ -6,6 +6,8 @@ import React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, API_BASE } from "../api";
 import { notify } from "../toast";
+import { intentKeys } from "./intent";
+import { smartDiffKeys } from "./smart-diff";
 import type {
   FindingActionKind,
   PrReviewComment,
@@ -32,6 +34,39 @@ export function usePrActiveRuns(prId: string | null | undefined) {
     enabled: !!prId,
     refetchInterval: (query) => ((query.state.data?.length ?? 0) > 0 ? 4000 : false),
   });
+}
+
+/** True only when a known, non-empty list of active runs became empty. */
+export function runsJustSettled(previous: number | undefined, current: number | undefined): boolean {
+  return previous !== undefined && previous > 0 && current === 0;
+}
+
+/** Returns the refresh a finished run needs, and runs it by itself when the PR's active runs
+   become empty — on any tab. Shares the page's `usePrActiveRuns` query, so no extra request. */
+export function useRunSettledRefresh(prId: string | null | undefined): () => void {
+  const qc = useQueryClient();
+  const count = usePrActiveRuns(prId).data?.length;
+
+  const refresh = React.useCallback(() => {
+    if (!prId) return;
+    qc.invalidateQueries({ queryKey: ["pr-active-runs", prId] });
+    qc.invalidateQueries({ queryKey: ["pr-runs", prId] });
+    qc.invalidateQueries({ queryKey: ["reviews", prId] });
+    qc.invalidateQueries({ queryKey: intentKeys.detail(prId) });
+    qc.invalidateQueries({ queryKey: smartDiffKeys.pull(prId) });
+  }, [qc, prId]);
+
+  // The last known count and the PR it belongs to; written only inside the effect.
+  const last = React.useRef<{ prId: string | null | undefined; count: number } | null>(null);
+  React.useEffect(() => {
+    if (count === undefined) return;
+    const seen = last.current;
+    const previous = seen && seen.prId === prId ? seen.count : undefined;
+    last.current = { prId, count };
+    if (runsJustSettled(previous, count)) refresh();
+  }, [prId, count, refresh]);
+
+  return refresh;
 }
 
 // ---- Full run history for a PR (every agent_runs row, any status) ----
@@ -66,6 +101,7 @@ export function useDeleteRun(prId: string | null | undefined) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pr-runs", prId] });
       qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      qc.invalidateQueries({ queryKey: smartDiffKeys.pull(prId) });
     },
   });
 }
@@ -82,7 +118,10 @@ export function useDeleteReview(prId: string | null | undefined) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (reviewId: string) => api.del<{ ok: boolean }>(`/reviews/${reviewId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["reviews", prId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      qc.invalidateQueries({ queryKey: smartDiffKeys.pull(prId) });
+    },
   });
 }
 
@@ -155,7 +194,10 @@ export function useFindingAction() {
         reply ? { reply } : undefined,
       ),
     onSuccess: (_d, { prId }) => {
-      if (prId) qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      if (prId) {
+        qc.invalidateQueries({ queryKey: ["reviews", prId] });
+        qc.invalidateQueries({ queryKey: smartDiffKeys.pull(prId) });
+      }
     },
   });
 }

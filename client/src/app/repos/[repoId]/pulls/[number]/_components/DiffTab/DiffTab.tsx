@@ -122,6 +122,7 @@ export function DiffTab({ prId, pr, repoFullName, canComment }: DiffTabProps) {
         </p>
         <OrderSwitch value={order} onChange={handleOrderChange} />
       </div>
+      {reviews?.length === 0 ? <p style={s.notice}>{t("smartDiff.noReviewYet")}</p> : null}
       {groupingFailed ? <p style={s.notice}>{t("smartDiff.groupingUnavailable")}</p> : null}
       {groupingPending ? (
         <div style={s.skeletonList}>

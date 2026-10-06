@@ -71,6 +71,17 @@ describe("InlineFinding", () => {
     expect(init.method).toBe("POST");
   });
 
+  it("Dismiss also invalidates the PR's smart-diff queries, so the group marks follow (C4)", async () => {
+    mockFetch();
+    const user = userEvent.setup();
+    const { invalidate } = renderCard();
+
+    await user.click(screen.getByText("Dismiss"));
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ["smart-diff", "pr1"] }));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["reviews", "pr1"] });
+  });
+
   it("Accept posts to /findings/<id>/accept", async () => {
     const fetch = mockFetch();
     const user = userEvent.setup();

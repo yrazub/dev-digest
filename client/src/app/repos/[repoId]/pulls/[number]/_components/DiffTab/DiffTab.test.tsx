@@ -25,7 +25,8 @@ interface SmartDiffQuery {
 
 const hookData: {
   comments: PrReviewComment[];
-  reviews: ReviewRecord[];
+  /** `undefined` is a reviews query that has not answered yet. */
+  reviews: ReviewRecord[] | undefined;
   smartDiff: SmartDiffQuery;
   search: URLSearchParams;
 } = {
@@ -159,12 +160,16 @@ function ghComment(over: Partial<PrReviewComment> & { id: number }): PrReviewCom
   };
 }
 
-function renderTab(pr: PrDetail = PR) {
-  return render(
+function tabTree(pr: PrDetail) {
+  return (
     <NextIntlClientProvider locale="en" messages={{ shell, prReview }}>
       <DiffTab prId="pr1" pr={pr} repoFullName="acme/api" canComment />
-    </NextIntlClientProvider>,
+    </NextIntlClientProvider>
   );
+}
+
+function renderTab(pr: PrDetail = PR) {
+  return render(tabTree(pr));
 }
 
 /** The rendered diff row of a line: the element that holds the line's code text. */
@@ -529,5 +534,81 @@ describe("DiffTab — smart-diff states", () => {
 
     expect(screen.getByText("No changed files.")).toBeInTheDocument();
     expect(queryGroupHeaders()).toHaveLength(0);
+  });
+});
+
+// ---- Phase 9: the "no review yet" line (C3) and the refresh after a run (C4) ----
+
+const NO_REVIEW_YET = "No review has run yet — findings appear here after Run Review";
+
+describe("DiffTab — the no-review-yet line (C3)", () => {
+  it("shows the line, no dot, no group mark and no switch when the reviews query answered with an empty list, in smart order", () => {
+    hookData.reviews = [];
+    renderTab();
+
+    expect(screen.getByText(NO_REVIEW_YET)).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "File has findings" })).not.toBeInTheDocument();
+    expect(within(headerAt(0)).queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /(Show|Hide) comments/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/with findings/)).not.toBeInTheDocument();
+  });
+
+  it("shows the line in Original order too", () => {
+    hookData.reviews = [];
+    hookData.search = new URLSearchParams("order=original");
+    renderTab();
+
+    expect(screen.getByText(NO_REVIEW_YET)).toBeInTheDocument();
+    expect(queryGroupHeaders()).toHaveLength(0);
+  });
+
+  it("does not show the line when a review exists, in either order", () => {
+    hookData.reviews = [review("r", "a1", "2026-10-03T10:00:00Z", [finding({ id: "f" })])];
+    const first = renderTab();
+    expect(screen.queryByText(NO_REVIEW_YET)).not.toBeInTheDocument();
+    first.unmount();
+
+    hookData.search = new URLSearchParams("order=original");
+    renderTab();
+    expect(screen.queryByText(NO_REVIEW_YET)).not.toBeInTheDocument();
+  });
+
+  it("does not show the line while the reviews query is still loading", () => {
+    hookData.reviews = undefined;
+    renderTab();
+
+    expect(screen.queryByText(NO_REVIEW_YET)).not.toBeInTheDocument();
+    // the rest of the tab is there
+    expect(screen.getByText("2 files · +5 −1")).toBeInTheDocument();
+    expect(screen.getByText(CONFIG)).toBeInTheDocument();
+  });
+
+  it("does not show the line for a review that has no findings", () => {
+    hookData.reviews = [review("r", "a1", "2026-10-03T10:00:00Z", [])];
+    renderTab();
+
+    expect(screen.queryByText(NO_REVIEW_YET)).not.toBeInTheDocument();
+  });
+});
+
+describe("DiffTab — a review arriving in the same mounted tab (C4)", () => {
+  it("draws the file's dot and the Core header's mark, and drops the no-review line, when the reviews data changes", () => {
+    hookData.reviews = [];
+    const view = renderTab();
+    expect(screen.getByText(NO_REVIEW_YET)).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "File has findings" })).not.toBeInTheDocument();
+    expect(within(headerAt(0)).queryByRole("img")).not.toBeInTheDocument();
+
+    // a finished run: the refreshed reviews query now holds a review with a finding in a core file
+    hookData.reviews = [
+      review("r", "a1", "2026-10-03T10:00:00Z", [finding({ id: "fresh", title: "Fresh finding", file: CONFIG })]),
+    ];
+    view.rerender(tabTree(PR));
+
+    expect(screen.queryByText(NO_REVIEW_YET)).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "File has findings" })).toBeInTheDocument();
+    expect(within(headerAt(0)).getByRole("img", { name: "1 file with findings" })).toBeInTheDocument();
+    expect(screen.getByText("Fresh finding")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Hide comments \(1\)/ })).toBeInTheDocument();
   });
 });
