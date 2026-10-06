@@ -5,6 +5,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Icon } from "@devdigest/ui";
 import type { ToolCall } from "@devdigest/shared";
+import { formatDuration } from "@/lib/format-duration";
 import { s } from "../../styles";
 
 export function ToolCallRow({ tc }: { tc: ToolCall }) {
@@ -20,7 +21,7 @@ export function ToolCallRow({ tc }: { tc: ToolCall }) {
         </span>
         <span style={s.toolMeta}>{tc.meta}</span>
         <span className="mono tnum" style={s.toolMs}>
-          {tc.ms}ms
+          {formatDuration(tc.ms)}
         </span>
       </div>
       {open && (
