@@ -1,4 +1,5 @@
 import { ConventionCategory, type ConventionSkillDraft } from '@devdigest/shared';
+import { recordLevel } from './confidence.js';
 import type { ConventionRecord } from './domain.js';
 
 /**
@@ -68,7 +69,7 @@ export function buildSkillDraft(
     if (rules.length === 0) return [];
     const blocks = rules.map((r) => {
       const f = fence(r.evidenceSnippet);
-      return `### ${ruleSlug(r.rule)}\n\n${r.rule}\n\nDetected in \`${range(r)}\`:\n\n${f}\n${r.evidenceSnippet}\n${f}`;
+      return `### ${ruleSlug(r.rule)}\n\n${r.rule}\n\nConfidence: ${recordLevel(r)}.\n\nDetected in \`${range(r)}\`:\n\n${f}\n${r.evidenceSnippet}\n${f}`;
     });
     return [`## ${CATEGORY_TITLES[category]}\n\n${blocks.join('\n\n')}`];
   });

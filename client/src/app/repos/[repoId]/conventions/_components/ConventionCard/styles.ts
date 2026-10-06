@@ -59,4 +59,16 @@ export const s = {
   editGrid: { display: "grid", gridTemplateColumns: "1fr 180px", gap: 10, alignItems: "start" } satisfies CSSProperties,
   editActions: { display: "flex", gap: 8, justifyContent: "flex-end" } satisfies CSSProperties,
   error: { fontSize: 12, color: "var(--crit)" } satisfies CSSProperties,
+  levelChip: (level: "low" | "medium" | "high") => ({
+    fontSize: 11,
+    fontWeight: 600,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.4,
+    padding: "1px 6px",
+    borderRadius: 4,
+    color: LEVEL_COLORS[level],
+    border: `1px solid ${LEVEL_COLORS[level]}`,
+  }),
 };
+
+const LEVEL_COLORS = { low: "#6b7280", medium: "#d97706", high: "#16a34a" };
