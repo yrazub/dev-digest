@@ -37,6 +37,14 @@ Traps we have already hit in the web app. Append-only. See the root
   wheel at the list's end doesn't chain into `<main>` and close it that way.
   **Evidence 2026-09-27:** `src/app/repos/[repoId]/pulls/_components/FindingsPopover/FindingsPopover.tsx:72`
   (`onScroll` target check).
+- **2026-10-07** — TanStack Query v5 keeps `data` when a refetch fails and sets `isError` at the
+  same time, so "error" and "has data" are not exclusive. `DiffTab` chose its body from four
+  independent booleans and drew the flat list and the groups together in that state. A component
+  that renders one of several bodies from a query takes the choice from one pure function that
+  returns a single mode, and the label, the notice and the body all read that value
+  (`diffBodyMode` in `src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/helpers.ts:55`).
+  A test with `{ data: undefined, isError: true }` alone does not cover it.
+
 
 ## Tool & Library Notes
 
@@ -56,6 +64,17 @@ Traps we have already hit in the web app. Append-only. See the root
   does, or give the control its own `aria-label` when it is app code (the skill body textarea
   in `src/components/skill-body-editor/SkillBodyEditor.tsx` has one). `src/vendor/ui/kit/FormField.tsx:19`
   shows the bare `<label>`.
+- **2026-10-07** — `tsconfig` has `noUncheckedIndexedAccess` and `pnpm typecheck` covers test files, so
+  `arr[0]` in a test is `T | undefined`: vitest passes and the typecheck fails. Run `pnpm typecheck`
+  after writing tests. A vitest path filter is a pattern, so a path with `[repoId]` brackets matches
+  no file; pass a bare substring (`pnpm exec vitest run DiffTab`). No line in the repo shows either;
+  both were hit while writing `DiffTab.test.tsx`.
+- **2026-10-07** — to test a hook that watches a polling query (`usePrActiveRuns` has
+  `refetchInterval` while its list is non-empty), change the mocked `fetch` answer and call
+  `qc.refetchQueries` on the key instead of waiting on timers; it adds no call to an
+  `invalidateQueries` spy, so the spy counts only what the hook did. Unmount and `qc.clear()` in
+  `afterEach`, or the poll outlives the test (`src/lib/hooks/reviews.test.tsx:127`).
+
 
 ## Decisions
 
@@ -132,3 +151,4 @@ function identity a component depends on; the original code is in commit `54e2b1
 - **2026-09-30** — L02 Skills UI done (skills, agents Skills tab, trace); L02 tests moved to `userEvent`.
 - **2026-10-01** — L02 Conventions page, candidate cards and the Create-skill-from-conventions modal.
 - **2026-10-05** — L03 Intent card, `usePrIntent` / `useRegenerateIntent`, the out-of-scope badge and the trace count; a stale `.next/types` blocked the first baseline.
+- **2026-10-07** — L03 Smart Diff: findings inside `diff-viewer` behind an optional prop, the grouped Files changed tab, the run-settled refresh hook; review fix for the double body. Plan: `specs/L03-smart-diff-plan.md` (revision 2).

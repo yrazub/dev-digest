@@ -191,6 +191,13 @@ be obvious to anyone reading the code, it does not belong here.
   (`client/src/app/skills/_components/ImportSkillModal/styles.ts`, `fileInput`). The config that
   sets the roots is `.mcp.json:3`. Error seen: `Access denied: path … is not within any of the
   configured workspace roots.`
+- **2026-10-07** — to stop a dev stack started with `scripts/dev.sh` from another shell, signal its
+  process group, as Ctrl-C does: `kill -INT -<pgid>` (the group id is the script's own pid,
+  `ps -o pgid= -p <pid>`). `kill -INT <pid>` alone did nothing: the script sits in `wait` on its
+  children and the servers kept `:3000` and `:3001` (`scripts/dev.sh:109` `trap cleanup EXIT INT TERM`,
+  `:120` `wait`). Postgres stays up. Needed before `npm run e2e:hermetic`, which writes into the
+  same `client/.next`. **See also:** `e2e/INSIGHTS.md` (the `:3101` entry).
+
 
 ## Decisions
 
@@ -410,3 +417,4 @@ schema.
 - **2026-10-04** — added `test-writer`, `architecture-reviewer`, `plan-verifier` and `doc-writer` from `specs/agents-lab-plan.md` (planner → implementer → plan-verifier, the first real run of that chain) and moved test ownership to `test-writer`; decisions recorded above. A subagent type added mid-session is not available to the `Agent` tool until the session reloads it — `plan-verifier` was run by pointing a general-purpose agent at its file. Its verdict was FAIL on one item: the overlap paragraph in `architecture-reviewer.md` is longer than the "two or three sentences" the plan asked for.
 
 - **2026-10-05** — L03 Intent Layer through the full agent chain: phases 1–8, first review, plan revision 3, phase 10, tests for every phase, second review. Module findings are in `server/`, `client/` and `reviewer-core/` `INSIGHTS.md`.
+- **2026-10-07** — L03 Smart Diff through the full agent chain: nine phases, plan-verifier FAIL on one gap (two diff bodies rendered together), fix round, hermetic e2e 11/11. Module findings are in `server/`, `client/` and `e2e/` `INSIGHTS.md`.

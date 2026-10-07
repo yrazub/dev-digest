@@ -125,8 +125,10 @@ and leaves the dots, counters, stripes and tags.
 
 Exactly one body is rendered at a time. The choice is one pure function, `diffBodyMode` in
 `DiffTab/helpers.ts`, that returns `flat`, `pending`, `groups` or `unavailable` from the order,
-the query's error flag, whether grouping data exists and the number of files; the section
-label, the notice line and the body all follow from that one value.
+the query's error flag, whether grouping data exists and the number of files; the notice line
+and the body follow from that one value. The section label needs one more fact: it is
+`groupedByRole` only in `groups` mode with at least one non-empty group, so a response that
+places none of the PR's files is labelled as the flat list it renders.
 
 | State | Rendering |
 |---|---|

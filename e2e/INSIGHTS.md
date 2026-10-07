@@ -20,6 +20,17 @@ Traps we have already hit in the browser suite. Append-only. See the root
   first, then `set viewport`. Also `fill <sel> ''` does not fire React's `onChange` (the filter keeps
   its old text); clear with `press Backspace` instead. External-tool behaviour, no repo line;
   browser config is `agent-browser.json:3`.
+- **2026-10-07** — `agent-browser find role <role> --name <text>` matches the accessible name as a
+  case-insensitive substring unless `--exact` is passed (`agent-browser find --help`), so
+  `--name "Boilerplate"` finds the group header button whose full name is the label, the hint and
+  the file count (`specs/11-pr-smart-diff.flow.json`). Pick a substring no other button shares.
+- **2026-10-07** — a `SectionLabel` is uppercased by CSS. Flow `11` asserts it with
+  `wait --fn "document.body.innerText.toLowerCase().includes('…')"` (`specs/11-pr-smart-diff.flow.json:14`),
+  which passed in the hermetic run. Whether `wait --text` with the authored casing would also
+  pass was not tried; the test-writer chose `--fn` because the binary's text check reads
+  `innerText`, which carries the transformed casing. Every other flow uses `--text` on text that
+  no CSS transforms.
+
 
 ## Recurring Errors & Fixes
 
@@ -84,3 +95,4 @@ separate dist dir. **See also:** `../client/INSIGHTS.md` — the same shared-`.n
 - **2026-09-30** — added `08-skills` (create skill → link to agent → persists) and fixed the `04`/`05` click race.
 - **2026-10-01** — added `09-conventions` (reject/accept seeded candidates → reload → create skill) and three seeded convention candidates; fixed the `08` tab-click race.
 - **2026-10-02** — recorded the HW2 demo video with `agent-browser record` + `ffmpeg-static` and burned-in SRT subtitles; noted the ffmpeg, viewport and `fill ''` quirks.
+- **2026-10-07** — added `11-pr-smart-diff` (grouped Files changed tab on the nine seeded files); hermetic run 11/11 with the dev stack stopped first.
