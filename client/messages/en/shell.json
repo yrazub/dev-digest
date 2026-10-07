@@ -44,6 +44,7 @@
     "reply": "Reply",
     "viewOnGitHub": "View on GitHub",
     "postedToGitHub": "Posts to GitHub immediately",
-    "outdatedTitle": "{count} comment(s) on older revisions"
+    "outdatedTitle": "{count} comment(s) on older revisions",
+    "githubComments": "{count, plural, one {# comment on GitHub} other {# comments on GitHub}}"
   }
 }

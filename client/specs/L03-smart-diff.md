@@ -74,6 +74,13 @@ Three marks, all from the counted list.
 
 Colours and icons come from `SEV` in `@devdigest/ui`; no new palette.
 
+Four marks carry a native hover hint (`title`), because the mark alone does not say what it
+counts: the group mark (`smartDiff.filesWithFindings`, the same words as its accessible name),
+the file dot (`smartDiff.fileHasFindings`), the GitHub comment count on a file card
+(`shell` `diffViewer.githubComments`, so it is not taken for a findings count), and the comments
+switch (`smartDiff.commentsSwitchHint`: what its number adds up, and that the marks stay). No
+custom tooltip component is used.
+
 ### Changes inside `src/components/diff-viewer/` (D7)
 
 `diff-viewer` is shared chrome and must not import from a route folder, so the card is passed

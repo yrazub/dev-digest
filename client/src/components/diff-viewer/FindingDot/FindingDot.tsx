@@ -14,6 +14,7 @@ export function FindingDot({ severity }: { severity: Severity }) {
     <span
       role="img"
       aria-label={t("smartDiff.fileHasFindings")}
+      title={t("smartDiff.fileHasFindings")}
       style={{ ...fs.dot, background: SEV[severity].c }}
     />
   );

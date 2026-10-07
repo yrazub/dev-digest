@@ -86,6 +86,7 @@
     "findingsOutsideDiff": "Findings outside the diff",
     "noReviewYet": "No review has run yet — findings appear here after Run Review",
     "groupingUnavailable": "Grouping is unavailable — showing the original order",
+    "commentsSwitchHint": "GitHub comments and review findings. The marks on files and lines stay visible.",
     "showComments": "Show comments ({count})",
     "hideComments": "Hide comments ({count})"
   },

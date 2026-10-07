@@ -118,6 +118,7 @@ export function FileCard({
         </span>
         {commentCount > 0 && (
           <span
+            title={t("diffViewer.githubComments", { count: commentCount })}
             style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)" }}
           >
             <Icon.MessageSquare size={12} />

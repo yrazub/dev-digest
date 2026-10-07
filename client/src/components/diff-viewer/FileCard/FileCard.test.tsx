@@ -103,6 +103,9 @@ describe("FileCard — file dot", () => {
     expect(screen.getByRole("img", DOT)).toBeInTheDocument();
     // the count is the number of GitHub comments, not comments + findings
     expect(within(headerOf(PATH)).getByText("2")).toBeInTheDocument();
+    // each mark says on hover what it is, so the two are not mixed up
+    expect(screen.getByRole("img", DOT)).toHaveAttribute("title", "File has findings");
+    expect(within(headerOf(PATH)).getByTitle("2 comments on GitHub")).toBeInTheDocument();
   });
 
   it("draws no dot when the file's only finding is dismissed, but still draws its card and no tag", () => {

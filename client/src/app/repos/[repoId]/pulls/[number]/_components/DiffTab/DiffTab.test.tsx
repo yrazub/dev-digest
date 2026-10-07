@@ -221,6 +221,11 @@ describe("DiffTab — the comments switch", () => {
 
     // 1 comment + 1 counted finding: the dismissed one and the one outside the PR do not count
     expect(screen.getByRole("button", { name: /Hide comments \(2\)/ })).toBeInTheDocument();
+    // the hover hint says what the number adds up and what stays when hidden
+    expect(screen.getByRole("button", { name: /Hide comments \(2\)/ })).toHaveAttribute(
+      "title",
+      "GitHub comments and review findings. The marks on files and lines stay visible.",
+    );
     expect(screen.getByText("gh body 1")).toBeInTheDocument();
     expect(screen.getByText("Title counted")).toBeInTheDocument();
     // a dismissed finding keeps its card
@@ -437,6 +442,8 @@ describe("DiffTab — groups by role", () => {
 
     // three findings in two files: the mark counts files
     expect(within(headerAt(0)).getByRole("img", { name: "2 files with findings" })).toBeInTheDocument();
+    // the same words are the hover hint: the mark itself shows only a dot and a number
+    expect(within(headerAt(0)).getByTitle("2 files with findings")).toBeInTheDocument();
     for (const i of [1, 2, 3, 4]) {
       expect(within(headerAt(i)).queryByRole("img")).not.toBeInTheDocument();
     }

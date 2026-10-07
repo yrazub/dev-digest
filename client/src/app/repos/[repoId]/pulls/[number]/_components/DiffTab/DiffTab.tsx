@@ -103,6 +103,7 @@ export function DiffTab({ prId, pr, repoFullName, canComment }: DiffTabProps) {
               kind="ghost"
               size="sm"
               icon={showComments ? "EyeOff" : "Eye"}
+              title={t("smartDiff.commentsSwitchHint")}
               onClick={() => setShowComments((v) => !v)}
             >
               {t(showComments ? "smartDiff.hideComments" : "smartDiff.showComments", {

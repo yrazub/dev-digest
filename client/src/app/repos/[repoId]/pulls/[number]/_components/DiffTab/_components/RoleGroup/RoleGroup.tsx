@@ -43,6 +43,7 @@ export function RoleGroup({
           <span
             role="img"
             aria-label={t("smartDiff.filesWithFindings", { count: mark.files })}
+            title={t("smartDiff.filesWithFindings", { count: mark.files })}
             style={s.groupMark}
           >
             <span aria-hidden style={s.markDot(SEV[mark.severity].c)} />
