@@ -371,6 +371,20 @@ exists to keep concurrent agent sessions from stealing each other's tab.
 The error string above is the proof; the `pageId` type is the tool's input
 schema.
 
+### A shell command that only writes a Markdown file starts the dev stack and never returns
+**Date:** 2026-10-07
+**Cause:** the file's text was passed to `python3 - <<E` with an unquoted delimiter. In an unquoted
+heredoc the shell still expands `$VAR`, `$(…)` and backticks, so every inline-code span of the
+Markdown ran as a command: `./scripts/dev.sh` started a second stack (migrate and seed
+included) and blocked the call until its timeout; an `npm i …` span further down would have
+installed into the repository root.
+**Fix / rule:** quote the delimiter (`<<'PYEOF'`) whenever a heredoc body holds prose, Markdown or
+code, or write the file with the editor tool instead of the shell. After such a slip, look for
+the processes it left (`ps -o pid,pgid,command`) and stop that process group before anything else.
+**Evidence:** no repo line shows it; the stray `bash ./scripts/dev.sh` and its `tsx watch` child
+were found in the process list and stopped, and `docs/hw3-video-script.md` was then written with
+the editor tool.
+
 ## Session Notes
 
 - **2026-09-20** — added the `engineering-insights` skill and restructured all five
@@ -418,3 +432,4 @@ schema.
 
 - **2026-10-05** — L03 Intent Layer through the full agent chain: phases 1–8, first review, plan revision 3, phase 10, tests for every phase, second review. Module findings are in `server/`, `client/` and `reviewer-core/` `INSIGHTS.md`.
 - **2026-10-07** — L03 Smart Diff through the full agent chain: nine phases, plan-verifier FAIL on one gap (two diff bodies rendered together), fix round, hermetic e2e 11/11. Module findings are in `server/`, `client/` and `e2e/` `INSIGHTS.md`.
+- **2026-10-07** — HW3 delivery: demo PRs #13 and #15, PR #14 description with screenshots, the demo video recorded with `agent-browser` (script in `docs/hw3-video-script.md`); recorded the unquoted-heredoc slip above and the reviewer line-number question in `reviewer-core/INSIGHTS.md`.

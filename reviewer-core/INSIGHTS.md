@@ -58,6 +58,21 @@ guard; `src/review/run.ts` `DEFAULT_REVIEW_MAX_TOKENS`; `test/openrouter.test.ts
   `provider.sort: 'throughput'` (the same model ran at 27 vs 100 tok/s across providers)
   (`src/review/run.ts`, `src/llm/openrouter.ts`).
 
+## Open Questions
+
+- **2026-10-07** — should the diff in the review prompt carry line numbers? Today it is the raw
+  unified diff (`userSections.push` with `wrapUntrusted('diff', parts.diff)` in `src/prompt.ts:156`),
+  so the model counts lines itself and `Finding.start_line` is its guess. Six runs of the General
+  Reviewer (`deepseek/deepseek-v4-flash`) on a new 37-line file with bugs on lines 18, 24, 30, 35
+  and 36 put the findings 2–5 lines low nearly every time (13–15 for 18, 16–21 for 24, 27–29 for
+  30, 32–33 for 35); one run had two exact lines. Grounding cannot catch it: a new file is one
+  hunk, so every line "intersects a hunk" (`src/grounding.ts:73`). It became visible with L03
+  Smart Diff, which draws the finding under `start_line` in the diff. Ruled out: retrying (three
+  takes in a row had no exact line). Not tried: prefixing each diff line with its new-side
+  number, or snapping `start_line` to the nearest line that matches a quoted snippet.
+  **See also:** `../docs/hw3-video-script.md` ("Things to know").
+
 ## Session Notes
 
 - **2026-10-05** — L03: the `intent` prompt slot and the scope filter after grounding (`src/scope.ts`).
+- **2026-10-07** — no code change; recorded the line-number accuracy question that the L03 Smart Diff demo exposed.
