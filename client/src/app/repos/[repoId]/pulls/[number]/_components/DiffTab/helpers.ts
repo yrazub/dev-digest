@@ -6,16 +6,12 @@ import type {
   SmartDiffGroup,
   SmartDiffRole,
 } from "@devdigest/shared";
+import { isCounted, mostSevere } from "@/components/diff-viewer";
 
 /** Time of a review for ordering; an unparsable stamp sorts as the oldest. */
 function reviewTime(r: ReviewRecord): number {
   const t = Date.parse(r.created_at);
   return Number.isNaN(t) ? Number.NEGATIVE_INFINITY : t;
-}
-
-/** A finding counts towards the switch's number unless it was dismissed. */
-function isCounted(f: FindingRecord): boolean {
-  return f.dismissed_at == null;
 }
 
 /**
@@ -38,8 +34,36 @@ export function countedInDiff(findings: FindingRecord[], files: PrFile[]): numbe
   return findings.filter((f) => isCounted(f) && paths.has(f.file)).length;
 }
 
-/** Lower rank = more severe. Keyed by the exact enum values. */
-const SEVERITY_RANK: Record<Severity, number> = { CRITICAL: 0, WARNING: 1, SUGGESTION: 2 };
+/** Which body the Files changed tab draws; exactly one is rendered. */
+export type DiffBodyMode =
+  /** The PR's files as one flat list: original order, or no files to group. */
+  | "flat"
+  /** Smart order, grouping still loading: skeleton rows. */
+  | "pending"
+  /** Smart order with grouping data: files under their role. */
+  | "groups"
+  /** Smart order, the request failed and there is no grouping to keep: flat list plus a muted line. */
+  | "unavailable";
+
+/**
+ * The one choice between the bodies. A grouping the user already has wins over
+ * a failed background refetch (`hasData` stays true when TanStack Query reports
+ * `isError` after an earlier success); the flat list with the notice appears
+ * only when there is no grouping to show. With no files there is nothing to
+ * group, so the mode is `flat` and no notice is drawn, whatever the request did.
+ */
+export function diffBodyMode(input: {
+  order: "smart" | "original";
+  isError: boolean;
+  hasData: boolean;
+  fileCount: number;
+}): DiffBodyMode {
+  const { order, isError, hasData, fileCount } = input;
+  if (order === "original") return "flat";
+  if (hasData) return fileCount > 0 ? "groups" : "flat";
+  if (fileCount === 0) return "flat";
+  return isError ? "unavailable" : "pending";
+}
 
 /**
  * Join the grouping of the API with the PR's files. Groups keep the response
@@ -75,12 +99,7 @@ export function groupFindingMark(
   findings: FindingRecord[],
 ): { files: number; severity: Severity } | null {
   const paths = new Set(files.map((f) => f.path));
-  const withFindings = new Set<string>();
-  let severity: Severity | null = null;
-  for (const f of findings) {
-    if (!isCounted(f) || !paths.has(f.file)) continue;
-    withFindings.add(f.file);
-    if (severity === null || SEVERITY_RANK[f.severity] < SEVERITY_RANK[severity]) severity = f.severity;
-  }
-  return severity === null ? null : { files: withFindings.size, severity };
+  const inGroup = findings.filter((f) => isCounted(f) && paths.has(f.file));
+  const severity = mostSevere(inGroup);
+  return severity === null ? null : { files: new Set(inGroup.map((f) => f.file)).size, severity };
 }

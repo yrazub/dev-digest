@@ -528,6 +528,31 @@ describe("DiffTab — smart-diff states", () => {
     expect(screen.getByText("Files changed")).toBeInTheDocument();
   });
 
+  // Spec "States": a refetch that failed while a grouping is already loaded keeps the groups, with
+  // no notice. The old code drew the flat list and the groups together, so every file showed twice.
+  it("when a refetch fails after a grouping loaded keeps the groups, draws each file once, and shows no notice", () => {
+    hookData.smartDiff = { data: fullResponse(), isError: true };
+    renderTab(GROUPED_PR);
+
+    expect(groupHeaders()).toHaveLength(5);
+    expect(screen.getByText("Smart Diff · grouped by role")).toBeInTheDocument();
+    expect(screen.queryByText("Files changed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Grouping is unavailable — showing the original order")).not.toBeInTheDocument();
+    // the files of the open groups; Docs and Boilerplate start collapsed
+    for (const path of [CONFIG, USERS, RATELIMIT_TEST, PUBLIC_INDEX]) {
+      expect(screen.getAllByText(path)).toHaveLength(1);
+    }
+  });
+
+  it("with the request failed, no grouping and no files prints No changed files and no notice", () => {
+    hookData.smartDiff = { data: undefined, isError: true };
+    renderTab({ ...PR, files: [], files_count: 0, additions: 0, deletions: 0 });
+
+    expect(screen.getByText("No changed files.")).toBeInTheDocument();
+    expect(screen.queryByText("Grouping is unavailable — showing the original order")).not.toBeInTheDocument();
+    expect(queryGroupHeaders()).toHaveLength(0);
+  });
+
   it("with no files prints No changed files and no group header", () => {
     hookData.smartDiff = { data: fullResponse(), isError: false };
     renderTab({ ...PR, files: [], files_count: 0, additions: 0, deletions: 0 });

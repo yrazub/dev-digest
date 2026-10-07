@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
 import type { FindingRecord, PrFile, ReviewRecord, SmartDiffGroup } from "@devdigest/shared";
-import { countedInDiff, findingsOfLatestReviews, groupFindingMark, joinGroups } from "./helpers";
+import {
+  countedInDiff,
+  diffBodyMode,
+  findingsOfLatestReviews,
+  groupFindingMark,
+  joinGroups,
+  type DiffBodyMode,
+} from "./helpers";
 
 function finding(id: string, over: Partial<FindingRecord> = {}): FindingRecord {
   return {
@@ -126,6 +133,29 @@ describe("countedInDiff", () => {
     ];
     expect(countedInDiff(list, files)).toBe(1);
     expect(countedInDiff([], files)).toBe(0);
+  });
+});
+
+// Spec "States": exactly one body is rendered, chosen by `diffBodyMode` from the order, the
+// query's error flag, whether grouping data exists and the number of files.
+describe("diffBodyMode", () => {
+  type Input = Parameters<typeof diffBodyMode>[0];
+  const cases: [string, Input, DiffBodyMode][] = [
+    ["original order wins over an error, data and files", { order: "original", isError: true, hasData: true, fileCount: 3 }, "flat"],
+    ["original order, no error, no data", { order: "original", isError: false, hasData: false, fileCount: 3 }, "flat"],
+    ["original order with no files", { order: "original", isError: true, hasData: true, fileCount: 0 }, "flat"],
+    ["smart, data and files", { order: "smart", isError: false, hasData: true, fileCount: 3 }, "groups"],
+    ["smart, data and files, refetch failed (stale data wins over the error)", { order: "smart", isError: true, hasData: true, fileCount: 3 }, "groups"],
+    ["smart, data but no files", { order: "smart", isError: false, hasData: true, fileCount: 0 }, "flat"],
+    ["smart, data with an error but no files", { order: "smart", isError: true, hasData: true, fileCount: 0 }, "flat"],
+    ["smart, error without data", { order: "smart", isError: true, hasData: false, fileCount: 3 }, "unavailable"],
+    ["smart, still loading with files", { order: "smart", isError: false, hasData: false, fileCount: 3 }, "pending"],
+    ["smart, still loading with no files", { order: "smart", isError: false, hasData: false, fileCount: 0 }, "flat"],
+    ["smart, error without data and no files (no notice above an empty list)", { order: "smart", isError: true, hasData: false, fileCount: 0 }, "flat"],
+  ];
+
+  it.each(cases)("%s", (_name, input, expected) => {
+    expect(diffBodyMode(input)).toBe(expected);
   });
 });
 

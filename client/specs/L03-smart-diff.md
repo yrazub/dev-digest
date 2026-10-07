@@ -97,7 +97,7 @@ interface DiffFindingApi {
 | `FileCard` | accepts `findings` and an optional `defaultOpen`; header dot; passes each line its findings; renders the unanchored block |
 | `CodeLine` | stripe, tag, and the cards under the line |
 | `DiffViewer` | passes `findings` and `defaultOpen` through |
-| `index.ts` | exports the `DiffFindingApi` type |
+| `index.ts` | exports the `DiffFindingApi` type, and `isCounted` and `mostSevere`, so that the route computes the group counter and the switch number from the same rule the viewer uses for the dot, the stripe and the tag |
 
 With the prop absent, `diff-viewer` renders exactly as today.
 
@@ -120,7 +120,16 @@ and leaves the dots, counters, stripes and tags.
 | State | Rendering |
 |---|---|
 | Smart-diff loading | `Skeleton` rows in place of the groups; the totals row and the switch are already there |
-| Smart-diff failed | the flat list (as Original order) with one muted line `smartDiff.groupingUnavailable`; the tab never becomes unusable because grouping failed |
+| Smart-diff failed, no grouping loaded | the flat list (as Original order) with one muted line `smartDiff.groupingUnavailable`; the tab never becomes unusable because grouping failed |
+| Smart-diff refetch failed, a grouping already loaded | the groups stay as they are, with no notice: a failed background refresh does not discard the grouping the user is reading |
+
+Exactly one body is rendered at a time. The choice is one pure function, `diffBodyMode` in
+`DiffTab/helpers.ts`, that returns `flat`, `pending`, `groups` or `unavailable` from the order,
+the query's error flag, whether grouping data exists and the number of files; the section
+label, the notice line and the body all follow from that one value.
+
+| State | Rendering |
+|---|---|
 | No files | the existing "No changed files." |
 | No review yet (C3) | one muted line `smartDiff.noReviewYet` under the totals row; no dots and no counters, since a zero is never rendered |
 | Review in flight | nothing special; the marks appear when the run ends, on any tab (C4, Q5) |

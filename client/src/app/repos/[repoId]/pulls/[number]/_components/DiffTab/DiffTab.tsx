@@ -13,7 +13,7 @@ import { InlineFinding } from "./_components/InlineFinding";
 import { OrderSwitch, type FilesOrder } from "./_components/OrderSwitch";
 import { RoleGroup } from "./_components/RoleGroup";
 import { SKELETON_ROW_KEYS } from "./constants";
-import { countedInDiff, findingsOfLatestReviews, joinGroups } from "./helpers";
+import { countedInDiff, diffBodyMode, findingsOfLatestReviews, joinGroups } from "./helpers";
 import { s } from "./styles";
 
 interface DiffTabProps {
@@ -52,11 +52,13 @@ export function DiffTab({ prId, pr, repoFullName, canComment }: DiffTabProps) {
     [smartDiff.data, pr.files],
   );
   const groups = joined?.groups.filter((g) => g.files.length > 0) ?? [];
-  const smart = order === "smart";
-  const groupingFailed = smart && smartDiff.isError;
-  const groupingPending = smart && !smartDiff.isError && !smartDiff.data && pr.files.length > 0;
-  const showGroups = smart && !!joined && pr.files.length > 0;
-  const showFlat = !smart || groupingFailed || pr.files.length === 0;
+  // One mode drives the label, the notice and the body, so they cannot disagree.
+  const mode = diffBodyMode({
+    order,
+    isError: smartDiff.isError,
+    hasData: !!joined,
+    fileCount: pr.files.length,
+  });
   const switchCount = (comments?.length ?? 0) + countedInDiff(shownFindings, pr.files);
 
   const headSha = pr.head_sha;
@@ -110,7 +112,7 @@ export function DiffTab({ prId, pr, repoFullName, canComment }: DiffTabProps) {
           ) : undefined
         }
       >
-        {t(showGroups && groups.length > 0 ? "smartDiff.groupedByRole" : "smartDiff.filesChanged")}
+        {t(mode === "groups" && groups.length > 0 ? "smartDiff.groupedByRole" : "smartDiff.filesChanged")}
       </SectionLabel>
       <div style={s.totalsRow}>
         <p style={s.totals}>
@@ -123,16 +125,16 @@ export function DiffTab({ prId, pr, repoFullName, canComment }: DiffTabProps) {
         <OrderSwitch value={order} onChange={handleOrderChange} />
       </div>
       {reviews?.length === 0 ? <p style={s.notice}>{t("smartDiff.noReviewYet")}</p> : null}
-      {groupingFailed ? <p style={s.notice}>{t("smartDiff.groupingUnavailable")}</p> : null}
-      {groupingPending ? (
+      {mode === "unavailable" ? <p style={s.notice}>{t("smartDiff.groupingUnavailable")}</p> : null}
+      {mode === "pending" ? (
         <div style={s.skeletonList}>
           {SKELETON_ROW_KEYS.map((key) => (
             <Skeleton key={key} height={38} />
           ))}
         </div>
       ) : null}
-      {showFlat ? <DiffViewer files={pr.files} commenting={commenting} findings={findings} /> : null}
-      {showGroups ? (
+      {mode === "flat" || mode === "unavailable" ? <DiffViewer files={pr.files} commenting={commenting} findings={findings} /> : null}
+      {mode === "groups" ? (
         <div style={s.groups}>
           {groups.map((g) => (
             <RoleGroup
