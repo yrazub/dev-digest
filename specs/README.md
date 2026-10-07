@@ -20,8 +20,8 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | [`agents-lab-plan.md`](agents-lab-plan.md) | approved |
 | [`L03-intent-layer.md`](L03-intent-layer.md) | implemented |
 | [`L03-intent-layer-plan.md`](L03-intent-layer-plan.md) | done |
-| [`L03-smart-diff.md`](L03-smart-diff.md) | draft |
-| [`L03-smart-diff-plan.md`](L03-smart-diff-plan.md) | approved |
+| [`L03-smart-diff.md`](L03-smart-diff.md) | implemented |
+| [`L03-smart-diff-plan.md`](L03-smart-diff-plan.md) | done |
 
 The lesson roadmap (L01–L08) is in the root [`README.md`](../README.md).
 When you add a spec, add a row above.

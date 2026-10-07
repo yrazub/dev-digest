@@ -146,6 +146,7 @@ checking its status. (Read from the code, not reproduced; see `../INSIGHTS.md` �
 |---|---|
 | `reviews` | `agent_runs` · `run_traces` · `reviews` · `findings` · `pull_requests` (review freshness only) |
 | `intent` | `pr_intent` (reads `pull_requests` · `repos` · `pr_files` and the `feature_models` key of `settings`) |
+| `smart-diff` | nothing — read-only (reads `pull_requests` · `pr_files` · `reviews` · `findings`; no GitHub, no model call) |
 | `pulls` | `pull_requests` · `pr_files` · `pr_commits` (GitHub import and backfill) |
 | `polling` | `pull_requests` · `repos` |
 | `repos` | `repos` |
@@ -153,10 +154,17 @@ checking its status. (Read from the code, not reproduced; see `../INSIGHTS.md` �
 | `agents` | `agents` · `agent_versions` · `agent_skills` |
 | `settings` | `settings` |
 
-Two read models sit on top:
+Three read models sit on top:
 
 - **Per run**, the timeline reads the summary columns on `agent_runs` and never joins `findings`.
 - **Per PR**, `GET /repos/:id/pulls` computes on read: the latest review's `score`; the **total**
   cost of completed runs; and the latest completed run's findings breakdown plus its finding
   preview. The rules are in [`../specs/L01-run-cost.md`](../specs/L01-run-cost.md) and
   [`../specs/L01-findings-counter.md`](../specs/L01-findings-counter.md).
+- **Per PR file list**, `GET /pulls/:id/smart-diff` groups the stored `pr_files` by role on read and
+  marks the lines of the counted findings (the newest review of each agent, dismissed ones left out).
+  It never reaches GitHub, so it works before the first review and on whatever the last import
+  stored. `pr_files` has no position column and is read without an `ORDER BY`, so the domain sorts
+  the files of each group by path. The route is in [`../README.md`](../README.md) → "API map"; the
+  classifier is explained in
+  [`../src/modules/_shared/file-role/README.md`](../src/modules/_shared/file-role/README.md).

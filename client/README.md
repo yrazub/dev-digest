@@ -33,7 +33,7 @@ flowchart TD
   SETTINGS["/settings/:section<br/>API keys · models"]
 
   PULLS -->|"GET /repos/:id/pulls · /repos/:id/index-state"| API
-  PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments · /pulls/:id/intent<br/>POST /pulls/:id/review · /pulls/:id/intent · /findings/:id/(accept|dismiss)"| API
+  PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments · /pulls/:id/intent · /pulls/:id/smart-diff<br/>POST /pulls/:id/review · /pulls/:id/intent · /findings/:id/(accept|dismiss)"| API
   AGENTS -->|"/agents · /agents/:id · /agents/:id/skills"| API
   SKILLS -->|"/skills · /skills/:id/versions · /skills/import/(file|url)"| API
   CONV -->|"/repos/:id/conventions · /extract · /skill-draft · /skill<br/>PATCH /conventions/:id"| API
@@ -51,6 +51,28 @@ The PR page (`/repos/:repoId/pulls/:number`) also shows the PR's derived intent 
 - **`FindingCard`** shows an *Outside PR scope* badge on a finding the reviewer tagged
   `out_of_scope` (with the filter on, only a serious one survives).
 - **The run trace drawer** adds a badge with the number of out-of-scope findings filtered.
+
+The **Files changed** tab (`?tab=diff`, `DiffTab`) is the Smart Diff view (L03):
+
+- **Groups by role.** Files sit under five headers in the order the API returns them — Core,
+  Tests, Wiring, Docs, Boilerplate — each with a one-line hint and its file count; a role with no
+  file has no header. Docs and Boilerplate start collapsed, with their file cards collapsed too. A
+  file the grouping response does not mention is listed after the last group, so none disappears.
+- **Findings inside the diff.** The tab draws the findings of the newest review of each agent: a
+  dot on the file card, a coloured stripe and a severity word (`blocker`, `warning`, `suggestion`)
+  on the line, the `FindingCard` under its line with Accept and Dismiss, and a **Findings outside
+  the diff** block at the end of a file for a finding whose line is not in the patch. A dismissed
+  finding keeps its card but stops counting. Each group header shows how many of its files have a
+  counted finding.
+- **One switch** — *Hide comments (N)* / *Show comments (N)*, with N the GitHub comments plus the
+  counted findings of the PR's files — hides the GitHub threads and the finding cards together;
+  dots, stripes and tags stay. It appears only when N is above 0.
+- **Order.** **Smart order** (default) or **Original order**; the choice is `?order=original` in the
+  URL (see [`docs/ui-architecture.md`](docs/ui-architecture.md) → "URL state"). If the grouping
+  request fails, the tab shows the flat list with a muted line saying so. A PR with no review shows
+  a muted *No review has run yet* line.
+- **Fresh after a run.** The marks refresh when a run ends, on any tab, and after Accept, Dismiss
+  and deleting a review or a run ([`docs/data-flow.md`](docs/data-flow.md)).
 
 Cross-cutting chrome lives in `src/components/app-shell` (nav, breadcrumbs,
 `g`-then-key shortcuts). Pages are thin; feature logic sits in colocated

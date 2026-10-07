@@ -15,6 +15,7 @@
 | run cost, or the findings counter/popover data | `specs/L01-run-cost.md` · `specs/L01-findings-counter.md` |
 | repo indexing, symbols, the import graph, or the repo map | `src/modules/repo-intel/README.md` |
 | a PR's derived intent — the classifier call, its sources, confidence, cache key or failures | `src/modules/intent/README.md` |
+| a changed file's role, or the Smart Diff grouping (`GET /pulls/:id/smart-diff`) | `src/modules/_shared/file-role/README.md`, then `README.md` — API map |
 | any test | `../TESTING.md` |
 | a failure that smells familiar | `INSIGHTS.md` — and **append** to it through the `engineering-insights` skill |
 
