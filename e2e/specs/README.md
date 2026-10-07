@@ -15,6 +15,7 @@ are the executable acceptance criteria, so there is no separate prose spec here.
 | `07-settings.flow.json` | settings sections |
 | `08-skills.flow.json` | create a skill, link it to an agent, the link persists |
 | `10-pr-intent.flow.json` | the seeded Intent card on the Overview and Agent runs tabs, with no model call |
+| `11-pr-smart-diff.flow.json` | the Files changed tab grouped by role on the seeded nine files: five group hints, the seeded finding under `src/config.ts`, the Boilerplate group opening onto `package-lock.json`, and the round trip through `?order=original` (read-only, no model call) |
 
 Read [`../README.md`](../README.md) before adding one — locator rules and the
 seeded-data precondition are not optional.
