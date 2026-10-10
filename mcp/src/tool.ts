@@ -41,6 +41,16 @@ export function sanitizeText(text: string, max: number): string {
   return collapsed.length > max ? `${collapsed.slice(0, Math.max(0, max - 1))}…` : collapsed;
 }
 
+/** Cuts at `max` characters with an ellipsis; leaves whitespace and content alone otherwise. */
+export function cutText(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, Math.max(0, max - 1))}…` : text;
+}
+
+/** Lets a numeric argument also arrive as a whole-number string ("482"); the listed schema stays the inner one. */
+export function acceptNumericString<T extends z.ZodTypeAny>(schema: T): z.ZodEffects<T, z.output<T>, unknown> {
+  return z.preprocess((value) => (typeof value === 'string' && /^\s*\d+\s*$/.test(value) ? Number(value) : value), schema);
+}
+
 function describeIssues(error: z.ZodError): string {
   return error.issues
     .map((issue) => {

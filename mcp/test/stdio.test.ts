@@ -1,3 +1,5 @@
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { SERVER_INSTRUCTIONS } from '../src/constants.js';
 import { isAlive, readMcpJsonEntry, startServer, waitFor, type RunningServer } from './helpers/stdio-server.js';
@@ -9,8 +11,8 @@ async function stopAll(): Promise<void> {
   await Promise.all(running.splice(0).map((server) => server.stop()));
 }
 
-async function start(): Promise<RunningServer> {
-  const server = await startServer();
+async function start(opts: { apiUrl?: string } = {}): Promise<RunningServer> {
+  const server = await startServer(opts);
   running.push(server);
   return server;
 }
@@ -97,6 +99,41 @@ describe('devdigest-mcp over stdio, started as .mcp.json starts it', () => {
     expect(content[0]?.text).not.toContain('not implemented');
   });
 
+  it('lists the three read tools as read-only with their flat schemas and no outputSchema', async () => {
+    const { tools } = await server.client.listTools();
+
+    const byName = new Map(tools.map((t) => [t.name, t]));
+    for (const name of ['list_agents', 'get_findings', 'get_conventions']) {
+      const tool = byName.get(name);
+      expect(tool, name).toBeDefined();
+      expect(tool?.annotations?.readOnlyHint, name).toBe(true);
+      expect(tool?.outputSchema, name).toBeUndefined();
+      expect((tool?.inputSchema as { additionalProperties?: boolean }).additionalProperties, name).toBe(false);
+    }
+    expect(Object.keys((byName.get('list_agents')?.inputSchema as { properties?: object }).properties ?? {})).toEqual([]);
+    const findings = byName.get('get_findings')?.inputSchema as {
+      required?: string[];
+      properties: Record<string, { type?: string; enum?: string[] }>;
+    };
+    expect(findings.required?.slice().sort()).toEqual(['pr', 'repo']);
+    expect(Object.keys(findings.properties).sort()).toEqual(['limit', 'min_severity', 'pr', 'repo', 'run_id']);
+    expect(findings.properties.pr?.type).toBe('integer');
+    expect(findings.properties.min_severity?.enum).toEqual(['CRITICAL', 'WARNING', 'SUGGESTION']);
+    const conventions = byName.get('get_conventions')?.inputSchema as { properties: Record<string, { enum?: string[] }> };
+    expect(conventions.properties.status?.enum).toEqual(['pending', 'accepted']);
+  });
+
+  it('list_agents against a closed port answers isError with E-API-UNREACHABLE naming the URL and ./scripts/dev.sh', async () => {
+    const result = await server.client.callTool({ name: 'list_agents', arguments: {} });
+
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content).toHaveLength(1);
+    expect(content[0]?.text).toMatch(/not reachable at http:\/\/127\.0\.0\.1:\d+/);
+    expect(content[0]?.text).toContain('./scripts/dev.sh');
+    expect(isAlive(server.pid)).toBe(true);
+  });
+
   it('reported no transport or parse error during the session, and stderr got the ready line', async () => {
     const ready = await waitFor(() => server.stderr().includes('devdigest-mcp ready'), 2_000);
 
@@ -121,5 +158,90 @@ describe('shutdown', () => {
     expect(gone).toBe(true);
     expect(Date.now() - startedAt).toBeLessThan(2_000);
     expect(server.errors.map((e) => e.message)).toEqual([]);
+  });
+});
+
+describe('devdigest-mcp over stdio against a local API stub', () => {
+  const SYSTEM_PROMPT = `You are a ruthless reviewer. ${'X'.repeat(5_000)}`;
+  const requests: Array<{ method?: string; url?: string }> = [];
+  let stub: http.Server;
+  let server: RunningServer;
+
+  beforeAll(async () => {
+    stub = http.createServer((req, res) => {
+      requests.push({ method: req.method, url: req.url });
+      if (req.method === 'GET' && req.url === '/agents') {
+        const agent = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
+          id,
+          name,
+          description: `${name} description`,
+          provider: 'openai',
+          model: 'gpt-4.1',
+          system_prompt: 'short prompt',
+          enabled: true,
+          version: 1,
+          strategy: 'single-pass',
+          ci_fail_on: 'critical',
+          repo_intel: true,
+          skill_count: 0,
+          ...extra,
+        });
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(
+          JSON.stringify([
+            agent('agent-security', 'Security Reviewer', { system_prompt: SYSTEM_PROMPT }),
+            agent('agent-general', 'General Reviewer'),
+          ]),
+        );
+        return;
+      }
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { code: 'not_found', message: 'no such route' } }));
+    });
+    await new Promise<void>((resolve) => stub.listen(0, '127.0.0.1', resolve));
+    const { port } = stub.address() as AddressInfo;
+    server = await start({ apiUrl: `http://127.0.0.1:${port}` });
+  });
+
+  afterAll(async () => {
+    await stopAll();
+    await new Promise<void>((resolve) => {
+      stub.close(() => resolve());
+      stub.closeAllConnections();
+    });
+  });
+
+  it('list_agents returns both ids and names and never the system prompt', async () => {
+    const result = await server.client.callTool({ name: 'list_agents', arguments: {} });
+
+    expect(result.isError).toBeUndefined();
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content).toHaveLength(1);
+    const text = content[0]?.text ?? '';
+    const agents = (JSON.parse(text) as { agents: Array<{ id: string; name: string }> }).agents;
+    expect(agents.map((a) => [a.id, a.name])).toEqual([
+      ['agent-general', 'General Reviewer'],
+      ['agent-security', 'Security Reviewer'],
+    ]);
+    expect(text).not.toContain('You are a ruthless reviewer');
+    expect(text).not.toContain('system_prompt');
+    expect(text.length).toBeLessThan(1_000);
+  });
+
+  it('asked the stub for GET requests only', () => {
+    expect(requests.length).toBeGreaterThan(0);
+    expect(requests.map((r) => r.method)).toEqual(requests.map(() => 'GET'));
+    expect(requests.map((r) => r.url)).toContain('/agents');
+  });
+
+  it('answers a repository the stub does not know with isError (the API said 404), not by crashing', async () => {
+    const result = await server.client.callTool({ name: 'get_conventions', arguments: { repo: 'acme/payments-api' } });
+
+    expect(result.isError).toBe(true);
+    const text = (result.content as Array<{ text: string }>)[0]?.text ?? '';
+    expect(text).toContain('The DevDigest API answered 404');
+    expect(text).toContain('GET /repos');
+    expect(isAlive(server.pid)).toBe(true);
+    expect(requests.every((r) => r.method === 'GET')).toBe(true);
   });
 });

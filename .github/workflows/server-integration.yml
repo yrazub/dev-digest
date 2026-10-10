@@ -15,10 +15,14 @@ on:
     branches: [main]
     paths:
       - 'server/**'
+      - 'mcp/**'
+      - '.mcp.json'
       - '.github/workflows/server-integration.yml'
   pull_request:
     paths:
       - 'server/**'
+      - 'mcp/**'
+      - '.mcp.json'
       - '.github/workflows/server-integration.yml'
 
 permissions:
@@ -55,6 +59,13 @@ jobs:
       # deps so those resolve at module load. reviewer-core uses npm (see reviewer-core.yml).
       - name: Install reviewer-core deps
         working-directory: reviewer-core
+        run: npm ci
+
+      # test/mcp-stdio.it.test.ts spawns the devdigest-mcp server from the root .mcp.json
+      # (node mcp/bin/devdigest-mcp.mjs), so mcp/'s dependencies must be installed. mcp uses
+      # npm (see mcp.yml); no main script installs it.
+      - name: Install mcp deps
+        working-directory: mcp
         run: npm ci
 
       # Inlined rather than `pnpm test:integration`: server/package.json is

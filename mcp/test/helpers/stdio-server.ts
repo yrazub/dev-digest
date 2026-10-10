@@ -59,16 +59,17 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Spawns exactly the `command` + `args` of the `.mcp.json` entry from the repository root,
- * with the test's environment plus `DEVDIGEST_API_URL` on a closed port, and connects the SDK client.
+ * with the test's environment plus `DEVDIGEST_API_URL` (a closed port unless `apiUrl` is given),
+ * and connects the SDK client.
  */
-export async function startServer(): Promise<RunningServer> {
+export async function startServer(opts: { apiUrl?: string } = {}): Promise<RunningServer> {
   const entry = readMcpJsonEntry();
-  const port = await closedLocalPort();
+  const apiUrl = opts.apiUrl ?? `http://127.0.0.1:${await closedLocalPort()}`;
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined) env[key] = value;
   }
-  Object.assign(env, entry.env ?? {}, { DEVDIGEST_API_URL: `http://127.0.0.1:${port}` });
+  Object.assign(env, entry.env ?? {}, { DEVDIGEST_API_URL: apiUrl });
 
   const transport = new StdioClientTransport({
     command: entry.command,

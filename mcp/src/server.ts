@@ -3,10 +3,18 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { SERVER_INSTRUCTIONS, SERVER_NAME, SERVER_VERSION } from './constants.js';
 import { getBlastRadius } from './tools/get-blast-radius.js';
+import { getConventions } from './tools/get-conventions.js';
+import { getFindings } from './tools/get-findings.js';
+import { listAgents } from './tools/list-agents.js';
 import { executeTool, type ToolContext, type ToolDef, type ToolDeps } from './tool.js';
 
-/** In call order; the other four tools are added in later phases. */
-export const TOOLS: readonly ToolDef[] = [getBlastRadius as unknown as ToolDef];
+/** In call order; `run_agent_on_pr` is added in a later phase, between `list_agents` and `get_findings`. */
+export const TOOLS: readonly ToolDef[] = [
+  listAgents as unknown as ToolDef,
+  getFindings as unknown as ToolDef,
+  getConventions as unknown as ToolDef,
+  getBlastRadius as unknown as ToolDef,
+];
 
 export function createMcpServer(deps: ToolDeps): McpServer {
   const server = new McpServer(
