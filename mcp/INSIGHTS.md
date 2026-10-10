@@ -36,3 +36,4 @@ Traps we have already hit in the local MCP server. Append-only. See the root
 ## Session Notes
 
 - **2026-10-10** — L04 part 1, `devdigest-mcp`, through the full agent chain: plan revision 3 after the lab page was read, six phases, two Inspector checks, architecture review with three suggestions and a fix round. 271 hermetic tests. Not done at this point: the real-API test never executed (Docker down) — see `../server/INSIGHTS.md`, Open Questions.
+- **2026-10-10** — later the same day: Docker was restarted and the real-API test ran and passed (18 tests); `plan-verifier` then found three tool texts that differed from the spec's catalogue without being recorded (the E-PR-UNKNOWN variant with no stored PR, the adaptive truncation note, a third `get_conventions` note). The code was kept and the spec now states them.

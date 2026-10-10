@@ -322,6 +322,7 @@ scalar or an enum. Only `repo`, `pr`, `agent` and `run_id` carry a description.
 - Output, `done`: the review result below, plus `"attached": true` when it joined an in-flight run.
 - Output, still `running` after the wait (not an error, so the caller does not retry the write): `{"status":"running","run_id","agent","waited_seconds","next":"The review is still running. Do not call run_agent_on_pr again. Call get_findings with repo \"<repo>\", pr <n>, run_id \"<id>\" in about 30 seconds."}`.
 - Errors: E-REPO-FORMAT, E-REPO-UNKNOWN, E-PR-UNKNOWN, E-AGENT-UNKNOWN, E-AGENT-AMBIGUOUS, E-RUN-FAILED, E-RUN-CANCELLED, E-RUN-NO-REVIEW, the API errors.
+- When the client cancels the call during the wait, the result is an error that is not in the catalogue: `The call was cancelled. Run <run_id> was not stopped; read it later with get_findings.` No further API call is made and the run is never cancelled.
 
 ### 3. `get_findings` — read-only
 
@@ -342,7 +343,7 @@ scalar or an enum. Only `repo`, `pr`, `agent` and `run_id` carry a description.
 
 - `findings`: dismissed findings are left out (the product's "counted findings" rule, `server/README.md:113-115`); sorted by severity, then `file`, then `line` (code-unit comparison); `line` is `start_line`; `end_line` appears only when it differs; `title`, `rationale`, `summary` are cut at their caps.
 - `counts`: every non-dismissed finding by severity, before `min_severity` and `limit`.
-- When `limit` cut the list: `"truncated": true` and `"note": "Showing <k> of <n> findings, most severe first. Call get_findings with run_id \"<id>\" and min_severity \"WARNING\", or a higher limit (max 50)."`.
+- When `limit` cut the list: `"truncated": true` and `"note": "Showing <k> of <n> findings, most severe first. Call get_findings with run_id \"<id>\" and min_severity \"WARNING\", or a higher limit (max 50)."`. That is the text for the default call; the advice adapts to the arguments so it never suggests a step that cannot help: `<n>` counts the findings left after `min_severity`; the suggested severity is the next one up (`WARNING` with no filter, `CRITICAL` when the filter is `WARNING`, none when it is already `CRITICAL`); `run_id` is left out when the review has none; "or a higher limit" is left out when the limit is already 50.
 - `verdict` is the shared `Verdict` enum; `run_id`, `agent`, `verdict`, `score`, `summary` may be `null` (the seeded review has no agent).
 - Dropped from `ReviewRecord` / `FindingRecord`: `id`, `pr_id`, `agent_id`, `model`, `grounding`, `review_id`, `category`, `suggestion`, `confidence`, `kind`, `scope`, `trifecta_components`, `evidence`, `accepted_at`, `dismissed_at`.
 
@@ -351,7 +352,7 @@ scalar or an enum. Only `repo`, `pr`, `agent` and `run_id` carry a description.
 - Description: `Return the coding conventions DevDigest extracted from a repository and the user accepted. Call it before writing or reviewing code in that repository.`
 - Input: `repo` (required) · `status` (enum `accepted` | `pending`, default `accepted`; derived from the shared `ConventionStatus` without `rejected`).
 - Output: `{"repo","status","conventions":[{"category","rule","evidence"}],"last_scan_at"}` in the API's order; `evidence` is `path:start` or `path:start-end`; at most 50, with a `note` when cut.
-- Notes instead of errors: nothing with the requested status but other candidates exist → `"No accepted conventions yet; <k> candidates are pending review in DevDigest (Skills Lab → Conventions). Call get_conventions with status \"pending\" to read them as unconfirmed proposals."`; never scanned → `"This repository has not been scanned for conventions. Run a scan in DevDigest (Skills Lab → Conventions), accept the rules that are right, then call get_conventions again."`.
+- Notes instead of errors: nothing with the requested status but other candidates exist → `"No accepted conventions yet; <k> candidates are pending review in DevDigest (Skills Lab → Conventions). Call get_conventions with status \"pending\" to read them as unconfirmed proposals."`; never scanned → `"This repository has not been scanned for conventions. Run a scan in DevDigest (Skills Lab → Conventions), accept the rules that are right, then call get_conventions again."`; scanned, with nothing of the requested status and nothing pending to point at (also `status: "pending"` with none pending) → `"No <status> conventions for this repository. Review the extracted rules in DevDigest (Skills Lab → Conventions)."`. When more than 50 match: `"Showing the first 50 of <n> conventions."`.
 - Dropped from `ConventionCandidate`: `id`, `evidence_snippet`, `evidence_url`, `confidence`, `status`.
 - Errors: E-REPO-FORMAT, E-REPO-UNKNOWN, the API errors.
 
@@ -369,7 +370,7 @@ Every error is a tool result with `isError: true` and one text block. Tests pin 
 |---|---|
 | E-REPO-FORMAT | `repo must be **"owner/name"**, for example "acme/payments-api". Got "<input>".` |
 | E-REPO-UNKNOWN | `Repository "<input>" is **not imported into DevDigest**. Imported repositories: **<up to 10 full names>**. Pass one of them exactly, or add the repository in the DevDigest UI first.` With none: `No repository is imported into DevDigest yet. Add one in the DevDigest UI, then retry.` |
-| E-PR-UNKNOWN | `Pull request **#<n>** is not imported for <repo>. Imported pull requests: **<up to 10 numbers, highest first>**. If it is new, open <repo> in the DevDigest UI so it is imported, then retry.` |
+| E-PR-UNKNOWN | `Pull request **#<n>** is not imported for <repo>. Imported pull requests: **<up to 10 numbers, highest first>**. If it is new, open <repo> in the DevDigest UI so it is imported, then retry.` When no pull request is stored for the repository, the middle sentence is `No pull requests are imported for it yet.` |
 | E-AGENT-UNKNOWN | `Agent "<input>" was not found. **Call list_agents** and pass one of its id values.` |
 | E-AGENT-AMBIGUOUS | `"<input>" matches <k> agents. **Pass the id** instead: <id> (<name>), …` |
 | E-NO-REVIEW | `<repo>#<n> has no finished review. Call list_agents, then **run_agent_on_pr** to create one.` |
@@ -433,16 +434,16 @@ separately: `pnpm exec vitest run --exclude '**/*.it.test.ts'` and
 Package-level checklist; the cross-package one is in
 [`../../specs/L04-devdigest-mcp.md`](../../specs/L04-devdigest-mcp.md).
 
-- [ ] `cd mcp && npm ci && npm run typecheck && npm test` pass; `mcp/` holds `package-lock.json` and no pnpm file.
-- [ ] `npm ls zod` shows one Zod (3.25.x), and `assertSingleZod()` passes under vitest and through the launcher.
-- [ ] `node mcp/bin/devdigest-mcp.mjs` starts the server from the repository root, from `mcp/` and from an unrelated directory; without installed dependencies it exits 1 and says `cd mcp && npm ci`.
-- [ ] `tools/list` holds exactly `list_agents`, `run_agent_on_pr`, `get_findings`, `get_conventions`, `get_blast_radius`, in that order, with flat inputs and no `outputSchema`; the `tools/list` result is at most 4,000 characters and `instructions` at most 500.
-- [ ] `HttpDevDigestApi` and `MockDevDigestApi` both `implements DevDigestApi`; `API_ROUTES` has eight entries and one write; `fetch` is called in `src/api-client.ts` only.
-- [ ] Nothing but JSON-RPC appears on stdout; logging goes to stderr.
-- [ ] `get_blast_radius` answers E-BLAST and makes no API call.
-- [ ] `server/test/mcp-stdio.it.test.ts` ran, not skipped.
-- [ ] No file under `server/src/`, `scripts/`, `client/`, `reviewer-core/` or `e2e/` changed.
-- [ ] The "SDK compatibility record" and the "Inspector record" below are filled.
+- [x] `cd mcp && npm ci && npm run typecheck && npm test` pass; `mcp/` holds `package-lock.json` and no pnpm file.
+- [x] `npm ls zod` shows one Zod (3.25.x), and `assertSingleZod()` passes under vitest and through the launcher.
+- [x] `node mcp/bin/devdigest-mcp.mjs` starts the server from the repository root, from `mcp/` and from an unrelated directory; without installed dependencies it exits 1 and says `cd mcp && npm ci`.
+- [x] `tools/list` holds exactly `list_agents`, `run_agent_on_pr`, `get_findings`, `get_conventions`, `get_blast_radius`, in that order, with flat inputs and no `outputSchema`; the `tools/list` result is at most 4,000 characters and `instructions` at most 500.
+- [x] `HttpDevDigestApi` and `MockDevDigestApi` both `implements DevDigestApi`; `API_ROUTES` has eight entries and one write; `fetch` is called in `src/api-client.ts` only.
+- [x] Nothing but JSON-RPC appears on stdout; logging goes to stderr.
+- [x] `get_blast_radius` answers E-BLAST and makes no API call.
+- [x] `server/test/mcp-stdio.it.test.ts` ran, not skipped.
+- [x] No file under `server/src/`, `scripts/`, `client/`, `reviewer-core/` or `e2e/` changed.
+- [x] The "SDK compatibility record" and the "Inspector record" below are filled.
 
 ## SDK compatibility record
 

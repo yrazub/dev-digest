@@ -158,9 +158,11 @@ The server command comes right after `--cli`, before `--method`. A call that nee
 `--help` first if you use another one.
 
 What the record has verified: `tools/list` for all five tools (order, annotations, flat closed
-input schemas, no `outputSchema`) and the stub call. The calls that need the API were not
-verified against a healthy API in that run, because the developer API answered `500` while its
-database was down.
+input schemas, no `outputSchema`) and the stub call. The calls that need the API were then repeated
+against a healthy developer API with the seeded database, read-only calls only: `list_agents`,
+`get_findings`, `get_conventions`, and the unknown-agent and unknown-PR errors. `run_agent_on_pr`
+with a real agent was not called from Inspector, because it starts a paid run; the server's
+integration test covers it with a mock model.
 
 ## Connect it to Claude Code
 

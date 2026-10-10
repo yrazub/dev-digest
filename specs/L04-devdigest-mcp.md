@@ -147,32 +147,32 @@ one, and the stub says outright that no data exists.
 
 | # | Lab statement | Plan item | Status |
 |---|---|---|---|
-| 1 | One more entry point: Claude Code in the terminal, or any MCP client | A stdio server; the `.mcp.json` entry; the manual acceptance | planned — phases 3, 6 |
-| 2 | "A thin local wrapper over the Fastify API" | D2, D19, P17 | planned — phases 4–6 |
-| 3 | "It does not start together with the whole application" | D16, D18; nothing under `scripts/` changes | planned — changed in revision 3 |
-| 4 | "Contains no copy of the business logic" | D2: the tools resolve names, project fields, sort and cap. One product rule is mirrored on purpose — dismissed findings are not shown (`server/README.md:113-115`) | planned, with that note |
-| 5 | A local MCP server in TypeScript over stdio | D7, D8 | planned — phases 2, 3 |
-| 6 | Four working tools and one interface for the next step | Phases 5 and 6; the stub in phase 3 | planned |
-| 7 | `list_agents` returns the configured reviewer agents | Tool 1 | planned — phase 5 |
-| 8 | `run_agent_on_pr` starts a review and returns the result after it completes | Tool 2, D4, D20; a run longer than the 120 s wait returns `status: "running"` with the next step | planned — phase 6 |
-| 9 | `get_findings` gives the concise structured verdict of a finished run | Tool 3, the review result | planned — phase 5 |
-| 10 | `get_conventions` returns the repository conventions from L02 | Tool 4, D11 | planned — phase 5 |
-| 11 | `get_blast_radius` may be an honest stub | Tool 5, D10 | planned — phase 3 |
-| 12 | A separate launch, independent of the main scripts | L1 | planned — phases 2, 3 |
-| 13 | Verification through MCP Inspector, then connecting it to Claude Code | L2 | planned — after phases 3 and 6, then the manual acceptance |
-| 14 | `list_prs` and `list_repos` are not added; `list_agents` stays | Exactly five tools, asserted by the stdio test; unknown repos and PRs are answered by an error that lists the imported values, not by a tool | planned — phase 6 |
-| 15 | A short description explains when to call the tool | The five descriptions; at most 240 characters each | planned — phase 6 |
-| 16 | The arguments have a clear schema | R2, P3; flat shapes, checked over stdio and in Inspector | planned — phase 6 |
-| 17 | The response is structured and contains nothing extra | R3, P6, D6 | planned — phase 5 |
-| 18 | An error suggests the next step | R4, the error catalogue | planned — phases 3–6 |
-| 19 | Read tools have `readOnlyHint: true` | P12 | planned — phase 6 |
-| 20 | The domain code limits the real permissions | L3, D19 | planned — added in revision 3 |
-| 21 | Scenario: Claude Code goes through `list_agents → run_agent_on_pr → get_findings` | D20 and "The lab's scenario": the sequence is the generic path; shorter paths are valid (user decision) | planned — manual acceptance covers the short and the full path |
-| 22 | The answer contains DevDigest's actual findings, not the model's assumptions | Results are the API's data projected without rewriting; the stub and every not-found case are errors | planned — manual acceptance |
-| 23 | Check: Inspector sees all five tools and correct schemas | The Inspector record after phase 6 | planned |
-| 24 | Check: `devdigest-mcp` starts with a separate command | L1; `mcp/test/single-zod.test.ts`, `mcp/test/stdio.test.ts` | planned — phases 2, 3 |
-| 25 | Check: Claude Code goes through the sequence | Manual acceptance | planned |
-| 26 | Check: for an unknown agent or PR the response suggests how to find a correct value | E-AGENT-UNKNOWN, E-PR-UNKNOWN; tests in phases 5 and 6 | planned |
+| 1 | One more entry point: Claude Code in the terminal, or any MCP client | A stdio server; the `.mcp.json` entry; the manual acceptance | implemented — phases 3, 6 |
+| 2 | "A thin local wrapper over the Fastify API" | D2, D19, P17 | implemented — phases 4–6 |
+| 3 | "It does not start together with the whole application" | D16, D18; nothing under `scripts/` changes | implemented — changed in revision 3 |
+| 4 | "Contains no copy of the business logic" | D2: the tools resolve names, project fields, sort and cap. One product rule is mirrored on purpose — dismissed findings are not shown (`server/README.md:113-115`) | implemented, with that note |
+| 5 | A local MCP server in TypeScript over stdio | D7, D8 | implemented — phases 2, 3 |
+| 6 | Four working tools and one interface for the next step | Phases 5 and 6; the stub in phase 3 | implemented |
+| 7 | `list_agents` returns the configured reviewer agents | Tool 1 | implemented — phase 5 |
+| 8 | `run_agent_on_pr` starts a review and returns the result after it completes | Tool 2, D4, D20; a run longer than the 120 s wait returns `status: "running"` with the next step | implemented — phase 6 |
+| 9 | `get_findings` gives the concise structured verdict of a finished run | Tool 3, the review result | implemented — phase 5 |
+| 10 | `get_conventions` returns the repository conventions from L02 | Tool 4, D11 | implemented — phase 5 |
+| 11 | `get_blast_radius` may be an honest stub | Tool 5, D10 | implemented — phase 3 |
+| 12 | A separate launch, independent of the main scripts | L1 | implemented — phases 2, 3 |
+| 13 | Verification through MCP Inspector, then connecting it to Claude Code | L2 | Inspector half done (see the Inspector record); the Claude Code connection awaits the manual acceptance |
+| 14 | `list_prs` and `list_repos` are not added; `list_agents` stays | Exactly five tools, asserted by the stdio test; unknown repos and PRs are answered by an error that lists the imported values, not by a tool | implemented — phase 6 |
+| 15 | A short description explains when to call the tool | The five descriptions; at most 240 characters each | implemented — phase 6 |
+| 16 | The arguments have a clear schema | R2, P3; flat shapes, checked over stdio and in Inspector | implemented — phase 6 |
+| 17 | The response is structured and contains nothing extra | R3, P6, D6 | implemented — phase 5 |
+| 18 | An error suggests the next step | R4, the error catalogue | implemented — phases 3–6 |
+| 19 | Read tools have `readOnlyHint: true` | P12 | implemented — phase 6 |
+| 20 | The domain code limits the real permissions | L3, D19 | implemented — added in revision 3 |
+| 21 | Scenario: Claude Code goes through `list_agents → run_agent_on_pr → get_findings` | D20 and "The lab's scenario": the sequence is the generic path; shorter paths are valid (user decision) | tools and tests done; the run in Claude Code awaits the manual acceptance |
+| 22 | The answer contains DevDigest's actual findings, not the model's assumptions | Results are the API's data projected without rewriting; the stub and every not-found case are errors | the projection is proven by tests; the model's answer awaits the manual acceptance |
+| 23 | Check: Inspector sees all five tools and correct schemas | The Inspector record after phase 6 | implemented |
+| 24 | Check: `devdigest-mcp` starts with a separate command | L1; `mcp/test/single-zod.test.ts`, `mcp/test/stdio.test.ts` | implemented — phases 2, 3 |
+| 25 | Check: Claude Code goes through the sequence | Manual acceptance | awaits the manual acceptance |
+| 26 | Check: for an unknown agent or PR the response suggests how to find a correct value | E-AGENT-UNKNOWN, E-PR-UNKNOWN; tests in phases 5 and 6 | implemented |
 | 27 | Token audit (`/context` figures, `ENABLE_TOOL_SEARCH`, `GITHUB_TOOLSETS`, `GITHUB_READ_ONLY`) and its two self-check items | — | **excluded** by the user: manual experiments, not part of the MCP feature |
 
 ## Ownership
@@ -220,53 +220,53 @@ package-level checklist is in the package spec.
 
 ### Phase 2 — scaffold, SDK check, launcher, one Zod
 
-- [ ] D14 — `mcp/` is installable with `npm ci` alone and holds `package-lock.json` and no pnpm file.
-- [ ] P19 — the SDK compatibility record names the installed SDK version (1.32.1 or a later 1.x), its Zod range and the import paths.
-- [ ] D15 — `npm ls zod` shows one Zod, and `assertSingleZod()` passes under vitest and through the launcher.
-- [ ] L1 — `node mcp/bin/devdigest-mcp.mjs` starts the entry from the repository root, from `mcp/` and from an unrelated directory, and nothing under `scripts/` changed.
-- [ ] D18 — without installed dependencies the launcher exits 1 and says `cd mcp && npm ci` on stderr.
-- [ ] `npm run typecheck` passes with `@devdigest/shared` resolved from `../server/src/vendor/shared`, and `mcp/CLAUDE.md` lists `npm ci`, `npm test`, `npm run typecheck` and the launch command.
+- [x] D14 — `mcp/` is installable with `npm ci` alone and holds `package-lock.json` and no pnpm file.
+- [x] P19 — the SDK compatibility record names the installed SDK version (1.32.1 or a later 1.x), its Zod range and the import paths.
+- [x] D15 — `npm ls zod` shows one Zod, and `assertSingleZod()` passes under vitest and through the launcher.
+- [x] L1 — `node mcp/bin/devdigest-mcp.mjs` starts the entry from the repository root, from `mcp/` and from an unrelated directory, and nothing under `scripts/` changed.
+- [x] D18 — without installed dependencies the launcher exits 1 and says `cd mcp && npm ci` on stderr.
+- [x] `npm run typecheck` passes with `@devdigest/shared` resolved from `../server/src/vendor/shared`, and `mcp/CLAUDE.md` lists `npm ci`, `npm test`, `npm run typecheck` and the launch command.
 
 ### Phase 3 — stdio skeleton, the stub, registration, CI, first Inspector check
 
-- [ ] P18 — the server started from the `.mcp.json` entry answers `initialize`, `tools/list` and a `tools/call` over stdio, with only `mcp/node_modules` needed.
-- [ ] P16 — nothing but JSON-RPC messages appears on stdout during that session, the startup line is on stderr, and `boundaries.test.ts` passes.
-- [ ] L1 — `.mcp.json`, the hand launch and the stdio test all start the same file, `mcp/bin/devdigest-mcp.mjs`.
-- [ ] D10 — `get_blast_radius` answers `isError: true` with E-BLAST and makes no API call.
-- [ ] P13, P14 — invalid arguments and an unexpected throw both come back as `isError` results, the latter with no message or stack of the original error.
-- [ ] `.github/workflows/mcp.yml` filters on `mcp/**`, `server/src/vendor/shared/**` and `.mcp.json`, and runs `npm ci`, `npm run typecheck`, `npm test`; `routing.json` routes `mcp/src/**/*.ts` to `security`.
-- [ ] The "SDK compatibility record" has every field filled.
-- [ ] L2 — the "Inspector record" holds an entry for this phase stating that Inspector connected through the launch command, listed `get_blast_radius` with `repo` and `pr` in its schema, and received the "not implemented" error.
+- [x] P18 — the server started from the `.mcp.json` entry answers `initialize`, `tools/list` and a `tools/call` over stdio, with only `mcp/node_modules` needed.
+- [x] P16 — nothing but JSON-RPC messages appears on stdout during that session, the startup line is on stderr, and `boundaries.test.ts` passes.
+- [x] L1 — `.mcp.json`, the hand launch and the stdio test all start the same file, `mcp/bin/devdigest-mcp.mjs`.
+- [x] D10 — `get_blast_radius` answers `isError: true` with E-BLAST and makes no API call.
+- [x] P13, P14 — invalid arguments and an unexpected throw both come back as `isError` results, the latter with no message or stack of the original error.
+- [x] `.github/workflows/mcp.yml` filters on `mcp/**`, `server/src/vendor/shared/**` and `.mcp.json`, and runs `npm ci`, `npm run typecheck`, `npm test`; `routing.json` routes `mcp/src/**/*.ts` to `security`.
+- [x] The "SDK compatibility record" has every field filled.
+- [x] L2 — the "Inspector record" holds an entry for this phase stating that Inspector connected through the launch command, listed `get_blast_radius` with `repo` and `pr` in its schema, and received the "not implemented" error.
 
 ### Phase 4 — the API port, its HTTP adapter and its mock
 
-- [ ] P17 — every API response is parsed through a view derived from a shared contract with `.pick()` / `.extend()`; `mcp/src/` declares no object schema of its own for an API shape.
-- [ ] L3 — the process can send only the eight requests of `API_ROUTES`, one of them a write; `HttpDevDigestApi` exposes no generic request; `fetch` is called in one file.
-- [ ] `HttpDevDigestApi` and `MockDevDigestApi` both declare `implements DevDigestApi`, and the mock lives in `mcp/src/mocks.ts`.
-- [ ] P14 — each failure mode of the HTTP boundary (unreachable, timeout, non-2xx, wrong shape) is an `ApiError` of the matching kind, and `waitForRun` never throws.
-- [ ] R4 — every `ApiError` kind maps to a catalogue text that names the next step.
+- [x] P17 — every API response is parsed through a view derived from a shared contract with `.pick()` / `.extend()`; `mcp/src/` declares no object schema of its own for an API shape.
+- [x] L3 — the process can send only the eight requests of `API_ROUTES`, one of them a write; `HttpDevDigestApi` exposes no generic request; `fetch` is called in one file.
+- [x] `HttpDevDigestApi` and `MockDevDigestApi` both declare `implements DevDigestApi`, and the mock lives in `mcp/src/mocks.ts`.
+- [x] P14 — each failure mode of the HTTP boundary (unreachable, timeout, non-2xx, wrong shape) is an `ApiError` of the matching kind, and `waitForRun` never throws.
+- [x] R4 — every `ApiError` kind maps to a catalogue text that names the next step.
 
 ### Phase 5 — the read tools and the real-API test
 
-- [ ] R3, P6 — a `get_findings` result holds only the fields of the review result; `list_agents` never returns a system prompt.
-- [ ] P7, P9 — `limit` and `min_severity` bound the result, a cut list says so and how to narrow it, and the worst case at `limit: 50` is at most 36,000 characters.
-- [ ] R4 — every not-found and not-ready case of the three tools answers with its catalogue text; an unknown repo or PR lists valid values.
-- [ ] D5 — `get_findings` works with `repo` and `pr` alone and with a `run_id`.
-- [ ] D11 — `get_conventions` returns accepted candidates by default and explains an empty result.
-- [ ] L3 — the read tools start no run: no `startReview` call against the mock, and no new `agent_runs` row against the real API.
-- [ ] P18, D13 — the three tools return real data over stdio from a seeded database, with `server/test/mcp-stdio.it.test.ts` executed, not skipped.
-- [ ] `server-integration.yml` installs `mcp/` and is triggered by `mcp/**` and `.mcp.json`; no file under `server/src/` or `scripts/` changed.
+- [x] R3, P6 — a `get_findings` result holds only the fields of the review result; `list_agents` never returns a system prompt.
+- [x] P7, P9 — `limit` and `min_severity` bound the result, a cut list says so and how to narrow it, and the worst case at `limit: 50` is at most 36,000 characters.
+- [x] R4 — every not-found and not-ready case of the three tools answers with its catalogue text; an unknown repo or PR lists valid values.
+- [x] D5 — `get_findings` works with `repo` and `pr` alone and with a `run_id`.
+- [x] D11 — `get_conventions` returns accepted candidates by default and explains an empty result.
+- [x] L3 — the read tools start no run: no `startReview` call against the mock, and no new `agent_runs` row against the real API.
+- [x] P18, D13 — the three tools return real data over stdio from a seeded database, with `server/test/mcp-stdio.it.test.ts` executed, not skipped.
+- [x] `server-integration.yml` installs `mcp/` and is triggered by `mcp/**` and `.mcp.json`; no file under `server/src/` or `scripts/` changed.
 
 ### Phase 6 — the write tool, the second Inspector check
 
-- [ ] R1, D20 — one `run_agent_on_pr` call, given the agent's name, creates the run, waits and returns `{ verdict, findings }`; the integration test proves it over stdio with one `agent_runs` row and no other tool call.
-- [ ] P10, D4 — the default wait is 120 s; a wait that outlasts it returns a non-error `status: "running"` result that names `get_findings` and the run id; the run is not started twice.
-- [ ] D9 — a second call while a run of that agent is in flight attaches to it.
-- [ ] R2, P11, P12 — `tools/list` holds exactly the five tools, with flat inputs, shared parameter names and the annotations above.
-- [ ] P1, P3, P4, P5 — the `tools/list` and instructions budgets hold, no tool has an `outputSchema`, and neither the instructions nor the `list_agents` description tells the caller to always call it first.
-- [ ] R4 — an unknown agent answers with "Call list_agents" and starts nothing.
-- [ ] L2 — the "Inspector record" holds an entry for this phase stating that Inspector saw all five tools with correct schemas.
-- [ ] Both spec rows read `implemented`; `server/test/mcp-stdio.it.test.ts` ran (not skipped); `git status` shows no change under `server/src/` or `scripts/`.
+- [x] R1, D20 — one `run_agent_on_pr` call, given the agent's name, creates the run, waits and returns `{ verdict, findings }`; the integration test proves it over stdio with one `agent_runs` row and no other tool call.
+- [x] P10, D4 — the default wait is 120 s; a wait that outlasts it returns a non-error `status: "running"` result that names `get_findings` and the run id; the run is not started twice.
+- [x] D9 — a second call while a run of that agent is in flight attaches to it.
+- [x] R2, P11, P12 — `tools/list` holds exactly the five tools, with flat inputs, shared parameter names and the annotations above.
+- [x] P1, P3, P4, P5 — the `tools/list` and instructions budgets hold, no tool has an `outputSchema`, and neither the instructions nor the `list_agents` description tells the caller to always call it first.
+- [x] R4 — an unknown agent answers with "Call list_agents" and starts nothing.
+- [x] L2 — the "Inspector record" holds an entry for this phase stating that Inspector saw all five tools with correct schemas.
+- [x] Both spec rows read `implemented`; `server/test/mcp-stdio.it.test.ts` ran (not skipped); `git status` shows no change under `server/src/` or `scripts/`.
 
 ### Manual acceptance in Claude Code
 
