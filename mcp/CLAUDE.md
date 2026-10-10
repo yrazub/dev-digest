@@ -34,17 +34,17 @@ Note: npm, not pnpm. The lockfile here is `package-lock.json`.
 | `src/single-zod.ts` | `assertSingleZod()` — the contracts and this package share one Zod |
 | `src/main.ts` | the process entry and composition root |
 | `src/config.ts` | `McpConfig`, `loadMcpConfig(env)` |
-| `src/tool.ts` | `ToolDef`, `ToolDeps`, `ToolContext`, `ToolFailure`, `executeTool`, `toolOk`, `toolError`, `sanitizeText` |
+| `src/tool.ts` | `ToolDef`, `ToolDeps`, `ToolContext`, `ToolFailure`, `executeTool`, `toolOk`, `toolError`, `sanitizeText`, `cutText`, `acceptNumericString` |
 | `src/server.ts` | `TOOLS` and `createMcpServer(deps)` |
 | `src/ports.ts` | `DevDigestApi`, `API_ROUTES`, the API view schemas, `ApiError` |
 | `src/api-client.ts` | `HttpDevDigestApi implements DevDigestApi` |
 | `src/mocks.ts` | `MockDevDigestApi implements DevDigestApi` |
-| `src/resolve.ts` | `resolveRepo`, `resolvePull`, `resolveAgent` |
+| `src/resolve.ts` | `resolveRepo`, `resolvePull`, `resolveAgent`; the run-state failures shared by `get_findings` and `run_agent_on_pr` (`noReviewFailure`, `runNoReviewFailure`) |
 | `src/review-view.ts` | `toReviewView` (pure) |
 | `src/tools/` | one `ToolDef` per tool |
 | `test/` | the hermetic suite |
 
-Files are added phase by phase; see the layout table in `specs/L04-devdigest-mcp.md`.
+The same layout, with the phase that added each file, is in `specs/L04-devdigest-mcp.md`.
 
 ## Conventions
 
