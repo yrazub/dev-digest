@@ -447,7 +447,7 @@ Package-level checklist; the cross-package one is in
 ## SDK compatibility record
 
 Static half, filled in phase 2 (2026-10-10). The runtime half (what a client sees over the wire)
-is filled in phase 3.
+was filled in phase 3 (2026-10-10), see "Runtime half" below.
 
 ### Installed versions
 
@@ -509,6 +509,46 @@ The **in-process form** is used: `register({ tsconfig })` from `tsx/esm/api`, th
 | `node /…/mcp/bin/devdigest-mcp.mjs`, working directory = an unrelated temporary directory | 0 | empty | `devdigest-mcp: no transport yet` |
 | a copy of the launcher in a directory with no `node_modules` | 1 | empty | `devdigest-mcp: dependencies are not installed. Run: cd mcp && npm ci` |
 
+### Runtime half (phase 3, observed over stdio)
+
+Driven with the SDK's `Client` and `StdioClientTransport`, spawning the `command` + `args` read out
+of `.mcp.json` (`node mcp/bin/devdigest-mcp.mjs`, working directory = repository root, `DEVDIGEST_API_URL`
+pointing at a closed port), plus an in-memory pair around `createMcpServer` with two throwaway tools.
+The launcher rows above show the phase-2 placeholder line; since phase 3 the startup line is
+`devdigest-mcp ready (API <apiUrl>)` and the process waits on stdin.
+
+| Question | Observed |
+|---|---|
+| `initialize` | `serverInfo` = `{"name":"devdigest-mcp","version":"0.0.0"}`; `instructions` = the shipped text (verbatim); capabilities `{"tools":{"listChanged":true}}` |
+| `tools/list` entry of `get_blast_radius` | `description` as in the spec; `inputSchema` = `{"type":"object","properties":{"repo":{"type":"string","description":"owner/name"},"pr":{"type":"integer","minimum":1,"description":"pull request number"}},"required":["repo","pr"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}`; `annotations` = `{"readOnlyHint":true}`; no `outputSchema`; the SDK adds `"execution":{"taskSupport":"forbidden"}` |
+| Input schema of a tool with no parameters | Registered with the bare shape `{}`: `{"type":"object","properties":{}}` — **no** `additionalProperties: false`. Registered with `z.object({}).strict()`: `{"type":"object","properties":{},"additionalProperties":false}`. `server.ts` therefore registers `z.object(def.inputShape).strict()` for every tool, so the `list_agents` target is reachable (checked with a throwaway no-argument tool; the real tool arrives in phase 5) |
+| Invalid arguments (wrong type, missing field, unknown key) | Answered **by the SDK**, before the handler runs: a result with `isError: true` (not a JSON-RPC error) and the text `MCP error -32602: Input validation error: Invalid arguments for tool <name>: <zod message>` (e.g. `Expected number, received string at pr`, `Required at pr`, `Unrecognized key(s) in object: 'x'`). `executeTool`'s own E-ARGS text is reached only when `executeTool` is called directly, and is the second line of defence. With the bare shape (not strict) the SDK silently dropped an unknown key; with the strict object it rejects it |
+| Text-only result with `isError: true` | Passes unchanged: `{"content":[{"type":"text","text":"<E-BLAST>"}],"isError":true}` |
+| Unexpected throw | `isError: true`, E-INTERNAL text with no original message, path or stack; the detail (`Error: boom at /Users/x` + stack) went to `deps.log` |
+| Progress notifications | Reach the client: with `onprogress` set, two `ctx.progress(...)` calls arrived as `{"progress":1,"message":"step one"}` and `{"progress":2,"message":"step two"}`; without a progress token nothing is sent. The handler's `ctx.signal` is present |
+| stdin ends / client disconnects | The SDK's stdio transport does not report the end of stdin as a close; `main.ts` listens to stdin `end` / `close`, `SIGINT`, `SIGTERM` and the server's `onclose`, and exits 0. Measured: closed stdin (`</dev/null`) exits 0 at once, with empty stdout and the `ready` line on stderr; `Client.close()` ends the process within the 300 ms the script waited; `SIGTERM` exits 0 |
+| Bad environment | `DEVDIGEST_MCP_WAIT_SECONDS=abc` and `DEVDIGEST_API_URL=ftp://x` each exit 1 with one stderr line naming the variable |
+
 ## Inspector record
 
-Filled in by the main session after phase 3 and after phase 6 (D17). Empty at phase 1.
+Filled in by the main session after phase 3 and after phase 6 (D17).
+
+### Phase 3 — one tool (2026-10-10)
+
+- **Inspector:** `@modelcontextprotocol/inspector` 2.10.1, run through `npx` in CLI mode; not a
+  dependency of this package. Options taken from `--cli --help`: the server command comes right
+  after `--cli`, before `--method`.
+- **Working directory:** the repository root.
+- **List:** `npx -y @modelcontextprotocol/inspector@2.10.1 --cli node mcp/bin/devdigest-mcp.mjs --method tools/list --strict`
+  — exit 0, no schema-portability problem reported. It listed one tool, `get_blast_radius`, with
+  the shipped description, `annotations: { readOnlyHint: true }`, no `outputSchema`, and the input
+  schema `{ type: "object", properties: { repo: { type: "string", description: "owner/name" },
+  pr: { type: "integer", minimum: 1, description: "pull request number" } }, required: ["repo",
+  "pr"], additionalProperties: false }` (draft-07). The SDK adds
+  `execution: { taskSupport: "forbidden" }`.
+- **Call:** `npx -y @modelcontextprotocol/inspector@2.10.1 --cli node mcp/bin/devdigest-mcp.mjs --method tools/call --tool-name get_blast_radius --tool-arg repo=acme/payments-api pr=482`
+  — the result is `isError: true` with the E-BLAST text ("get_blast_radius is not implemented yet
+  in this DevDigest build: no impact data exists. …"). Inspector exits 5 (`tool_is_error`) for an
+  `isError` result, which is the expected outcome for the stub.
+- **stderr of the server in both runs:** `devdigest-mcp ready (API http://127.0.0.1:3001)`.
+- The API was not running; the stub calls nothing, so it is not needed for this check.
