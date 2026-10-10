@@ -19,6 +19,10 @@ export const MAX_LIMIT = 50;
 export const MAX_TITLE = 120;
 export const MAX_RATIONALE = 240;
 export const MAX_SUMMARY = 600;
+// A file path in a finding or a convention's evidence.
+export const MAX_PATH = 240;
+export const MAX_AGENT_NAME = 120;
+export const MAX_RULE = 400;
 export const MAX_DESCRIPTION = 200;
 export const MAX_CONVENTIONS = 50;
 export const MAX_AGENTS = 50;

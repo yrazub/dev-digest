@@ -40,4 +40,55 @@ describe('loadMcpConfig', () => {
   ])('accepts the bound %s seconds', (value, ms) => {
     expect(loadMcpConfig({ DEVDIGEST_MCP_WAIT_SECONDS: value }).waitMs).toBe(ms);
   });
+
+  describe('credentials in DEVDIGEST_API_URL (F2)', () => {
+    const message = (env: NodeJS.ProcessEnv): string => {
+      try {
+        loadMcpConfig(env);
+      } catch (err) {
+        return (err as Error).message;
+      }
+      throw new Error('loadMcpConfig did not throw');
+    };
+
+    it.each(['http://alice:hunter2@127.0.0.1:3001', 'https://alice@example.test', 'http://:hunter2@127.0.0.1:3001'])(
+      'rejects %j, naming the variable and the reason, without echoing the user or the password',
+      (value) => {
+        const text = message({ DEVDIGEST_API_URL: value });
+
+        expect(text).toContain('DEVDIGEST_API_URL');
+        expect(text).toContain('credentials are not allowed');
+        // The message says "the user and password" in general; the actual credentials must not appear.
+        expect(text).not.toContain('alice');
+        expect(text).not.toContain('hunter2');
+        expect(text).not.toContain(value);
+      },
+    );
+
+    it.each(['ftp://example.test/x', 'file:///etc/passwd', 'not a url'])(
+      'does not echo the raw value %j in the error of a rejected URL',
+      (value) => {
+        const text = message({ DEVDIGEST_API_URL: value });
+
+        expect(text).toContain('DEVDIGEST_API_URL is invalid');
+        expect(text).not.toContain(value);
+        expect(text).not.toContain('Got');
+      },
+    );
+
+    it('says an ftp URL must use http or https', () => {
+      expect(message({ DEVDIGEST_API_URL: 'ftp://x' })).toContain('must use http or https');
+    });
+
+    it('still loads a valid URL without credentials, with a port and a path', () => {
+      expect(loadMcpConfig({ DEVDIGEST_API_URL: 'http://127.0.0.1:3001/api' }).apiUrl).toBe('http://127.0.0.1:3001/api');
+    });
+
+    it.each(['abc', '0', '601'])('still quotes the wait seconds value %j in its error', (value) => {
+      const text = message({ DEVDIGEST_MCP_WAIT_SECONDS: value });
+
+      expect(text).toContain('DEVDIGEST_MCP_WAIT_SECONDS is invalid');
+      expect(text).toContain(`Got "${value}".`);
+    });
+  });
 });

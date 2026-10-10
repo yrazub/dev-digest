@@ -58,10 +58,10 @@ Environment variables (read by `main.ts` only, parsed by `loadMcpConfig`):
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `DEVDIGEST_API_URL` | http(s) URL of the API; a trailing slash is removed | `http://127.0.0.1:3001` |
+| `DEVDIGEST_API_URL` | http(s) URL of the API, without credentials (a URL with a user or password is rejected, because the URL is logged and quoted in error texts); a trailing slash is removed | `http://127.0.0.1:3001` |
 | `DEVDIGEST_MCP_WAIT_SECONDS` | integer 1..600; how long `run_agent_on_pr` waits | `120` |
 
-An invalid value makes `main.ts` write one stderr line naming the variable and exit with code 1.
+An invalid value makes `main.ts` write one stderr line naming the variable and exit with code 1. The line for `DEVDIGEST_API_URL` never quotes the value (`DEVDIGEST_API_URL is invalid (credentials are not allowed in it; remove the user and password).`); the line for `DEVDIGEST_MCP_WAIT_SECONDS` quotes it (`… Got "abc".`).
 stdout carries only MCP messages; all logging goes to stderr.
 
 ## What already exists
@@ -189,7 +189,7 @@ export function assertSingleZod(): void;   // throws when `Severity instanceof z
 // config.ts
 export interface McpConfig { apiUrl: string; waitMs: number }
 export function loadMcpConfig(env: NodeJS.ProcessEnv): McpConfig;
-// DEVDIGEST_API_URL: http(s) URL, default 'http://127.0.0.1:3001', trailing slash removed.
+// DEVDIGEST_API_URL: http(s) URL without a user or password, default 'http://127.0.0.1:3001', trailing slash removed. The error never echoes the value.
 // DEVDIGEST_MCP_WAIT_SECONDS: integer 1..600, default 120. Invalid value → throws an Error naming the variable.
 
 // tool.ts
@@ -281,17 +281,17 @@ export class MockDevDigestApi implements DevDigestApi {
 
 - `executeTool` is the one path for every tool: parse `rawArgs` with `z.object(def.inputShape).strict()`, call `def.run`, wrap the payload with `toolOk`; any throw goes to `toolError`. Tests call it directly, with no SDK involved.
 - `MockDevDigestApi`: a missing state key reads as empty (`[]`; for `getConventions`, `{ scan: { last_scan_at: null, sampled_files: null }, candidates: [] }`); every call is recorded in `calls`; `startReview` returns `{ run_id: startedRunId }` after `onStart`; `waitForRun` delivers `events`, calls `onWait`, resolves `waitResult`.
-- `HttpDevDigestApi`: the `:id` of a route is filled with an id that came from an API response, through `encodeURIComponent`. No tool argument is ever written into a URL.
+- `HttpDevDigestApi`: the `:id` of a route is filled with an id that came from an API response, through `encodeURIComponent`. An empty id, `.` or `..` (which `encodeURIComponent` leaves intact and a URL parser would fold into a path outside the allow-list) is refused before the request: `ApiError('invalid_response', <route>)`; `waitForRun`, which never throws, resolves `'ended'`. No tool argument is ever written into a URL.
 - Routes deliberately not in the allow-list, so no tool can reach them: `DELETE /runs/:id`, `POST /runs/:id/cancel`, `DELETE /reviews/:id`, `POST /findings/:id/(accept|dismiss)`, every `/agents` write, `/settings`, `POST /repos`, `DELETE /repos/:id`, `POST /pulls/:id/comments`, `POST /repos/:id/conventions/extract`, `PATCH /conventions/:id`, the skill routes.
 
 ## Limits
 
 All in `src/constants.ts`: `DEFAULT_LIMIT = 20`, `MAX_LIMIT = 50`, `MAX_TITLE = 120`,
-`MAX_RATIONALE = 240`, `MAX_SUMMARY = 600`, `MAX_DESCRIPTION = 200`, `MAX_CONVENTIONS = 50`,
+`MAX_RATIONALE = 240`, `MAX_SUMMARY = 600`, `MAX_PATH = 240` (a finding's `file`, a convention's evidence path), `MAX_AGENT_NAME = 120`, `MAX_RULE = 400`, `MAX_DESCRIPTION = 200`, `MAX_CONVENTIONS = 50`,
 `MAX_AGENTS = 50`, `MAX_LISTED = 10` (names or numbers quoted in an error), `MAX_ERROR_TEXT = 300`,
 `REQUEST_TIMEOUT_MS = 30_000`, `DEFAULT_WAIT_SECONDS = 120`. Severity order is `Severity.options`
 from `@devdigest/shared` (`CRITICAL`, `WARNING`, `SUGGESTION`). A cut string ends with `…`. Worst
-case at `limit: 50` is about 32,000 characters (about 8,000 tokens): under Claude Code's
+case at `limit: 50`, with every capped field at its cap, is about 35,800 characters (about 9,000 tokens; the bound `mcp/test/review-view.test.ts` pins is 36,000): under Claude Code's
 10,000-token warning, its 25,000-token limit and its 50,000-character spill.
 
 ## Server metadata
@@ -341,7 +341,7 @@ scalar or an enum. Only `repo`, `pr`, `agent` and `run_id` carry a description.
  "findings":[{"severity":"CRITICAL","title":"…","file":"src/config.ts","line":11,"rationale":"…"}]}
 ```
 
-- `findings`: dismissed findings are left out (the product's "counted findings" rule, `server/README.md:113-115`); sorted by severity, then `file`, then `line` (code-unit comparison); `line` is `start_line`; `end_line` appears only when it differs; `title`, `rationale`, `summary` are cut at their caps.
+- `findings`: dismissed findings are left out (the product's "counted findings" rule, `server/README.md:113-115`); sorted by severity, then `file`, then `line` (code-unit comparison); `line` is `start_line`; `end_line` appears only when it differs; `title`, `rationale`, `summary`, `file` and the top-level `agent` are cut at their caps (`MAX_TITLE`, `MAX_RATIONALE`, `MAX_SUMMARY`, `MAX_PATH`, `MAX_AGENT_NAME`).
 - `counts`: every non-dismissed finding by severity, before `min_severity` and `limit`.
 - When `limit` cut the list: `"truncated": true` and `"note": "Showing <k> of <n> findings, most severe first. Call get_findings with run_id \"<id>\" and min_severity \"WARNING\", or a higher limit (max 50)."`. That is the text for the default call; the advice adapts to the arguments so it never suggests a step that cannot help: `<n>` counts the findings left after `min_severity`; the suggested severity is the next one up (`WARNING` with no filter, `CRITICAL` when the filter is `WARNING`, none when it is already `CRITICAL`); `run_id` is left out when the review has none; "or a higher limit" is left out when the limit is already 50.
 - `verdict` is the shared `Verdict` enum; `run_id`, `agent`, `verdict`, `score`, `summary` may be `null` (the seeded review has no agent).
@@ -351,7 +351,7 @@ scalar or an enum. Only `repo`, `pr`, `agent` and `run_id` carry a description.
 
 - Description: `Return the coding conventions DevDigest extracted from a repository and the user accepted. Call it before writing or reviewing code in that repository.`
 - Input: `repo` (required) · `status` (enum `accepted` | `pending`, default `accepted`; derived from the shared `ConventionStatus` without `rejected`).
-- Output: `{"repo","status","conventions":[{"category","rule","evidence"}],"last_scan_at"}` in the API's order; `evidence` is `path:start` or `path:start-end`; at most 50, with a `note` when cut.
+- Output: `{"repo","status","conventions":[{"category","rule","evidence"}],"last_scan_at"}` in the API's order; `evidence` is `path:start` or `path:start-end`; at most 50, with a `note` when cut. `rule` (extracted by a model from repository files, unbounded in the contract) and the evidence path pass through `sanitizeText`: whitespace and control characters collapse to one space, token-like strings are masked, and they are cut at `MAX_RULE` / `MAX_PATH`. `category` is an enum of the contract and is passed as is.
 - Notes instead of errors: nothing with the requested status but other candidates exist → `"No accepted conventions yet; <k> candidates are pending review in DevDigest (Skills Lab → Conventions). Call get_conventions with status \"pending\" to read them as unconfirmed proposals."`; never scanned → `"This repository has not been scanned for conventions. Run a scan in DevDigest (Skills Lab → Conventions), accept the rules that are right, then call get_conventions again."`; scanned, with nothing of the requested status and nothing pending to point at (also `status: "pending"` with none pending) → `"No <status> conventions for this repository. Review the extracted rules in DevDigest (Skills Lab → Conventions)."`. When more than 50 match: `"Showing the first 50 of <n> conventions."`.
 - Dropped from `ConventionCandidate`: `id`, `evidence_snippet`, `evidence_url`, `confidence`, `status`.
 - Errors: E-REPO-FORMAT, E-REPO-UNKNOWN, the API errors.

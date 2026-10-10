@@ -30,10 +30,22 @@ function failureKind(err: unknown): 'timeout' | 'unreachable' {
 }
 
 /**
+ * Fills the `:id` of a route template. `encodeURIComponent` leaves `.` and `..` alone, and a URL
+ * parser would fold them into a path outside `API_ROUTES`; those and an empty id yield `undefined`.
+ * A template without `:id` needs no id.
+ */
+function fillPath(template: string, id: string | undefined): string | undefined {
+  if (!template.includes(':id')) return template;
+  if (id === undefined || id === '' || id === '.' || id === '..') return undefined;
+  return template.replace(':id', encodeURIComponent(id));
+}
+
+/**
  * The one place a JSON request is built (`waitForRun` makes its own SSE call). Both callers take
  * their method and path from `API_ROUTES`, never from a literal: what the process can ask the API
  * for is that table. This helper takes a key of `API_ROUTES`.
- * `id` is an id that came from an API response; it is percent-encoded into the path.
+ * `id` is an id that came from an API response; it is percent-encoded into the path. An empty id, `.`
+ * or `..` is an `invalid_response` for the route.
  */
 async function request(
   transport: Transport,
@@ -42,7 +54,8 @@ async function request(
 ): Promise<unknown> {
   const route: string = API_ROUTES[key];
   const [method = 'GET', template = ''] = route.split(' ');
-  const path = template.replace(':id', encodeURIComponent(opts.id ?? ''));
+  const path = fillPath(template, opts.id);
+  if (path === undefined) throw new ApiError('invalid_response', route);
   const hasBody = opts.body !== undefined;
 
   let response: Response;
@@ -161,7 +174,10 @@ export class HttpDevDigestApi implements DevDigestApi {
     opts: { timeoutMs: number; signal?: AbortSignal; onEvent?: (message: string) => void },
   ): Promise<'ended' | 'timeout'> {
     const [, template = ''] = API_ROUTES.waitForRun.split(' ');
-    const url = `${this.transport.baseUrl}${template.replace(':id', encodeURIComponent(runId))}`;
+    const path = fillPath(template, runId);
+    // The method never throws: an id that cannot be put in the path ends the wait.
+    if (path === undefined) return 'ended';
+    const url = `${this.transport.baseUrl}${path}`;
 
     const controller = new AbortController();
     let timedOut = false;

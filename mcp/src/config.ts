@@ -8,10 +8,21 @@ export interface McpConfig {
 
 const DEFAULT_API_URL = 'http://127.0.0.1:3001';
 
+// A URL is logged and quoted in error texts, so a user or password in it would leak.
+function hasCredentials(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.username !== '' || url.password !== '';
+  } catch {
+    return false;
+  }
+}
+
 const ApiUrl = z
   .string()
   .url()
-  .refine((value) => /^https?:\/\//i.test(value), 'must use http or https');
+  .refine((value) => /^https?:\/\//i.test(value), 'must use http or https')
+  .refine((value) => !hasCredentials(value), 'credentials are not allowed in it; remove the user and password');
 
 const WaitSeconds = z
   .string()
@@ -24,11 +35,17 @@ function present(value: string | undefined): string | undefined {
   return value === undefined || value.trim() === '' ? undefined : value.trim();
 }
 
-function parseVariable<T>(name: string, schema: z.ZodType<T, z.ZodTypeDef, string>, raw: string): T {
+/** `echo: false` keeps the raw value out of the error (a URL may carry credentials). */
+function parseVariable<T>(
+  name: string,
+  schema: z.ZodType<T, z.ZodTypeDef, string>,
+  raw: string,
+  echo = true,
+): T {
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     const issue = parsed.error.issues[0]?.message ?? 'invalid value';
-    throw new Error(`${name} is invalid (${issue}). Got "${raw}".`);
+    throw new Error(echo ? `${name} is invalid (${issue}). Got "${raw}".` : `${name} is invalid (${issue}).`);
   }
   return parsed.data;
 }
@@ -41,7 +58,7 @@ export function loadMcpConfig(env: NodeJS.ProcessEnv): McpConfig {
   const rawUrl = present(env.DEVDIGEST_API_URL);
   const rawWait = present(env.DEVDIGEST_MCP_WAIT_SECONDS);
 
-  const apiUrl = rawUrl === undefined ? DEFAULT_API_URL : parseVariable('DEVDIGEST_API_URL', ApiUrl, rawUrl);
+  const apiUrl = rawUrl === undefined ? DEFAULT_API_URL : parseVariable('DEVDIGEST_API_URL', ApiUrl, rawUrl, false);
   const waitSeconds =
     rawWait === undefined ? DEFAULT_WAIT_SECONDS : parseVariable('DEVDIGEST_MCP_WAIT_SECONDS', WaitSeconds, rawWait);
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { MAX_PATH, MAX_RULE } from '../src/constants.js';
 import { MockDevDigestApi, type MockDevDigestApiOptions, type MockDevDigestApiState } from '../src/mocks.js';
 import {
   ApiError,
@@ -225,6 +226,67 @@ describe('get_conventions', () => {
     ]));
 
     expect(json(text).conventions.map((c: { evidence: string }) => c.evidence)).toEqual(['src/one.ts:3', 'src/range.ts:3-9']);
+  });
+
+  it('cuts a rule longer than MAX_RULE to MAX_RULE characters ending with an ellipsis', async () => {
+    const { text } = await call(asDef(getConventions), { repo: 'acme/payments-api' }, state([
+      convention({ rule: 'r'.repeat(MAX_RULE + 100) }),
+    ]));
+
+    const rule = json(text).conventions[0].rule as string;
+    expect(rule).toHaveLength(MAX_RULE);
+    expect(rule.endsWith('…')).toBe(true);
+  });
+
+  it('leaves a rule that is exactly MAX_RULE characters alone', async () => {
+    const exact = 'r'.repeat(MAX_RULE);
+
+    const { text } = await call(asDef(getConventions), { repo: 'acme/payments-api' }, state([convention({ rule: exact })]));
+
+    expect(json(text).conventions[0].rule).toBe(exact);
+  });
+
+  it('collapses whitespace and newlines in a rule to single spaces', async () => {
+    const { text } = await call(asDef(getConventions), { repo: 'acme/payments-api' }, state([
+      convention({ rule: '  Use\n\n  kebab-case\t\tfor\r\nfiles.  ' }),
+    ]));
+
+    expect(json(text).conventions[0].rule).toBe('Use kebab-case for files.');
+  });
+
+  it('masks a token-like string in a rule', async () => {
+    const secret = 'sk-abcdefghijklmnopqrstuvwxyz0123456789';
+
+    const { text } = await call(asDef(getConventions), { repo: 'acme/payments-api' }, state([
+      convention({ rule: `Never commit ${secret} to git.` }),
+    ]));
+
+    expect(text).not.toContain(secret);
+    expect(json(text).conventions[0].rule).toBe('Never commit *** to git.');
+  });
+
+  it.each([
+    ['one line', 3, 3, ':3'],
+    ['a range', 3, 9, ':3-9'],
+  ])('cuts a long evidence path but keeps the line numbers of %s whole at the end', async (_label, start, end, suffix) => {
+    const { text } = await call(asDef(getConventions), { repo: 'acme/payments-api' }, state([
+      convention({ evidence_path: `${'d/'.repeat(MAX_PATH)}x.ts`, evidence_line_start: start, evidence_line_end: end }),
+    ]));
+
+    const evidence = json(text).conventions[0].evidence as string;
+    expect(evidence.endsWith(`…${suffix}`)).toBe(true);
+    expect(evidence).toHaveLength(MAX_PATH + suffix.length);
+  });
+
+  it('collapses whitespace and masks a token-like string in an evidence path', async () => {
+    const secret = 'ghp_abcdefghijklmnopqrstuvwxyz012345';
+
+    const { text } = await call(asDef(getConventions), { repo: 'acme/payments-api' }, state([
+      convention({ evidence_path: `src/\n${secret}.ts`, evidence_line_start: 1, evidence_line_end: 1 }),
+    ]));
+
+    expect(text).not.toContain(secret);
+    expect(json(text).conventions[0].evidence).toBe('src/ ***.ts:1');
   });
 
   it('keeps the API order and drops the ids, snippets, urls and confidence', async () => {

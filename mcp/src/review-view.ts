@@ -1,5 +1,5 @@
 import type { Severity } from '@devdigest/shared';
-import { MAX_LIMIT, MAX_RATIONALE, MAX_SUMMARY, MAX_TITLE, SEVERITY_ORDER } from './constants.js';
+import { MAX_AGENT_NAME, MAX_LIMIT, MAX_PATH, MAX_RATIONALE, MAX_SUMMARY, MAX_TITLE, SEVERITY_ORDER } from './constants.js';
 import type { ApiFinding, ApiReview } from './ports.js';
 import { cutText } from './tool.js';
 
@@ -17,7 +17,7 @@ function toFindingView(finding: ApiFinding): Record<string, unknown> {
   return {
     severity: finding.severity,
     title: cutText(finding.title, MAX_TITLE),
-    file: finding.file,
+    file: cutText(finding.file, MAX_PATH),
     line: finding.start_line,
     ...(finding.end_line !== finding.start_line ? { end_line: finding.end_line } : {}),
     rationale: cutText(finding.rationale, MAX_RATIONALE),
@@ -53,7 +53,7 @@ export function toReviewView(review: ApiReview, options: ReviewViewOptions): Rec
   const view: Record<string, unknown> = {
     status: 'done',
     run_id: review.run_id,
-    agent: review.agent_name ?? null,
+    agent: review.agent_name == null ? null : cutText(review.agent_name, MAX_AGENT_NAME),
     reviewed_at: review.created_at,
     verdict: review.verdict,
     score: review.score,

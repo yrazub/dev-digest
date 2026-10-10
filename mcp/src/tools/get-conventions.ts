@@ -1,9 +1,9 @@
 import { ConventionStatus } from '@devdigest/shared';
 import { z } from 'zod';
-import { MAX_CONVENTIONS } from '../constants.js';
+import { MAX_CONVENTIONS, MAX_PATH, MAX_RULE } from '../constants.js';
 import type { ApiConvention } from '../ports.js';
 import { resolveRepo } from '../resolve.js';
-import type { ToolDef } from '../tool.js';
+import { sanitizeText, type ToolDef } from '../tool.js';
 
 const inputShape = {
   repo: z.string().describe('owner/name'),
@@ -14,7 +14,8 @@ const inputShape = {
 const SCAN_HINT = 'Skills Lab → Conventions';
 
 function evidence(convention: ApiConvention): string {
-  const { evidence_path: path, evidence_line_start: start, evidence_line_end: end } = convention;
+  const { evidence_line_start: start, evidence_line_end: end } = convention;
+  const path = sanitizeText(convention.evidence_path, MAX_PATH);
   return end === start ? `${path}:${start}` : `${path}:${start}-${end}`;
 }
 
@@ -50,7 +51,7 @@ export const getConventions: ToolDef<typeof inputShape> = {
       status: args.status,
       conventions: shown.map((candidate) => ({
         category: candidate.category,
-        rule: candidate.rule,
+        rule: sanitizeText(candidate.rule, MAX_RULE),
         evidence: evidence(candidate),
       })),
       last_scan_at: scan.last_scan_at,

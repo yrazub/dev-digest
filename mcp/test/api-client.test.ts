@@ -339,6 +339,67 @@ describe('the request methods', () => {
   });
 });
 
+describe('an id that cannot be put in a path (F1)', () => {
+  // `encodeURIComponent` leaves '.' and '..' alone and a URL parser would fold them into another path.
+  const idCalls: Array<{ name: string; route: string; call: (api: HttpDevDigestApi, id: string) => Promise<unknown> }> = [
+    { name: 'listPulls', route: API_ROUTES.listPulls, call: (a, id) => a.listPulls(id) },
+    { name: 'listRuns', route: API_ROUTES.listRuns, call: (a, id) => a.listRuns(id) },
+    { name: 'listReviews', route: API_ROUTES.listReviews, call: (a, id) => a.listReviews(id) },
+    { name: 'getConventions', route: API_ROUTES.getConventions, call: (a, id) => a.getConventions(id) },
+    { name: 'startReview', route: API_ROUTES.startReview, call: (a, id) => a.startReview(id, 'agent-1') },
+  ];
+  const badIds: Array<[string, string]> = [
+    ['an empty id', ''],
+    ['"."', '.'],
+    ['".."', '..'],
+  ];
+
+  describe.each(idCalls)('$name', ({ route, call }) => {
+    it.each(badIds)('refuses %s with invalid_response naming the route, and fetches nothing', async (_label, id) => {
+      const { api, spy } = clientWith(() => json([]));
+
+      const err = await failure(call(api, id));
+
+      expect(err.kind).toBe('invalid_response');
+      expect(err.route).toBe(route);
+      expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
+  it('still sends a normal id, and an id that needs percent-encoding, to the allow-listed path', async () => {
+    const { api, seen } = clientWith(() => json([pullBody]));
+
+    await api.listPulls('repo-1');
+    await api.listPulls('..x');
+    await api.listPulls('a/../b');
+
+    expect(seen.map((s) => s.url)).toEqual([
+      `${BASE}/repos/repo-1/pulls`,
+      `${BASE}/repos/..x/pulls`,
+      `${BASE}/repos/a%2F..%2Fb/pulls`,
+    ]);
+  });
+
+  it('does not need an id for a route without :id (listAgents, listRepos)', async () => {
+    const { api, seen } = clientWith((s) => json(s.url.endsWith('/agents') ? [agentBody] : [repoBody]));
+
+    await expect(api.listAgents()).resolves.toHaveLength(1);
+    await expect(api.listRepos()).resolves.toHaveLength(1);
+
+    expect(seen.map((s) => s.url)).toEqual([`${BASE}/agents`, `${BASE}/repos`]);
+  });
+
+  it.each(badIds)('waitForRun resolves ended for %s, without a fetch and without throwing', async (_label, id) => {
+    const { api, spy } = clientWith(() => sse(openBody([runEvent(1, 'never read')])));
+    const onEvent = vi.fn();
+
+    await expect(api.waitForRun(id, { timeoutMs: 5000, onEvent })).resolves.toBe('ended');
+
+    expect(spy).not.toHaveBeenCalled();
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+});
+
 describe('startReview', () => {
   it('posts { "agentId": … } as JSON and returns the first run id', async () => {
     const body = {

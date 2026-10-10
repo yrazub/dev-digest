@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_RATIONALE, MAX_SUMMARY, MAX_TITLE } from '../src/constants.js';
+import { MAX_AGENT_NAME, MAX_PATH, MAX_RATIONALE, MAX_SUMMARY, MAX_TITLE } from '../src/constants.js';
 import type { ApiFinding, ApiReview } from '../src/ports.js';
 import { toReviewView } from '../src/review-view.js';
 
@@ -252,6 +252,38 @@ describe('toReviewView — caps', () => {
   });
 });
 
+describe('toReviewView — path and agent caps (F3)', () => {
+  it('cuts a file longer than MAX_PATH to MAX_PATH characters ending with an ellipsis', () => {
+    const view = toReviewView(review([finding({ file: 'p'.repeat(MAX_PATH + 100) })]), { limit: 20 });
+
+    const file = findingsOf(view)[0]?.file ?? '';
+    expect(file).toHaveLength(MAX_PATH);
+    expect(file.endsWith('…')).toBe(true);
+  });
+
+  it('leaves a file that is exactly MAX_PATH characters alone', () => {
+    const exact = 'p'.repeat(MAX_PATH);
+
+    const view = toReviewView(review([finding({ file: exact })]), { limit: 20 });
+
+    expect(findingsOf(view)[0]?.file).toBe(exact);
+  });
+
+  it('cuts an agent_name longer than MAX_AGENT_NAME to MAX_AGENT_NAME characters ending with an ellipsis', () => {
+    const view = toReviewView(review([], { agent_name: 'A'.repeat(MAX_AGENT_NAME + 50) }), { limit: 20 });
+
+    const agent = view.agent as string;
+    expect(agent).toHaveLength(MAX_AGENT_NAME);
+    expect(agent.endsWith('…')).toBe(true);
+  });
+
+  it('leaves an agent_name that is exactly MAX_AGENT_NAME characters alone', () => {
+    const exact = 'A'.repeat(MAX_AGENT_NAME);
+
+    expect(toReviewView(review([], { agent_name: exact }), { limit: 20 }).agent).toBe(exact);
+  });
+});
+
 describe('toReviewView — the fields of the review result', () => {
   it('maps a review with null verdict, score, summary, agent and run_id to null fields', () => {
     const view = toReviewView(
@@ -332,9 +364,8 @@ describe('toReviewView — the fields of the review result', () => {
 });
 
 describe('toReviewView — size', () => {
-  it('serialises 50 findings with maximum-length title, rationale and a 200-character path to at most 36,000 characters', () => {
-    const path = `${'d/'.repeat(98)}f.ts`; // 200 characters
-    expect(path).toHaveLength(200);
+  it('serialises 50 findings with title, rationale, path and agent name at their caps to at most 36,000 characters', () => {
+    const path = `${'d/'.repeat(MAX_PATH)}f.ts`; // longer than the cap: the cut is what bounds the size
     const findings = Array.from({ length: 50 }, (_, i) =>
       finding({
         severity: (['CRITICAL', 'WARNING', 'SUGGESTION'] as const)[i % 3] ?? 'WARNING',
@@ -346,9 +377,12 @@ describe('toReviewView — size', () => {
       }),
     );
 
-    const text = JSON.stringify(toReviewView(review(findings, { summary: 'S'.repeat(5_000) }), { limit: 50 }));
+    const text = JSON.stringify(toReviewView(review(findings, { summary: 'S'.repeat(5_000), agent_name: 'A'.repeat(MAX_AGENT_NAME + 80) }), { limit: 50 }));
 
     expect(text.length).toBeLessThanOrEqual(36_000);
-    expect(findingsOf(JSON.parse(text) as Record<string, unknown>)).toHaveLength(50);
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    expect(findingsOf(parsed)).toHaveLength(50);
+    expect(findingsOf(parsed)[0]?.file).toHaveLength(MAX_PATH);
+    expect(parsed.agent).toHaveLength(MAX_AGENT_NAME);
   });
 });
