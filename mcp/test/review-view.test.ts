@@ -410,6 +410,133 @@ describe('toReviewView — the fields of the review result', () => {
   });
 });
 
+// Spec, review result: "Deliberate change (2026-10-10, user decision, third pre-PR self-review)" — a token-like
+// string in a finding is shown as `***`, whitespace in title, file, rationale and summary is collapsed.
+describe('toReviewView — masking and whitespace in reviewer-written text', () => {
+  const STRIPE_LIKE = 'sk_live_AbCdEfGhIjKlMnOp1234'; // sk_ + 24 characters
+  const GITHUB_PAT = 'ghp_abcdefghijklmnopqrstuvwxyz012345';
+
+  it.each([
+    ['title', { title: `Key ${STRIPE_LIKE} committed` }, 'title', 'Key *** committed'],
+    ['rationale', { rationale: `The diff adds ${GITHUB_PAT} to the config.` }, 'rationale', 'The diff adds *** to the config.'],
+    ['file', { file: `src/${STRIPE_LIKE}.ts` }, 'file', 'src/***.ts'],
+  ] as const)('shows a token-like string in the finding %s as ***', (_field, over, key, expected) => {
+    const view = toReviewView(review([finding(over)]), { limit: 20 });
+
+    expect(findingsOf(view)[0]?.[key]).toBe(expected);
+    const text = JSON.stringify(view);
+    expect(text).not.toContain(STRIPE_LIKE);
+    expect(text).not.toContain(GITHUB_PAT);
+  });
+
+  it('shows a token-like string in the review summary as ***', () => {
+    const view = toReviewView(review([], { summary: `Found ${GITHUB_PAT} in the diff.` }), { limit: 20 });
+
+    expect(view.summary).toBe('Found *** in the diff.');
+    expect(JSON.stringify(view)).not.toContain(GITHUB_PAT);
+  });
+
+  it('masks every field of one finding and the summary in the same view', () => {
+    const view = toReviewView(
+      review(
+        [finding({ title: STRIPE_LIKE, file: `${GITHUB_PAT}.ts`, rationale: `${STRIPE_LIKE} and ${GITHUB_PAT}` })],
+        { summary: STRIPE_LIKE },
+      ),
+      { limit: 20 },
+    );
+
+    expect(findingsOf(view)[0]).toMatchObject({ title: '***', file: '***.ts', rationale: '*** and ***' });
+    expect(view.summary).toBe('***');
+  });
+
+  it('collapses a multi-line rationale to one line', () => {
+    const view = toReviewView(
+      review([finding({ rationale: 'First line.\n\n  Second line.\r\n\tThird line.  ' })]),
+      { limit: 20 },
+    );
+
+    expect(findingsOf(view)[0]?.rationale).toBe('First line. Second line. Third line.');
+  });
+
+  it('collapses whitespace in a multi-line summary and in a title', () => {
+    const view = toReviewView(
+      review([finding({ title: 'Two\nlines\t here' })], { summary: 'Overall:\n- one\n- two\n' }),
+      { limit: 20 },
+    );
+
+    expect(view.summary).toBe('Overall: - one - two');
+    expect(findingsOf(view)[0]?.title).toBe('Two lines here');
+  });
+
+  it('masks before it cuts: the cap still holds, the cut ends with an ellipsis and no token start is left', () => {
+    const tail = ' x'.repeat(500);
+    const view = toReviewView(
+      review(
+        [finding({ title: `${STRIPE_LIKE}${tail}`, rationale: `${GITHUB_PAT}${tail}`, file: `${STRIPE_LIKE}/${'p'.repeat(500)}` })],
+        { summary: `${GITHUB_PAT}${tail}` },
+      ),
+      { limit: 20 },
+    );
+
+    const [f] = findingsOf(view);
+    expect(f?.title).toHaveLength(MAX_TITLE);
+    expect(f?.title.startsWith('*** x')).toBe(true);
+    expect(f?.title.endsWith('…')).toBe(true);
+    expect(f?.rationale).toHaveLength(MAX_RATIONALE);
+    expect(f?.rationale.startsWith('*** x')).toBe(true);
+    expect(f?.rationale.endsWith('…')).toBe(true);
+    expect(f?.file).toHaveLength(MAX_PATH);
+    expect(f?.file.startsWith('***/ppp')).toBe(true);
+    expect(f?.file.endsWith('…')).toBe(true);
+    expect(view.summary).toHaveLength(MAX_SUMMARY);
+    expect((view.summary as string).startsWith('*** x')).toBe(true);
+    expect((view.summary as string).endsWith('…')).toBe(true);
+    expect(JSON.stringify(view)).not.toMatch(/sk_|ghp_/);
+  });
+
+  it('leaves ordinary text, short prefix-like words and a path alone', () => {
+    const view = toReviewView(
+      review([finding({ title: 'Use sk-short here', file: 'src/sk_live.ts', rationale: 'Bearer auth is used.' })], {
+        summary: 'Looks fine.',
+      }),
+      { limit: 20 },
+    );
+
+    expect(findingsOf(view)[0]).toMatchObject({ title: 'Use sk-short here', file: 'src/sk_live.ts', rationale: 'Bearer auth is used.' });
+    expect(view.summary).toBe('Looks fine.');
+  });
+
+  it('keeps the order by file: the sort reads the stored path, not the masked one', () => {
+    // Masked, 'sk_live_…' becomes '***', which sorts before every letter; the stored order is b, sk_live, z.
+    const view = toReviewView(
+      review([
+        finding({ file: 'z.ts', title: 'last' }),
+        finding({ file: STRIPE_LIKE, title: 'middle' }),
+        finding({ file: 'b.ts', title: 'first' }),
+      ]),
+      { limit: 20 },
+    );
+
+    expect(findingsOf(view).map((f) => f.title)).toEqual(['first', 'middle', 'last']);
+    expect(findingsOf(view).map((f) => f.file)).toEqual(['b.ts', '***', 'z.ts']);
+  });
+
+  it('does not mask run_id, agent or reviewed_at: they stay on the plain cut', () => {
+    const view = toReviewView(
+      review([], { run_id: STRIPE_LIKE, agent_name: GITHUB_PAT, created_at: 'sk_live_ZyXwVuTsRqPoNmLk9876' }),
+      { limit: 20 },
+    );
+
+    expect(view.run_id).toBe(STRIPE_LIKE);
+    expect(view.agent).toBe(GITHUB_PAT);
+    expect(view.reviewed_at).toBe('sk_live_ZyXwVuTsRqPoNmLk9876');
+  });
+
+  it('leaves whitespace in agent alone: only the four text fields collapse it', () => {
+    expect(toReviewView(review([], { agent_name: 'Security\n  Reviewer' }), { limit: 20 }).agent).toBe('Security\n  Reviewer');
+  });
+});
+
 describe('toReviewView — size', () => {
   it('serialises 50 findings with title, rationale, path and agent name at their caps to at most 36,000 characters', () => {
     const path = `${'d/'.repeat(MAX_PATH)}f.ts`; // longer than the cap: the cut is what bounds the size
@@ -431,5 +558,30 @@ describe('toReviewView — size', () => {
     expect(findingsOf(parsed)).toHaveLength(50);
     expect(findingsOf(parsed)[0]?.file).toHaveLength(MAX_PATH);
     expect(parsed.agent).toHaveLength(MAX_AGENT_NAME);
+  });
+
+  it('still stays within 36,000 characters when the long fields are multi-line and carry tokens', () => {
+    const noisy = (token: string) => `${token}\n${'word \n'.repeat(400)}`;
+    const findings = Array.from({ length: 50 }, (_, i) =>
+      finding({
+        severity: (['CRITICAL', 'WARNING', 'SUGGESTION'] as const)[i % 3] ?? 'WARNING',
+        title: noisy('sk_live_AbCdEfGhIjKlMnOp1234'),
+        rationale: noisy('ghp_abcdefghijklmnopqrstuvwxyz012345'),
+        file: `sk_live_AbCdEfGhIjKlMnOp1234/${'d/'.repeat(MAX_PATH)}f.ts`,
+        start_line: 100_000 + i,
+        end_line: 200_000 + i,
+      }),
+    );
+
+    const text = JSON.stringify(
+      toReviewView(review(findings, { summary: noisy('sk_live_AbCdEfGhIjKlMnOp1234'), agent_name: 'A'.repeat(MAX_AGENT_NAME + 80) }), { limit: 50 }),
+    );
+
+    expect(text.length).toBeLessThanOrEqual(36_000);
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    expect(findingsOf(parsed)).toHaveLength(50);
+    expect(findingsOf(parsed)[0]).toMatchObject({ title: expect.stringMatching(/^\*\*\* word/) });
+    expect(text).not.toMatch(/sk_live|ghp_/);
+    expect(text).not.toContain('\\n');
   });
 });

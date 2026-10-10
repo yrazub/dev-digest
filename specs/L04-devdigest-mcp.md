@@ -140,7 +140,7 @@ me whether there are critical findings."
 | Read only | `get_findings(repo, pr)` | A review already exists, made in the UI or earlier |
 
 The answer holds DevDigest's findings, not the model's guess, because every result is the API's
-data projected without rewriting, an unknown value is an error that names how to find a valid
+data projected without paraphrase (free text is capped, its whitespace collapsed and token-like strings shown as `***` — a deliberate change of 2026-10-10, see the package spec), an unknown value is an error that names how to find a valid
 one, and the stub says outright that no data exists.
 
 ## Lab conformance
@@ -168,7 +168,7 @@ one, and the stub says outright that no data exists.
 | 19 | Read tools have `readOnlyHint: true` | P12 | implemented — phase 6 |
 | 20 | The domain code limits the real permissions | L3, D19 | implemented — added in revision 3 |
 | 21 | Scenario: Claude Code goes through `list_agents → run_agent_on_pr → get_findings` | D20 and "The lab's scenario": the sequence is the generic path; shorter paths are valid (user decision) | tools and tests done; the run in Claude Code awaits the manual acceptance |
-| 22 | The answer contains DevDigest's actual findings, not the model's assumptions | Results are the API's data projected without rewriting; the stub and every not-found case are errors | the projection is proven by tests; the model's answer awaits the manual acceptance |
+| 22 | The answer contains DevDigest's actual findings, not the model's assumptions | Results are the API's data projected without paraphrase (capped, whitespace collapsed, token-like strings masked); the stub and every not-found case are errors | the projection is proven by tests; the model's answer awaits the manual acceptance |
 | 23 | Check: Inspector sees all five tools and correct schemas | The Inspector record after phase 6 | implemented |
 | 24 | Check: `devdigest-mcp` starts with a separate command | L1; `mcp/test/single-zod.test.ts`, `mcp/test/stdio.test.ts` | implemented — phases 2, 3 |
 | 25 | Check: Claude Code goes through the sequence | Manual acceptance | awaits the manual acceptance |

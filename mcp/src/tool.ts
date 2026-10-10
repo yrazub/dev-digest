@@ -1,7 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { McpConfig } from './config.js';
-import { MAX_ERROR_TEXT, REQUEST_TIMEOUT_MS } from './constants.js';
+import { MAX_ERROR_TEXT, MAX_ID, REQUEST_TIMEOUT_MS } from './constants.js';
 import { ApiError, type DevDigestApi } from './ports.js';
 
 /** An error whose message is written for the calling model; it is returned as the tool result. */
@@ -94,8 +94,9 @@ function apiErrorText(err: ApiError, config: McpConfig): string {
       if (err.status === 429) {
         return `The DevDigest API rate limit was reached (${err.route}). Wait 60 seconds, then retry once.`;
       }
+      const code = err.code === undefined ? undefined : sanitizeText(err.code, MAX_ID);
       return (
-        `The DevDigest API answered ${[err.status, err.code].filter((part) => part !== undefined).join(' ')} for ${err.route}: ` +
+        `The DevDigest API answered ${[err.status, code].filter((part) => part !== undefined).join(' ')} for ${err.route}: ` +
         `${sanitizeText(err.message, MAX_ERROR_TEXT)}. If the message names a missing relation, run "cd server && pnpm db:migrate".`
       );
   }

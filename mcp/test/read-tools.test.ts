@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { MAX_AGENT_NAME, MAX_ID, MAX_MODEL, MAX_PATH, MAX_REPO, MAX_RULE } from '../src/constants.js';
+import { MAX_AGENT_NAME, MAX_DESCRIPTION, MAX_ID, MAX_MODEL, MAX_PATH, MAX_REPO, MAX_RULE } from '../src/constants.js';
 import { MockDevDigestApi, type MockDevDigestApiOptions, type MockDevDigestApiState } from '../src/mocks.js';
 import {
   ApiError,
@@ -150,6 +150,39 @@ describe('list_agents', () => {
     const description = json(text).agents[0].description as string;
     expect(description).toHaveLength(200);
     expect(description.endsWith('…')).toBe(true);
+  });
+
+  it('masks a token-like string in the description and collapses its lines to one', async () => {
+    const secret = 'ghp_abcdefghijklmnopqrstuvwxyz012345';
+
+    const { text } = await call(asDef(listAgents), {}, {
+      agents: [agent({ description: `Flags ${secret}\n\n  and similar.\r\n\tSecond line.` })],
+    });
+
+    expect(text).not.toContain(secret);
+    expect(json(text).agents[0].description).toBe('Flags *** and similar. Second line.');
+  });
+
+  it('masks before it cuts a long description: 200 characters, an ellipsis, no token start left', async () => {
+    const { text } = await call(asDef(listAgents), {}, {
+      agents: [agent({ description: `sk_live_AbCdEfGhIjKlMnOp1234 ${'word '.repeat(100)}` })],
+    });
+
+    const description = json(text).agents[0].description as string;
+    expect(description).toHaveLength(MAX_DESCRIPTION);
+    expect(description.startsWith('*** word')).toBe(true);
+    expect(description.endsWith('…')).toBe(true);
+    expect(text).not.toContain('sk_live');
+  });
+
+  it('does not mask id, name or model: they stay on the plain cut', async () => {
+    const token = 'sk_live_AbCdEfGhIjKlMnOp1234';
+
+    const { text } = await call(asDef(listAgents), {}, {
+      agents: [agent({ id: token, name: token, provider: 'openai', model: token })],
+    });
+
+    expect(json(text).agents[0]).toMatchObject({ id: token, name: token, model: `openai/${token}` });
   });
 
   it('cuts name at MAX_AGENT_NAME and id at MAX_ID, each ending with an ellipsis', async () => {
@@ -457,6 +490,29 @@ describe('get_findings — selection', () => {
     expect(body.agent).toBe('Security Reviewer');
     expect(body.findings[0].title).toBe('from the newest');
     expectNoWrite(api);
+  });
+
+  it('shows a token-like string in a finding as *** and a multi-line rationale as one line, end to end', async () => {
+    const secret = 'ghp_abcdefghijklmnopqrstuvwxyz012345';
+    const leaky = review({
+      summary: `Summary mentions ${secret}.\nSecond line.`,
+      findings: [
+        finding({
+          title: `Token ${secret} committed`,
+          file: 'src/config.ts',
+          rationale: `The diff adds\n\n  ${secret}\nto the config.`,
+        }),
+      ],
+    });
+
+    const { text, isError } = await call(asDef(getFindings), { repo: 'acme/payments-api', pr: 482 }, stateWithReviews([leaky]));
+
+    expect(isError).toBe(false);
+    expect(text).not.toContain(secret);
+    const body = json(text);
+    expect(body.findings[0].title).toBe('Token *** committed');
+    expect(body.findings[0].rationale).toBe('The diff adds *** to the config.');
+    expect(body.summary).toBe('Summary mentions ***. Second line.');
   });
 
   it('with run_id returns the review of that run', async () => {

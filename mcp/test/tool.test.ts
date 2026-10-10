@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { MAX_ID } from '../src/constants.js';
 import {
   executeTool,
   sanitizeText,
@@ -194,6 +195,33 @@ describe('toolError for an ApiError (E-API-*)', () => {
     expect(text).toContain('answered 500 internal_error for GET /repos/:id/pulls');
     expect(text).toContain('relation "pull_requests" does not exist');
     expect(text).toContain('cd server && pnpm db:migrate');
+  });
+
+  it('E-API-HTTP: a normal code is shown unchanged', () => {
+    const err = new ApiError('http', 'GET /pulls/:id', 404, 'not_found', 'Pull request not found');
+
+    const text = textOf(toolError(err, deps(), 'get_findings'));
+
+    expect(text).toContain('answered 404 not_found for GET /pulls/:id: Pull request not found.');
+  });
+
+  it('E-API-HTTP: masks a token-like code', () => {
+    const token = 'sk_live_AbCdEfGhIjKlMnOp1234';
+    const err = new ApiError('http', 'GET /agents', 500, token, 'boom');
+
+    const text = textOf(toolError(err, deps(), 'list_agents'));
+
+    expect(text).not.toContain(token);
+    expect(text).toContain('answered 500 *** for GET /agents: boom.');
+  });
+
+  it('E-API-HTTP: cuts a very long code at MAX_ID characters with an ellipsis', () => {
+    const err = new ApiError('http', 'GET /agents', 500, 'c'.repeat(500), 'boom');
+
+    const text = textOf(toolError(err, deps(), 'list_agents'));
+
+    expect(text).toContain(`answered 500 ${'c'.repeat(MAX_ID - 1)}… for GET /agents`);
+    expect(text).not.toContain('c'.repeat(MAX_ID));
   });
 
   it('an http error without a code still names the status and the route', () => {

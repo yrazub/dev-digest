@@ -58,10 +58,10 @@ Environment variables (read by `main.ts` only, parsed by `loadMcpConfig`):
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `DEVDIGEST_API_URL` | http(s) URL of the API, without credentials (a URL with a user or password is rejected, because the URL is logged and quoted in error texts); a trailing slash is removed | `http://127.0.0.1:3001` |
+| `DEVDIGEST_API_URL` | http(s) URL of the API, without credentials and without a query string or fragment (a URL with a user, a password, a `?…` or a `#…` is rejected, because the URL is logged and quoted in error texts, and route paths are appended to it so a query string could not work anyway); a trailing slash is removed | `http://127.0.0.1:3001` |
 | `DEVDIGEST_MCP_WAIT_SECONDS` | integer 1..600; how long `run_agent_on_pr` waits | `120` |
 
-An invalid value makes `main.ts` write one stderr line naming the variable and exit with code 1. The line for `DEVDIGEST_API_URL` never quotes the value (`DEVDIGEST_API_URL is invalid (credentials are not allowed in it; remove the user and password).`); the line for `DEVDIGEST_MCP_WAIT_SECONDS` quotes it (`… Got "abc".`).
+An invalid value makes `main.ts` write one stderr line naming the variable and exit with code 1. The line for `DEVDIGEST_API_URL` never quotes the value (`DEVDIGEST_API_URL is invalid (credentials are not allowed in it; remove the user and password).`, or `DEVDIGEST_API_URL is invalid (a query string or fragment is not allowed in it; remove it).`); the line for `DEVDIGEST_MCP_WAIT_SECONDS` quotes it (`… Got "abc".`).
 stdout carries only MCP messages; all logging goes to stderr.
 
 ## What already exists
@@ -189,7 +189,7 @@ export function assertSingleZod(): void;   // throws when `Severity instanceof z
 // config.ts
 export interface McpConfig { apiUrl: string; waitMs: number }
 export function loadMcpConfig(env: NodeJS.ProcessEnv): McpConfig;
-// DEVDIGEST_API_URL: http(s) URL without a user or password, default 'http://127.0.0.1:3001', trailing slash removed. The error never echoes the value.
+// DEVDIGEST_API_URL: http(s) URL without a user, password, query string or fragment, default 'http://127.0.0.1:3001', trailing slash removed. The error never echoes the value.
 // DEVDIGEST_MCP_WAIT_SECONDS: integer 1..600, default 120. Invalid value → throws an Error naming the variable.
 
 // tool.ts
@@ -310,7 +310,7 @@ scalar or an enum. Only `repo`, `pr`, `agent` and `run_id` carry a description.
 
 - Description: `List the reviewer agents configured in DevDigest. Call it when you need an agent's id or exact name for run_agent_on_pr.`
 - Input: none. Schema target: `{ "type": "object", "additionalProperties": false }`.
-- Output: `{"agents":[{"id","name","description","model","enabled"}]}` sorted by `name`; `id` cut at `MAX_ID`, `name` at `MAX_AGENT_NAME`, `description` at 200; `model` is `<provider>/<model>`, cut at `MAX_MODEL`; at most 50, with a `note` when cut. Empty list: `agents: []` and `note: "No agents are configured. Create one in the DevDigest UI (Agents)."`.
+- Output: `{"agents":[{"id","name","description","model","enabled"}]}` sorted by `name`; `id` cut at `MAX_ID`, `name` at `MAX_AGENT_NAME`, `description` through `sanitizeText` at `MAX_DESCRIPTION` (200; user-authored free text, so whitespace collapses and token-like strings are masked as `***`); `model` is `<provider>/<model>`, cut at `MAX_MODEL`; at most 50, with a `note` when cut. Empty list: `agents: []` and `note: "No agents are configured. Create one in the DevDigest UI (Agents)."`.
 - Dropped from `Agent`: `system_prompt`, `output_schema`, `version`, `strategy`, `ci_fail_on`, `repo_intel`, `skill_count`.
 - Errors: the API errors below.
 
@@ -341,7 +341,8 @@ scalar or an enum. Only `repo`, `pr`, `agent` and `run_id` carry a description.
  "findings":[{"severity":"CRITICAL","title":"…","file":"src/config.ts","line":11,"rationale":"…"}]}
 ```
 
-- `findings`: dismissed findings are left out (the product's "counted findings" rule, `server/README.md:113-115`); sorted by severity, then `file`, then `line` (code-unit comparison); `line` is `start_line`; `end_line` appears only when it differs; `title`, `rationale`, `summary`, `file` and the top-level `agent` are cut at their caps (`MAX_TITLE`, `MAX_RATIONALE`, `MAX_SUMMARY`, `MAX_PATH`, `MAX_AGENT_NAME`); `run_id` and `reviewed_at` are cut at `MAX_ID` (they are free strings in the contract, and a normal value is shorter).
+- `findings`: dismissed findings are left out (the product's "counted findings" rule, `server/README.md:113-115`); sorted by severity, then `file`, then `line` (code-unit comparison); `line` is `start_line`; `end_line` appears only when it differs; `title`, `rationale`, `summary` and `file` pass through `sanitizeText` at their caps (`MAX_TITLE`, `MAX_RATIONALE`, `MAX_SUMMARY`, `MAX_PATH`): whitespace (including newlines) collapses to single spaces, so a multi-line rationale becomes one line, and token-like strings are masked as `***`. The top-level `agent` is cut with `cutText` at `MAX_AGENT_NAME`; `run_id` and `reviewed_at` are cut with `cutText` at `MAX_ID` (they are free strings in the contract, and a normal value is shorter; a mask would corrupt an id the caller passes back). The cut keeps the length at or below the cap, so the worst-case size under Limits does not change.
+- **Deliberate change (2026-10-10, user decision, third pre-PR self-review):** the plan and the first version of this spec projected review data "without rewriting", cutting free text only at its cap. A reviewer agent quotes the diff in a title, rationale or summary, so a secret that sits in the diff would reach the calling model verbatim. Masking is wanted even though it rewrites the text: a token-like string in a finding is shown as `***`, and whitespace in these four fields is collapsed. Ids, names and timestamps stay on `cutText`.
 - `counts`: every non-dismissed finding by severity, before `min_severity` and `limit`.
 - When `limit` cut the list: `"truncated": true` and `"note": "Showing <k> of <n> findings, most severe first. Call get_findings with run_id \"<id>\" and min_severity \"WARNING\", or a higher limit (max 50)."`. That is the text for the default call; the advice adapts to the arguments so it never suggests a step that cannot help: `<n>` counts the findings left after `min_severity`; the suggested severity is the next one up (`WARNING` with no filter, `CRITICAL` when the filter is `WARNING`, none when it is already `CRITICAL`); `run_id` is left out when the review has none; "or a higher limit" is left out when the limit is already 50.
 - `verdict` is the shared `Verdict` enum; `run_id`, `agent`, `verdict`, `score`, `summary` may be `null` (the seeded review has no agent).
@@ -382,7 +383,7 @@ Every error is a tool result with `isError: true` and one text block. Tests pin 
 | E-API-UNREACHABLE | `The DevDigest API is **not reachable at <apiUrl>**. Start it from the repository root with **./scripts/dev.sh**, then call this tool again.` |
 | E-API-TIMEOUT | `The DevDigest API did not answer <METHOD route> within 30 seconds. Check <apiUrl>/health, then retry.` |
 | E-API-RATE (HTTP 429) | `The DevDigest API **rate limit** was reached (<METHOD route>). **Wait 60 seconds**, then retry once.` |
-| E-API-HTTP | `The DevDigest API answered <status> <code> for <METHOD route>: <message, sanitized, ≤ 300>. If the message names a missing relation, run "cd server && pnpm db:migrate".` |
+| E-API-HTTP | `The DevDigest API answered <status> <code, sanitized, ≤ 64> for <METHOD route>: <message, sanitized, ≤ 300>. If the message names a missing relation, run "cd server && pnpm db:migrate".` |
 | E-API-SHAPE | `The DevDigest API returned an **unexpected response** for <METHOD route>. The API and devdigest-mcp may be on different versions: restart the API with ./scripts/dev.sh and retry.` |
 | E-ARGS | `**Invalid arguments** for <tool>: <field>: <issue>; … Expected: <the tool's parameter names>.` |
 | E-INTERNAL | `devdigest-mcp hit an unexpected error in <tool>. Details are in the server's stderr log; retry once, then report it to the user.` The original message and stack go to stderr only. |
@@ -403,7 +404,7 @@ cuts at `max`. Masked, each with a minimum length so ordinary words stay readabl
 - the value after `Bearer ` (any case): 16 or more characters of `[A-Za-z0-9._~+/=-]`; the word
   `Bearer` stays, so `Authorization: Bearer ***` shows what was removed.
 
-It is applied to every string that comes from the API into an error, and to each progress
+It is applied to every string that comes from the API into an error (the message and the `code` of E-API-HTTP, the latter at `MAX_ID`), to the reviewer-written text of a review result (finding `title`, `rationale`, `file` and the review `summary`), to an agent's `description` and to a convention's `rule` and evidence path, and to each progress
 notification (cap `MAX_PROGRESS_TEXT`): a run event's `msg` is model-written text derived from the
 pull request, so `server.ts` runs it through `sanitizeText` before `sendNotification`. Names, ids and
 timestamps that appear in a result are cut with `cutText` at their caps instead: they are not

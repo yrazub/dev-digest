@@ -18,11 +18,22 @@ function hasCredentials(value: string): boolean {
   }
 }
 
+// Route paths are appended to the URL, so a query string or fragment cannot work, and would be logged and quoted too.
+function hasQueryOrFragment(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.search !== '' || url.hash !== '';
+  } catch {
+    return false;
+  }
+}
+
 const ApiUrl = z
   .string()
   .url()
   .refine((value) => /^https?:\/\//i.test(value), 'must use http or https')
-  .refine((value) => !hasCredentials(value), 'credentials are not allowed in it; remove the user and password');
+  .refine((value) => !hasCredentials(value), 'credentials are not allowed in it; remove the user and password')
+  .refine((value) => !hasQueryOrFragment(value), 'a query string or fragment is not allowed in it; remove it');
 
 const WaitSeconds = z
   .string()

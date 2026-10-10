@@ -76,6 +76,27 @@ describe('loadMcpConfig', () => {
       },
     );
 
+    it.each([
+      'http://127.0.0.1:3001?token=abc',
+      'http://127.0.0.1:3001/api?token=abc',
+      'http://127.0.0.1:3001#frag',
+      'http://127.0.0.1:3001/api?token=abc#frag',
+    ])('rejects %j: a query string or fragment is not allowed, and neither the value nor the secret is echoed', (value) => {
+      const text = message({ DEVDIGEST_API_URL: value });
+
+      expect(text).toContain('DEVDIGEST_API_URL is invalid');
+      expect(text).toContain('a query string or fragment is not allowed');
+      expect(text).not.toContain('abc');
+      expect(text).not.toContain('#frag');
+      expect(text).not.toContain('token=');
+      expect(text).not.toContain(value);
+      expect(text).not.toContain('Got');
+    });
+
+    it('still loads a URL with a path and no query, and drops the trailing slash', () => {
+      expect(loadMcpConfig({ DEVDIGEST_API_URL: 'http://127.0.0.1:3001/api/' }).apiUrl).toBe('http://127.0.0.1:3001/api');
+    });
+
     it('says an ftp URL must use http or https', () => {
       expect(message({ DEVDIGEST_API_URL: 'ftp://x' })).toContain('must use http or https');
     });

@@ -1,7 +1,7 @@
 import type { Severity } from '@devdigest/shared';
 import { MAX_AGENT_NAME, MAX_ID, MAX_LIMIT, MAX_PATH, MAX_RATIONALE, MAX_SUMMARY, MAX_TITLE, SEVERITY_ORDER } from './constants.js';
 import type { ApiFinding, ApiReview } from './ports.js';
-import { cutText } from './tool.js';
+import { cutText, sanitizeText } from './tool.js';
 
 export interface ReviewViewOptions {
   minSeverity?: Severity;
@@ -13,14 +13,15 @@ const rank = (severity: Severity): number => SEVERITY_ORDER.indexOf(severity);
 /** Code-unit comparison, so the order does not depend on the machine's locale. */
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
+/** Reviewer-written text may quote the diff, so title, file and rationale are masked, not just cut. */
 function toFindingView(finding: ApiFinding): Record<string, unknown> {
   return {
     severity: finding.severity,
-    title: cutText(finding.title, MAX_TITLE),
-    file: cutText(finding.file, MAX_PATH),
+    title: sanitizeText(finding.title, MAX_TITLE),
+    file: sanitizeText(finding.file, MAX_PATH),
     line: finding.start_line,
     ...(finding.end_line !== finding.start_line ? { end_line: finding.end_line } : {}),
-    rationale: cutText(finding.rationale, MAX_RATIONALE),
+    rationale: sanitizeText(finding.rationale, MAX_RATIONALE),
   };
 }
 
@@ -57,7 +58,7 @@ export function toReviewView(review: ApiReview, options: ReviewViewOptions): Rec
     reviewed_at: cutText(review.created_at, MAX_ID),
     verdict: review.verdict,
     score: review.score,
-    summary: review.summary === null ? null : cutText(review.summary, MAX_SUMMARY),
+    summary: review.summary === null ? null : sanitizeText(review.summary, MAX_SUMMARY),
     counts,
     findings: kept.map(toFindingView),
   };
