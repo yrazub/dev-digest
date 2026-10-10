@@ -1,9 +1,9 @@
 import { ConventionStatus } from '@devdigest/shared';
 import { z } from 'zod';
-import { MAX_CONVENTIONS, MAX_PATH, MAX_RULE } from '../constants.js';
+import { MAX_CONVENTIONS, MAX_ID, MAX_PATH, MAX_REPO, MAX_RULE } from '../constants.js';
 import type { ApiConvention } from '../ports.js';
 import { resolveRepo } from '../resolve.js';
-import { sanitizeText, type ToolDef } from '../tool.js';
+import { cutText, sanitizeText, type ToolDef } from '../tool.js';
 
 const inputShape = {
   repo: z.string().describe('owner/name'),
@@ -47,14 +47,14 @@ export const getConventions: ToolDef<typeof inputShape> = {
     }
 
     return {
-      repo: repo.full_name,
+      repo: cutText(repo.full_name, MAX_REPO),
       status: args.status,
       conventions: shown.map((candidate) => ({
         category: candidate.category,
         rule: sanitizeText(candidate.rule, MAX_RULE),
         evidence: evidence(candidate),
       })),
-      last_scan_at: scan.last_scan_at,
+      last_scan_at: scan.last_scan_at === null ? null : cutText(scan.last_scan_at, MAX_ID),
       ...(note === undefined ? {} : { note }),
     };
   },

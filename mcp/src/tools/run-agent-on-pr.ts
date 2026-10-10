@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { DEFAULT_LIMIT } from '../constants.js';
+import { DEFAULT_LIMIT, MAX_AGENT_NAME, MAX_ERROR_TEXT, MAX_ID, MAX_REPO } from '../constants.js';
 import { noReviewFailure, resolveAgent, resolvePull, runNoReviewFailure } from '../resolve.js';
 import { toReviewView } from '../review-view.js';
-import { acceptNumericString, ToolFailure, type ToolDef } from '../tool.js';
+import { acceptNumericString, cutText, sanitizeText, ToolFailure, type ToolDef } from '../tool.js';
 
 const inputShape = {
   repo: z.string().describe('owner/name'),
@@ -21,7 +21,8 @@ export const runAgentOnPr: ToolDef<typeof inputShape> = {
     // Every lookup comes first: nothing is started when one of them fails.
     const { repo, pull } = await resolvePull(deps.api, args.repo, args.pr);
     const agent = await resolveAgent(deps.api, args.agent);
-    const where = `${repo.full_name}#${pull.number}`;
+    const repoName = cutText(repo.full_name, MAX_REPO);
+    const where = `${repoName}#${pull.number}`;
 
     // A retry after a timeout must not pay twice: join the run of this agent that is still going.
     const before = await deps.api.listRuns(pull.id);
@@ -33,7 +34,7 @@ export const runAgentOnPr: ToolDef<typeof inputShape> = {
 
     // The client gave up: end the call. The run is not cancelled; it keeps going in the API.
     if (ctx.signal?.aborted) {
-      throw new ToolFailure(`The call was cancelled. Run ${runId} was not stopped; read it later with get_findings.`);
+      throw new ToolFailure(`The call was cancelled. Run ${sanitizeText(runId, MAX_ERROR_TEXT)} was not stopped; read it later with get_findings.`);
     }
 
     // The final status comes from a second read, never from the end of the stream.
@@ -45,12 +46,12 @@ export const runAgentOnPr: ToolDef<typeof inputShape> = {
     if (run.status !== 'done') {
       return {
         status: 'running',
-        run_id: runId,
-        agent: agent.name,
+        run_id: cutText(runId, MAX_ID),
+        agent: cutText(agent.name, MAX_AGENT_NAME),
         waited_seconds: Math.round(deps.config.waitMs / 1000),
         next:
           'The review is still running. Do not call run_agent_on_pr again. ' +
-          `Call get_findings with repo "${repo.full_name}", pr ${pull.number}, run_id "${runId}" in about 30 seconds.`,
+          `Call get_findings with repo "${repoName}", pr ${pull.number}, run_id "${cutText(runId, MAX_ID)}" in about 30 seconds.`,
       };
     }
 

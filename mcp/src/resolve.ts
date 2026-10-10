@@ -64,8 +64,8 @@ export async function resolvePull(
     .join(', ');
   const imported = numbers === '' ? 'No pull requests are imported for it yet.' : `Imported pull requests: ${numbers}.`;
   throw new ToolFailure(
-    `Pull request #${pr} is not imported for ${resolvedRepo.full_name}. ${imported} ` +
-      `If it is new, open ${resolvedRepo.full_name} in the DevDigest UI so it is imported, then retry.`,
+    `Pull request #${pr} is not imported for ${quote(resolvedRepo.full_name)}. ${imported} ` +
+      `If it is new, open ${quote(resolvedRepo.full_name)} in the DevDigest UI so it is imported, then retry.`,
   );
 }
 

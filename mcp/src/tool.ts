@@ -32,12 +32,27 @@ export function toolOk(payload: Record<string, unknown>): CallToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
 }
 
+// Token-like strings, each with a minimum length so ordinary words and identifiers stay readable.
+const PREFIXED_TOKEN = /(?:sk-|sk_|ghp_|gho_|ghs_|ghu_|ghr_|github_pat_|xox)[A-Za-z0-9_-]{16,}/g;
+// npm tokens are `npm_` + 36 letters and digits; no `_` or `-`, so `npm_config_user_agent` is left alone.
+const NPM_TOKEN = /npm_[A-Za-z0-9]{36}(?![A-Za-z0-9])/g;
+// AWS access key id: `AKIA` + exactly 16 upper-case letters and digits.
+const AWS_KEY_ID = /(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}(?![A-Za-z0-9])/g;
+// Google API key: `AIza` + exactly 35 characters.
+const GOOGLE_KEY = /(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}(?![A-Za-z0-9_-])/g;
+// The word stays, the credential after it goes.
+const BEARER_TOKEN = /\b(Bearer\s+)[A-Za-z0-9._~+/=-]{16,}/gi;
+
 /** Collapses whitespace, masks token-like substrings and cuts at `max` with an ellipsis. */
 export function sanitizeText(text: string, max: number): string {
   const collapsed = text
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/(sk-|sk_|ghp_|gho_|github_pat_|xox)[A-Za-z0-9_-]{16,}/g, '***');
+    .replace(PREFIXED_TOKEN, '***')
+    .replace(NPM_TOKEN, '***')
+    .replace(AWS_KEY_ID, '***')
+    .replace(GOOGLE_KEY, '***')
+    .replace(BEARER_TOKEN, '$1***');
   return collapsed.length > max ? `${collapsed.slice(0, Math.max(0, max - 1))}…` : collapsed;
 }
 

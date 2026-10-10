@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { MAX_AGENT_NAME, MAX_ID, MAX_PROGRESS_TEXT, MAX_REPO } from '../src/constants.js';
+import { createMcpServer } from '../src/server.js';
 import { MockDevDigestApi, type MockDevDigestApiOptions, type MockDevDigestApiState } from '../src/mocks.js';
 import { ApiError, type ApiAgent, type ApiFinding, type ApiReview, type ApiRun } from '../src/ports.js';
 import { executeTool, type ToolContext, type ToolDef, type ToolDeps } from '../src/tool.js';
@@ -317,6 +321,46 @@ describe('run_agent_on_pr: the wait outlasts the budget (D4)', () => {
     expect(methods).not.toContain('listReviews');
   });
 
+  it('cuts agent at MAX_AGENT_NAME and run_id at MAX_ID, and a normal uuid run id is untouched', async () => {
+    const long = agent({ id: 'agent-long', name: 'A'.repeat(300) });
+    const cut = await call(
+      { ...ARGS, agent: long.id },
+      base({ agents: [long] }),
+      stillRunning({ startedRunId: 'i'.repeat(300) }),
+    );
+    const uuid = '3f2b8c1e-7a4d-4e0b-9c55-1d2e3f4a5b6c';
+    const plain = await call(ARGS, base(), stillRunning({ startedRunId: uuid }));
+
+    const body = json(cut.text);
+    expect(body.status).toBe('running');
+    expect(body.agent).toHaveLength(MAX_AGENT_NAME);
+    expect(body.agent.endsWith('…')).toBe(true);
+    expect(body.run_id).toHaveLength(MAX_ID);
+    expect(body.run_id.endsWith('…')).toBe(true);
+    expect(json(plain.text).run_id).toBe(uuid);
+    expect(json(plain.text).next).toContain(`run_id "${uuid}"`);
+  });
+
+  it('cuts the repository and the run id named in next, which still names get_findings, the PR and the run', async () => {
+    const longRepo = { id: 'repo-long', full_name: `acme/${'r'.repeat(300)}` };
+    const longRun = 'i'.repeat(300);
+    const { text } = await call(
+      { ...ARGS, repo: longRepo.full_name },
+      { ...base(), repos: [longRepo], pulls: { [longRepo.id]: [PR] } },
+      stillRunning({ startedRunId: longRun }),
+    );
+
+    const { next } = json(text);
+    const cutRepo = `acme/${'r'.repeat(MAX_REPO - 'acme/'.length - 1)}…`;
+    const cutRun = `${'i'.repeat(MAX_ID - 1)}…`;
+    expect(next).toContain('get_findings');
+    expect(next).toContain(`repo "${cutRepo}"`);
+    expect(next).toContain('pr 482');
+    expect(next).toContain(`run_id "${cutRun}"`);
+    expect(next).not.toContain('r'.repeat(MAX_REPO));
+    expect(next).not.toContain('i'.repeat(MAX_ID));
+  });
+
   it('reports waited_seconds from the configured wait', async () => {
     const { text, api } = await call(ARGS, base(), stillRunning(), { waitMs: 45_000 });
 
@@ -454,6 +498,25 @@ describe('run_agent_on_pr: progress, the wait and the signal', () => {
     expect(progress.mock.calls.map((c) => c[0])).toEqual(['queued', 'reading the diff', 'grounding']);
   });
 
+  it('a cancelled call masks a token-like run id and caps a long one in its text', async () => {
+    const token = 'ghp_abcdefghijklmnop1234';
+    const controller = new AbortController();
+    const masked = await call(ARGS, base(), finishing({ status: 'done' }, [review()], { startedRunId: token, onWait: () => controller.abort() }), {
+      ctx: { signal: controller.signal },
+    });
+    const controller2 = new AbortController();
+    const capped = await call(ARGS, base(), finishing({ status: 'done' }, [review()], { startedRunId: 'i'.repeat(1_000), onWait: () => controller2.abort() }), {
+      ctx: { signal: controller2.signal },
+    });
+
+    expect(masked.isError).toBe(true);
+    expect(masked.text).toBe('The call was cancelled. Run *** was not stopped; read it later with get_findings.');
+    expect(capped.isError).toBe(true);
+    expect(capped.text).not.toContain('i'.repeat(300));
+    expect(capped.text).toContain('…');
+    expect(capped.text).toContain('get_findings');
+  });
+
   it('waits with the default 120,000 ms and the context signal', async () => {
     const controller = new AbortController();
     const { api } = await call(ARGS, base(), finishing({ status: 'done' }), { ctx: { signal: controller.signal } });
@@ -484,5 +547,77 @@ describe('run_agent_on_pr: progress, the wait and the signal', () => {
     // The last call is the wait: no second listRuns, no review read, and the run is not touched.
     expect(methods[methods.length - 1]).toBe('waitForRun');
     expect(methods.filter((m) => m === 'startReview')).toHaveLength(1);
+  });
+});
+
+// The path from a run event to the client: `server.ts` masks and caps each message before it
+// sends `notifications/progress`. Driven through the SDK's in-memory transport pair: the real
+// `createMcpServer` and a real `Client`, in one process, with no spawned process and no port.
+describe('run_agent_on_pr: progress notifications through the server', () => {
+  async function callWithEvents(events: string[], options: { withToken: boolean }) {
+    const api = new MockDevDigestApi(base(), finishing({ status: 'done' }, [review()], { events }));
+    const server = createMcpServer({
+      api,
+      config: { apiUrl: 'http://127.0.0.1:3001', waitMs: 120_000 },
+      log: vi.fn(),
+    });
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    const received: Array<{ progress: number; message?: string }> = [];
+    // The client reports a progress notification it has no handler for ("unknown token") here, so
+    // a notification sent without a token would show up as an error rather than vanish.
+    const clientErrors: Error[] = [];
+    client.onerror = (error) => clientErrors.push(error);
+    try {
+      await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
+      const result = await client.callTool(
+        { name: 'run_agent_on_pr', arguments: ARGS },
+        undefined,
+        options.withToken ? { onprogress: (p) => received.push(p) } : undefined,
+      );
+      return { received, result, clientErrors };
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  }
+
+  it('masks, collapses and caps each message; an ordinary one arrives unchanged', async () => {
+    const token = 'ghp_abcdefghijklmnop1234';
+    const { received, result } = await callWithEvents(
+      ['reading the diff', 'first line\nsecond   line\r\n\tthird', `using ${token} to push`, 'L'.repeat(1_000)],
+      { withToken: true },
+    );
+
+    expect(result.isError).not.toBe(true);
+    expect(received.map((p) => p.progress)).toEqual([1, 2, 3, 4]);
+    const messages = received.map((p) => p.message ?? '');
+    expect(messages[0]).toBe('reading the diff');
+    expect(messages[1]).toBe('first line second line third');
+    expect(messages[2]).toBe('using *** to push');
+    expect(messages[2]).not.toContain(token);
+    expect(messages[3]).toHaveLength(MAX_PROGRESS_TEXT);
+    expect(messages[3]?.endsWith('…')).toBe(true);
+    for (const message of messages) expect(message).not.toMatch(/[\r\n\t]/);
+  });
+
+  it('masks a token before the cut, so a token that straddles the cap leaves no prefix behind', async () => {
+    const token = 'ghp_' + 'a'.repeat(40);
+    const filler = 'x'.repeat(MAX_PROGRESS_TEXT - 10);
+    const { received } = await callWithEvents([`${filler} ${token}`], { withToken: true });
+
+    const message = received[0]?.message ?? '';
+    expect(message).toBe(`${filler} ***`);
+    expect(message).not.toContain('ghp_');
+  });
+
+  it('sends no notification when the call carries no progress token, and the call still succeeds', async () => {
+    const { received, result, clientErrors } = await callWithEvents(['reading the diff', 'grounding'], { withToken: false });
+
+    expect(received).toEqual([]);
+    expect(clientErrors).toEqual([]);
+    expect(result.isError).not.toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(JSON.parse(content[0]?.text ?? '{}')).toMatchObject({ status: 'done', run_id: RUN_ID });
   });
 });

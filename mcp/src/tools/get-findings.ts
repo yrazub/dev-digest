@@ -1,9 +1,9 @@
 import { Severity } from '@devdigest/shared';
 import { z } from 'zod';
-import { DEFAULT_LIMIT, MAX_ERROR_TEXT, MAX_LIMIT } from '../constants.js';
+import { DEFAULT_LIMIT, MAX_ERROR_TEXT, MAX_LIMIT, MAX_REPO } from '../constants.js';
 import { noReviewFailure, resolvePull } from '../resolve.js';
 import { toReviewView } from '../review-view.js';
-import { acceptNumericString, sanitizeText, ToolFailure, type ToolDef } from '../tool.js';
+import { acceptNumericString, cutText, sanitizeText, ToolFailure, type ToolDef } from '../tool.js';
 
 const inputShape = {
   repo: z.string().describe('owner/name'),
@@ -21,7 +21,7 @@ export const getFindings: ToolDef<typeof inputShape> = {
   annotations: { readOnlyHint: true },
   async run(args, deps) {
     const { repo, pull } = await resolvePull(deps.api, args.repo, args.pr);
-    const where = `${repo.full_name}#${pull.number}`;
+    const where = `${cutText(repo.full_name, MAX_REPO)}#${pull.number}`;
 
     // Newest first. A `summary` review is the PR overview, not an agent's verdict.
     const reviews = (await deps.api.listReviews(pull.id)).filter((review) => review.kind === 'review');

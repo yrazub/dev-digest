@@ -1,5 +1,5 @@
 import type { Severity } from '@devdigest/shared';
-import { MAX_AGENT_NAME, MAX_LIMIT, MAX_PATH, MAX_RATIONALE, MAX_SUMMARY, MAX_TITLE, SEVERITY_ORDER } from './constants.js';
+import { MAX_AGENT_NAME, MAX_ID, MAX_LIMIT, MAX_PATH, MAX_RATIONALE, MAX_SUMMARY, MAX_TITLE, SEVERITY_ORDER } from './constants.js';
 import type { ApiFinding, ApiReview } from './ports.js';
 import { cutText } from './tool.js';
 
@@ -52,9 +52,9 @@ export function toReviewView(review: ApiReview, options: ReviewViewOptions): Rec
 
   const view: Record<string, unknown> = {
     status: 'done',
-    run_id: review.run_id,
+    run_id: review.run_id === null ? null : cutText(review.run_id, MAX_ID),
     agent: review.agent_name == null ? null : cutText(review.agent_name, MAX_AGENT_NAME),
-    reviewed_at: review.created_at,
+    reviewed_at: cutText(review.created_at, MAX_ID),
     verdict: review.verdict,
     score: review.score,
     summary: review.summary === null ? null : cutText(review.summary, MAX_SUMMARY),
@@ -65,7 +65,7 @@ export function toReviewView(review: ApiReview, options: ReviewViewOptions): Rec
   if (kept.length < shown.length) {
     const narrower = narrowerSeverity(minSeverity);
     const narrowing = [
-      ...(review.run_id === null ? [] : [`run_id "${review.run_id}"`]),
+      ...(review.run_id === null ? [] : [`run_id "${cutText(review.run_id, MAX_ID)}"`]),
       ...(narrower === undefined ? [] : [`min_severity "${narrower}"`]),
     ].join(' and ');
     const higherLimit = limit < MAX_LIMIT ? `a higher limit (max ${MAX_LIMIT})` : '';

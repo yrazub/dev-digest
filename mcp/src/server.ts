@@ -1,13 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { SERVER_INSTRUCTIONS, SERVER_NAME, SERVER_VERSION } from './constants.js';
+import { MAX_PROGRESS_TEXT, SERVER_INSTRUCTIONS, SERVER_NAME, SERVER_VERSION } from './constants.js';
 import { getBlastRadius } from './tools/get-blast-radius.js';
 import { getConventions } from './tools/get-conventions.js';
 import { getFindings } from './tools/get-findings.js';
 import { listAgents } from './tools/list-agents.js';
 import { runAgentOnPr } from './tools/run-agent-on-pr.js';
-import { executeTool, type ToolContext, type ToolDef, type ToolDeps } from './tool.js';
+import { executeTool, sanitizeText, type ToolContext, type ToolDef, type ToolDeps } from './tool.js';
 
 /** In call order. */
 export const TOOLS: readonly ToolDef[] = [
@@ -46,7 +46,8 @@ export function createMcpServer(deps: ToolDeps): McpServer {
                   extra
                     .sendNotification({
                       method: 'notifications/progress',
-                      params: { progressToken, progress: counter, message },
+                      // The text is a run event's: model-written, so it is masked and capped like every API string.
+                      params: { progressToken, progress: counter, message: sanitizeText(message, MAX_PROGRESS_TEXT) },
                     })
                     .catch(() => {});
                 },

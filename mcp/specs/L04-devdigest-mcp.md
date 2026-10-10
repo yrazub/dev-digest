@@ -287,11 +287,11 @@ export class MockDevDigestApi implements DevDigestApi {
 ## Limits
 
 All in `src/constants.ts`: `DEFAULT_LIMIT = 20`, `MAX_LIMIT = 50`, `MAX_TITLE = 120`,
-`MAX_RATIONALE = 240`, `MAX_SUMMARY = 600`, `MAX_PATH = 240` (a finding's `file`, a convention's evidence path), `MAX_AGENT_NAME = 120`, `MAX_RULE = 400`, `MAX_DESCRIPTION = 200`, `MAX_CONVENTIONS = 50`,
-`MAX_AGENTS = 50`, `MAX_LISTED = 10` (names or numbers quoted in an error), `MAX_ERROR_TEXT = 300`,
+`MAX_RATIONALE = 240`, `MAX_SUMMARY = 600`, `MAX_PATH = 240` (a finding's `file`, a convention's evidence path), `MAX_AGENT_NAME = 120`, `MAX_MODEL = 120` (an agent's `provider/model` string), `MAX_ID = 64` (an API-generated id or timestamp: `run_id`, an agent `id`, `reviewed_at`, `last_scan_at`), `MAX_REPO = 140` (a repository's `owner/name`), `MAX_RULE = 400`, `MAX_DESCRIPTION = 200`, `MAX_CONVENTIONS = 50`,
+`MAX_AGENTS = 50`, `MAX_LISTED = 10` (names or numbers quoted in an error), `MAX_ERROR_TEXT = 300`, `MAX_PROGRESS_TEXT = 200` (one progress notification; kept apart from `MAX_ERROR_TEXT`, which is for a value quoted inside an error sentence, so either can change alone),
 `REQUEST_TIMEOUT_MS = 30_000`, `DEFAULT_WAIT_SECONDS = 120`. Severity order is `Severity.options`
 from `@devdigest/shared` (`CRITICAL`, `WARNING`, `SUGGESTION`). A cut string ends with `…`. Worst
-case at `limit: 50`, with every capped field at its cap, is about 35,800 characters (about 9,000 tokens; the bound `mcp/test/review-view.test.ts` pins is 36,000): under Claude Code's
+case at `limit: 50`, with every capped field at its cap, is about 35,800 characters (the id and timestamp caps are above the real 36-character ids and 24-character timestamps, so they do not move it) (about 9,000 tokens; the bound `mcp/test/review-view.test.ts` pins is 36,000): under Claude Code's
 10,000-token warning, its 25,000-token limit and its 50,000-character spill.
 
 ## Server metadata
@@ -310,7 +310,7 @@ scalar or an enum. Only `repo`, `pr`, `agent` and `run_id` carry a description.
 
 - Description: `List the reviewer agents configured in DevDigest. Call it when you need an agent's id or exact name for run_agent_on_pr.`
 - Input: none. Schema target: `{ "type": "object", "additionalProperties": false }`.
-- Output: `{"agents":[{"id","name","description","model","enabled"}]}` sorted by `name`; `description` cut at 200; `model` is `<provider>/<model>`; at most 50, with a `note` when cut. Empty list: `agents: []` and `note: "No agents are configured. Create one in the DevDigest UI (Agents)."`.
+- Output: `{"agents":[{"id","name","description","model","enabled"}]}` sorted by `name`; `id` cut at `MAX_ID`, `name` at `MAX_AGENT_NAME`, `description` at 200; `model` is `<provider>/<model>`, cut at `MAX_MODEL`; at most 50, with a `note` when cut. Empty list: `agents: []` and `note: "No agents are configured. Create one in the DevDigest UI (Agents)."`.
 - Dropped from `Agent`: `system_prompt`, `output_schema`, `version`, `strategy`, `ci_fail_on`, `repo_intel`, `skill_count`.
 - Errors: the API errors below.
 
@@ -320,7 +320,7 @@ scalar or an enum. Only `repo`, `pr`, `agent` and `run_id` carry a description.
 - Input: `repo` (string, "owner/name") · `pr` (integer ≥ 1, "pull request number"; a numeric string is accepted) · `agent` (string, "agent id or exact name"). All required.
 - Steps: resolve repo → PR → agent; `listRuns`: if a run of that agent is `running`, use its id (D9), else `startReview`; `waitForRun` with `config.waitMs`, `ctx.signal`, `ctx.progress`; `listRuns` again and branch on the run's status. `done` → `listReviews` → `toReviewView` with `DEFAULT_LIMIT` (plus `attached: true` when it joined a run); `running` → the `status: "running"` payload with `waited_seconds` from `config.waitMs`; `failed` → E-RUN-FAILED; `cancelled` → E-RUN-CANCELLED; `done` without a review, or a missing run row → E-RUN-NO-REVIEW. Nothing is started when a lookup fails. An aborted `ctx.signal` ends the call without cancelling the run.
 - Output, `done`: the review result below, plus `"attached": true` when it joined an in-flight run.
-- Output, still `running` after the wait (not an error, so the caller does not retry the write): `{"status":"running","run_id","agent","waited_seconds","next":"The review is still running. Do not call run_agent_on_pr again. Call get_findings with repo \"<repo>\", pr <n>, run_id \"<id>\" in about 30 seconds."}`.
+- Output, still `running` after the wait (not an error, so the caller does not retry the write): `{"status":"running","run_id","agent","waited_seconds","next":"The review is still running. Do not call run_agent_on_pr again. Call get_findings with repo \"<repo>\", pr <n>, run_id \"<id>\" in about 30 seconds."}`. `run_id` is cut at `MAX_ID`, `agent` (the same cut as on the `done` path) at `MAX_AGENT_NAME`, and the repository named in `next` at `MAX_REPO`.
 - Errors: E-REPO-FORMAT, E-REPO-UNKNOWN, E-PR-UNKNOWN, E-AGENT-UNKNOWN, E-AGENT-AMBIGUOUS, E-RUN-FAILED, E-RUN-CANCELLED, E-RUN-NO-REVIEW, the API errors.
 - When the client cancels the call during the wait, the result is an error that is not in the catalogue: `The call was cancelled. Run <run_id> was not stopped; read it later with get_findings.` No further API call is made and the run is never cancelled.
 
@@ -341,7 +341,7 @@ scalar or an enum. Only `repo`, `pr`, `agent` and `run_id` carry a description.
  "findings":[{"severity":"CRITICAL","title":"…","file":"src/config.ts","line":11,"rationale":"…"}]}
 ```
 
-- `findings`: dismissed findings are left out (the product's "counted findings" rule, `server/README.md:113-115`); sorted by severity, then `file`, then `line` (code-unit comparison); `line` is `start_line`; `end_line` appears only when it differs; `title`, `rationale`, `summary`, `file` and the top-level `agent` are cut at their caps (`MAX_TITLE`, `MAX_RATIONALE`, `MAX_SUMMARY`, `MAX_PATH`, `MAX_AGENT_NAME`).
+- `findings`: dismissed findings are left out (the product's "counted findings" rule, `server/README.md:113-115`); sorted by severity, then `file`, then `line` (code-unit comparison); `line` is `start_line`; `end_line` appears only when it differs; `title`, `rationale`, `summary`, `file` and the top-level `agent` are cut at their caps (`MAX_TITLE`, `MAX_RATIONALE`, `MAX_SUMMARY`, `MAX_PATH`, `MAX_AGENT_NAME`); `run_id` and `reviewed_at` are cut at `MAX_ID` (they are free strings in the contract, and a normal value is shorter).
 - `counts`: every non-dismissed finding by severity, before `min_severity` and `limit`.
 - When `limit` cut the list: `"truncated": true` and `"note": "Showing <k> of <n> findings, most severe first. Call get_findings with run_id \"<id>\" and min_severity \"WARNING\", or a higher limit (max 50)."`. That is the text for the default call; the advice adapts to the arguments so it never suggests a step that cannot help: `<n>` counts the findings left after `min_severity`; the suggested severity is the next one up (`WARNING` with no filter, `CRITICAL` when the filter is `WARNING`, none when it is already `CRITICAL`); `run_id` is left out when the review has none; "or a higher limit" is left out when the limit is already 50.
 - `verdict` is the shared `Verdict` enum; `run_id`, `agent`, `verdict`, `score`, `summary` may be `null` (the seeded review has no agent).
@@ -351,7 +351,7 @@ scalar or an enum. Only `repo`, `pr`, `agent` and `run_id` carry a description.
 
 - Description: `Return the coding conventions DevDigest extracted from a repository and the user accepted. Call it before writing or reviewing code in that repository.`
 - Input: `repo` (required) · `status` (enum `accepted` | `pending`, default `accepted`; derived from the shared `ConventionStatus` without `rejected`).
-- Output: `{"repo","status","conventions":[{"category","rule","evidence"}],"last_scan_at"}` in the API's order; `evidence` is `path:start` or `path:start-end`; at most 50, with a `note` when cut. `rule` (extracted by a model from repository files, unbounded in the contract) and the evidence path pass through `sanitizeText`: whitespace and control characters collapse to one space, token-like strings are masked, and they are cut at `MAX_RULE` / `MAX_PATH`. `category` is an enum of the contract and is passed as is.
+- Output: `{"repo","status","conventions":[{"category","rule","evidence"}],"last_scan_at"}` in the API's order; `repo` is cut at `MAX_REPO` and `last_scan_at` at `MAX_ID`; `evidence` is `path:start` or `path:start-end`; at most 50, with a `note` when cut. `rule` (extracted by a model from repository files, unbounded in the contract) and the evidence path pass through `sanitizeText`: whitespace and control characters collapse to one space, token-like strings are masked, and they are cut at `MAX_RULE` / `MAX_PATH`. `category` is an enum of the contract and is passed as is.
 - Notes instead of errors: nothing with the requested status but other candidates exist → `"No accepted conventions yet; <k> candidates are pending review in DevDigest (Skills Lab → Conventions). Call get_conventions with status \"pending\" to read them as unconfirmed proposals."`; never scanned → `"This repository has not been scanned for conventions. Run a scan in DevDigest (Skills Lab → Conventions), accept the rules that are right, then call get_conventions again."`; scanned, with nothing of the requested status and nothing pending to point at (also `status: "pending"` with none pending) → `"No <status> conventions for this repository. Review the extracted rules in DevDigest (Skills Lab → Conventions)."`. When more than 50 match: `"Showing the first 50 of <n> conventions."`.
 - Dropped from `ConventionCandidate`: `id`, `evidence_snippet`, `evidence_url`, `confidence`, `status`.
 - Errors: E-REPO-FORMAT, E-REPO-UNKNOWN, the API errors.
@@ -392,10 +392,22 @@ E-API-UNREACHABLE names `./scripts/dev.sh` because that script starts the **API*
 start or install the MCP server (D18). A missing install of the MCP server itself is reported by
 the launcher, on stderr, before the protocol starts.
 
-`sanitizeText` collapses whitespace to single spaces, masks token-like substrings (a run of 16 or
-more characters from `[A-Za-z0-9_-]` after one of the prefixes `sk-`, `sk_`, `ghp_`, `gho_`,
-`github_pat_`, `xox`) with `***`, and cuts at `max`. It is applied to every string that comes from
-the API into an error.
+`sanitizeText` collapses whitespace to single spaces, masks token-like substrings with `***`, and
+cuts at `max`. Masked, each with a minimum length so ordinary words stay readable:
+
+- a run of 16 or more characters from `[A-Za-z0-9_-]` after one of the prefixes `sk-`, `sk_`,
+  `ghp_`, `gho_`, `ghs_`, `ghu_`, `ghr_`, `github_pat_`, `xox`;
+- `npm_` followed by exactly 36 letters and digits (so `npm_config_user_agent` is left alone);
+- an AWS access key id: `AKIA` and exactly 16 upper-case letters or digits, not part of a longer word;
+- a Google API key: `AIza` and exactly 35 characters of `[A-Za-z0-9_-]`, not part of a longer word;
+- the value after `Bearer ` (any case): 16 or more characters of `[A-Za-z0-9._~+/=-]`; the word
+  `Bearer` stays, so `Authorization: Bearer ***` shows what was removed.
+
+It is applied to every string that comes from the API into an error, and to each progress
+notification (cap `MAX_PROGRESS_TEXT`): a run event's `msg` is model-written text derived from the
+pull request, so `server.ts` runs it through `sanitizeText` before `sendNotification`. Names, ids and
+timestamps that appear in a result are cut with `cutText` at their caps instead: they are not
+free prose, and a mask would corrupt an id the caller passes back.
 
 ## Lookup rules
 
@@ -526,7 +538,7 @@ The launcher rows above show the phase-2 placeholder line; since phase 3 the sta
 | Invalid arguments (wrong type, missing field, unknown key) | Answered **by the SDK**, before the handler runs: a result with `isError: true` (not a JSON-RPC error) and the text `MCP error -32602: Input validation error: Invalid arguments for tool <name>: <zod message>` (e.g. `Expected number, received string at pr`, `Required at pr`, `Unrecognized key(s) in object: 'x'`). `executeTool`'s own E-ARGS text is reached only when `executeTool` is called directly, and is the second line of defence. With the bare shape (not strict) the SDK silently dropped an unknown key; with the strict object it rejects it |
 | Text-only result with `isError: true` | Passes unchanged: `{"content":[{"type":"text","text":"<E-BLAST>"}],"isError":true}` |
 | Unexpected throw | `isError: true`, E-INTERNAL text with no original message, path or stack; the detail (`Error: boom at /Users/x` + stack) went to `deps.log` |
-| Progress notifications | Reach the client: with `onprogress` set, two `ctx.progress(...)` calls arrived as `{"progress":1,"message":"step one"}` and `{"progress":2,"message":"step two"}`; without a progress token nothing is sent. The handler's `ctx.signal` is present |
+| Progress notifications | Reach the client: with `onprogress` set, two `ctx.progress(...)` calls arrived as `{"progress":1,"message":"step one"}` and `{"progress":2,"message":"step two"}`; without a progress token nothing is sent. `server.ts` passes each message through `sanitizeText(message, MAX_PROGRESS_TEXT)` first (collapsed whitespace, masked tokens, at most 200 characters), so the observed text above is unchanged for ordinary messages. The handler's `ctx.signal` is present |
 | stdin ends / client disconnects | The SDK's stdio transport does not report the end of stdin as a close; `main.ts` listens to stdin `end` / `close`, `SIGINT`, `SIGTERM` and the server's `onclose`, and exits 0. Measured: closed stdin (`</dev/null`) exits 0 at once, with empty stdout and the `ready` line on stderr; `Client.close()` ends the process within the 300 ms the script waited; `SIGTERM` exits 0 |
 | Bad environment | `DEVDIGEST_MCP_WAIT_SECONDS=abc` and `DEVDIGEST_API_URL=ftp://x` each exit 1 with one stderr line naming the variable |
 

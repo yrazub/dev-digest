@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { MAX_PATH, MAX_RULE } from '../src/constants.js';
+import { MAX_AGENT_NAME, MAX_ID, MAX_MODEL, MAX_PATH, MAX_REPO, MAX_RULE } from '../src/constants.js';
 import { MockDevDigestApi, type MockDevDigestApiOptions, type MockDevDigestApiState } from '../src/mocks.js';
 import {
   ApiError,
@@ -152,6 +152,49 @@ describe('list_agents', () => {
     expect(description.endsWith('…')).toBe(true);
   });
 
+  it('cuts name at MAX_AGENT_NAME and id at MAX_ID, each ending with an ellipsis', async () => {
+    const { text } = await call(asDef(listAgents), {}, {
+      agents: [agent({ id: 'i'.repeat(500), name: 'N'.repeat(500) })],
+    });
+
+    const [listed] = json(text).agents;
+    expect(listed.id).toHaveLength(MAX_ID);
+    expect(listed.id.endsWith('…')).toBe(true);
+    expect(listed.name).toHaveLength(MAX_AGENT_NAME);
+    expect(listed.name.endsWith('…')).toBe(true);
+  });
+
+  it('cuts the provider/model string at MAX_MODEL, ending with an ellipsis', async () => {
+    const { text } = await call(asDef(listAgents), {}, {
+      agents: [agent({ provider: 'openrouter', model: 'm'.repeat(500) })],
+    });
+
+    const model = json(text).agents[0].model as string;
+    expect(model).toHaveLength(MAX_MODEL);
+    expect(model.startsWith('openrouter/mmm')).toBe(true);
+    expect(model.endsWith('…')).toBe(true);
+  });
+
+  it('leaves an id, a name and a model that are exactly at their caps alone, and a uuid untouched', async () => {
+    const uuid = '3f2b8c1e-7a4d-4e0b-9c55-1d2e3f4a5b6c';
+    const exactName = 'N'.repeat(MAX_AGENT_NAME);
+    const provider = 'openai';
+    const exactModel = 'm'.repeat(MAX_MODEL - provider.length - 1);
+    const { text } = await call(asDef(listAgents), {}, {
+      agents: [
+        agent({ id: uuid, name: exactName, provider, model: exactModel }),
+        agent({ id: 'j'.repeat(MAX_ID), name: 'Other' }),
+      ],
+    });
+
+    const { agents } = json(text);
+    const first = agents.find((a: { name: string }) => a.name === exactName);
+    expect(first.id).toBe(uuid);
+    expect(first.model).toBe(`${provider}/${exactModel}`);
+    expect(first.model).toHaveLength(MAX_MODEL);
+    expect(agents.find((a: { name: string }) => a.name === 'Other').id).toBe('j'.repeat(MAX_ID));
+  });
+
   it('answers an empty list with agents: [] and the note that names where to create one', async () => {
     const { text, isError } = await call(asDef(listAgents), {}, {});
 
@@ -206,6 +249,30 @@ describe('get_conventions', () => {
     ]);
     expect(body).not.toHaveProperty('note');
     expectNoWrite(api);
+  });
+
+  it('cuts repo at MAX_REPO and last_scan_at at MAX_ID, each ending with an ellipsis', async () => {
+    const longRepo = { id: 'repo-long', full_name: `acme/${'r'.repeat(300)}` };
+    const { text, isError } = await call(asDef(getConventions), { repo: longRepo.full_name }, {
+      repos: [longRepo],
+      conventions: {
+        [longRepo.id]: { scan: { last_scan_at: 'T'.repeat(300), sampled_files: 3 }, candidates: [convention()] },
+      },
+    });
+
+    expect(isError).toBe(false);
+    const body = json(text);
+    expect(body.repo).toHaveLength(MAX_REPO);
+    expect(body.repo.startsWith('acme/rrr')).toBe(true);
+    expect(body.repo.endsWith('…')).toBe(true);
+    expect(body.last_scan_at).toHaveLength(MAX_ID);
+    expect(body.last_scan_at.endsWith('…')).toBe(true);
+  });
+
+  it('keeps a null last_scan_at null', async () => {
+    const { text } = await call(asDef(getConventions), { repo: 'acme/payments-api' }, state([], null));
+
+    expect(json(text).last_scan_at).toBeNull();
   });
 
   it('returns only pending conventions for status "pending"', async () => {
@@ -540,6 +607,17 @@ describe('get_findings — no review to show', () => {
     expect(text).toContain('Omit run_id');
   });
 
+  it('cuts the repository named in an error at MAX_REPO, before "#<pr>"', async () => {
+    const longRepo = { id: 'repo-long', full_name: `acme/${'r'.repeat(300)}` };
+    const state = { repos: [longRepo], pulls: { [longRepo.id]: [PR] } };
+
+    const { text, isError } = await call(asDef(getFindings), { repo: longRepo.full_name, pr: 482 }, state);
+
+    expect(isError).toBe(true);
+    expect(text).toContain(`${'acme/' + 'r'.repeat(MAX_REPO - 'acme/'.length - 1)}…#482`);
+    expect(text).not.toContain('r'.repeat(MAX_REPO));
+  });
+
   it('with a run_id: a review of another run does not satisfy it', async () => {
     const state = withPr({
       reviews: { [PR.id]: [review({ run_id: 'run-1' })] },
@@ -617,6 +695,22 @@ describe('lookups (repo and pull request)', () => {
     expect(text).not.toContain('#2,');
     expect(text).not.toContain('#1.');
     expect(text).toContain('open acme/payments-api in the DevDigest UI');
+  });
+
+  it('E-PR-UNKNOWN quotes the repository name through the mask and the cap', async () => {
+    const token = 'ghp_abcdefghijklmnop1234';
+    const odd = { id: 'repo-odd', full_name: `acme/${token}` };
+    const long = { id: 'repo-long', full_name: `acme/${'r'.repeat(500)}` };
+
+    const masked = await call(asDef(getFindings), { repo: odd.full_name, pr: 9 }, { repos: [odd], pulls: { [odd.id]: [PR] } });
+    const capped = await call(asDef(getFindings), { repo: long.full_name, pr: 9 }, { repos: [long], pulls: { [long.id]: [PR] } });
+
+    expect(masked.isError).toBe(true);
+    expect(masked.text).toContain('Pull request #9 is not imported for acme/***.');
+    expect(masked.text).not.toContain(token);
+    expect(capped.isError).toBe(true);
+    expect(capped.text).not.toContain('r'.repeat(300));
+    expect(capped.text).toContain('…');
   });
 
   it('E-PR-UNKNOWN with no stored pull request says none is imported yet', async () => {

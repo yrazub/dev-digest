@@ -296,6 +296,103 @@ describe('sanitizeText', () => {
   it('does not cut a text that fits', () => {
     expect(sanitizeText('abcde', 5)).toBe('abcde');
   });
+
+  it('masks before it cuts, so the cut cannot leave the start of a token behind', () => {
+    expect(sanitizeText('x ghp_abcdefghijklmnop1234', 5)).toBe('x ***');
+  });
+});
+
+// Spec, "Error catalogue": the five masks, each with a minimum length so ordinary words stay readable.
+describe('sanitizeText — token formats', () => {
+  const NPM_36 = 'npm_' + 'aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1dE3fG5'; // 4 + 36
+  const AWS = 'AKIAIOSFODNN7EXAMPLE'; // AKIA + 16
+  const GOOGLE = 'AIza' + 'SyA-1234567890_abcdefghijklmnopqrst'; // AIza + 35
+
+  it('fixtures have the lengths they claim', () => {
+    expect(NPM_36).toHaveLength(40);
+    expect(AWS).toHaveLength(20);
+    expect(GOOGLE).toHaveLength(39);
+  });
+
+  it.each([
+    ['ghs_', 'ghs_abcdefghijklmnop1234'],
+    ['ghu_', 'ghu_abcdefghijklmnop1234'],
+    ['ghr_', 'ghr_abcdefghijklmnop1234'],
+    ['gho_', 'gho_abcdefghijklmnop1234'],
+    ['sk_', 'sk_abcdefghijklmnop1234'],
+    ['xox', 'xoxb-1234567890-abcdefghij'],
+  ])('masks a %s token', (_prefix, token) => {
+    expect(sanitizeText(`header ${token} sent`, 200)).toBe('header *** sent');
+  });
+
+  it('masks an npm token: npm_ and exactly 36 letters and digits', () => {
+    const out = sanitizeText(`publish with ${NPM_36} now`, 200);
+
+    expect(out).toBe('publish with *** now');
+    expect(out).not.toContain(NPM_36);
+  });
+
+  it('masks an AWS access key id: AKIA and exactly 16 upper-case letters or digits', () => {
+    const out = sanitizeText(`key=${AWS}, region`, 200);
+
+    expect(out).toBe('key=***, region');
+    expect(out).not.toContain(AWS);
+  });
+
+  it('masks a Google API key: AIza and exactly 35 characters', () => {
+    const out = sanitizeText(`?key=${GOOGLE}&x=1`, 200);
+
+    expect(out).toBe('?key=***&x=1');
+    expect(out).not.toContain(GOOGLE);
+  });
+
+  it('masks the value after Bearer and keeps the word, so the line shows what was removed', () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abc-DEF_123';
+
+    expect(sanitizeText(`Authorization: Bearer ${jwt}`, 200)).toBe('Authorization: Bearer ***');
+  });
+
+  it('matches Bearer in any case and keeps the case written', () => {
+    expect(sanitizeText('authorization: bearer abcdefghijklmnop1234', 200)).toBe('authorization: bearer ***');
+    expect(sanitizeText('BEARER abcdefghijklmnop1234', 200)).toBe('BEARER ***');
+  });
+
+  it('masks a Bearer value that follows a newline or several spaces (whitespace collapses first)', () => {
+    expect(sanitizeText('Bearer\n   abcdefghijklmnop1234', 200)).toBe('Bearer ***');
+  });
+
+  it('masks a prefixed token that follows Bearer once, without a second mask', () => {
+    expect(sanitizeText('Bearer ghp_abcdefghijklmnop1234', 200)).toBe('Bearer ***');
+  });
+
+  it('masks several tokens of different formats in one text', () => {
+    const text = `a ghp_abcdefghijklmnop1234 b ${AWS} c ${NPM_36} d Bearer abcdefghijklmnop1234 e`;
+
+    expect(sanitizeText(text, 300)).toBe('a *** b *** c *** d Bearer *** e');
+  });
+
+  // Not tokens: each is below its minimum length or part of an ordinary word.
+  it.each([
+    ['sk- below 16 characters', 'use sk-short here'],
+    ['AKIA with 15 characters', 'id AKIA' + 'A'.repeat(15) + ' end'],
+    ['AKIA with 17 characters', 'id AKIA' + 'A'.repeat(17) + ' end'],
+    ['AKIA with lower-case characters', 'id AKIAabcdefghijklmnop end'],
+    ['AKIA inside a longer word', 'idXAKIA' + 'A'.repeat(16) + ' end'],
+    ['AIza below 35 characters', 'name AIzaShort end'],
+    ['AIza with 36 characters', 'k AIza' + 'a'.repeat(36) + ' end'],
+    ['npm_ with 35 characters', 'x npm_' + 'a'.repeat(35) + ' y'],
+    ['npm_ with 37 characters', 'x npm_' + 'a'.repeat(37) + ' y'],
+    ['an npm_ environment name', 'read npm_config_user_agent_something now'],
+    ['Bearer followed by a short word', 'Bearer tokens are fine'],
+    ['Bearer in prose', 'the Bearer authentication scheme'],
+    ['Bearer with a 15-character value', 'Bearer ' + 'a'.repeat(15)],
+  ])('leaves %s alone', (_label, text) => {
+    expect(sanitizeText(text, 300)).toBe(text);
+  });
+
+  it('masks a Bearer value of exactly 16 characters', () => {
+    expect(sanitizeText('Bearer ' + 'a'.repeat(16), 100)).toBe('Bearer ***');
+  });
 });
 
 describe('the get_blast_radius stub', () => {

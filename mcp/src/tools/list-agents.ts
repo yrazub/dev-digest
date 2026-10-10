@@ -1,4 +1,4 @@
-import { MAX_AGENTS, MAX_DESCRIPTION } from '../constants.js';
+import { MAX_AGENTS, MAX_AGENT_NAME, MAX_DESCRIPTION, MAX_ID, MAX_MODEL } from '../constants.js';
 import { cutText, type ToolDef } from '../tool.js';
 
 const inputShape = {};
@@ -16,10 +16,10 @@ export const listAgents: ToolDef<typeof inputShape> = {
     }
 
     const shown = agents.slice(0, MAX_AGENTS).map((agent) => ({
-      id: agent.id,
-      name: agent.name,
+      id: cutText(agent.id, MAX_ID),
+      name: cutText(agent.name, MAX_AGENT_NAME),
       description: cutText(agent.description, MAX_DESCRIPTION),
-      model: `${agent.provider}/${agent.model}`,
+      model: cutText(`${agent.provider}/${agent.model}`, MAX_MODEL),
       enabled: agent.enabled,
     }));
     return agents.length > shown.length

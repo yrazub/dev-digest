@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_AGENT_NAME, MAX_PATH, MAX_RATIONALE, MAX_SUMMARY, MAX_TITLE } from '../src/constants.js';
+import { MAX_AGENT_NAME, MAX_ID, MAX_PATH, MAX_RATIONALE, MAX_SUMMARY, MAX_TITLE } from '../src/constants.js';
 import type { ApiFinding, ApiReview } from '../src/ports.js';
 import { toReviewView } from '../src/review-view.js';
 
@@ -281,6 +281,53 @@ describe('toReviewView — path and agent caps (F3)', () => {
     const exact = 'A'.repeat(MAX_AGENT_NAME);
 
     expect(toReviewView(review([], { agent_name: exact }), { limit: 20 }).agent).toBe(exact);
+  });
+});
+
+describe('toReviewView — id and timestamp caps', () => {
+  it('cuts run_id and reviewed_at longer than MAX_ID to MAX_ID characters ending with an ellipsis', () => {
+    const view = toReviewView(review([], { run_id: 'i'.repeat(300), created_at: 'T'.repeat(300) }), { limit: 20 });
+
+    for (const value of [view.run_id, view.reviewed_at] as string[]) {
+      expect(value).toHaveLength(MAX_ID);
+      expect(value.endsWith('…')).toBe(true);
+    }
+  });
+
+  it('leaves run_id and reviewed_at that are exactly MAX_ID characters alone', () => {
+    const id = 'i'.repeat(MAX_ID);
+    const at = 'T'.repeat(MAX_ID);
+
+    const view = toReviewView(review([], { run_id: id, created_at: at }), { limit: 20 });
+
+    expect(view.run_id).toBe(id);
+    expect(view.reviewed_at).toBe(at);
+  });
+
+  it('leaves a uuid run_id and an ISO timestamp untouched', () => {
+    const uuid = '3f2b8c1e-7a4d-4e0b-9c55-1d2e3f4a5b6c';
+
+    const view = toReviewView(review([], { run_id: uuid, created_at: '2026-10-10T09:00:00.123Z' }), { limit: 20 });
+
+    expect(view.run_id).toBe(uuid);
+    expect(view.reviewed_at).toBe('2026-10-10T09:00:00.123Z');
+  });
+
+  it('names the run_id in the truncation note at the same cap, with the note ending the way it did', () => {
+    const many = Array.from({ length: 5 }, (_, i) => finding({ start_line: i + 1 }));
+    const long = 'i'.repeat(300);
+
+    const view = toReviewView(review(many, { run_id: long }), { limit: 2 });
+
+    const cut = `${'i'.repeat(MAX_ID - 1)}…`;
+    expect(view.note).toBe(
+      `Showing 2 of 5 findings, most severe first. Call get_findings with run_id "${cut}" and min_severity "WARNING", or a higher limit (max 50).`,
+    );
+    expect(view.note).not.toContain('i'.repeat(MAX_ID));
+  });
+
+  it('keeps a null run_id null', () => {
+    expect(toReviewView(review([], { run_id: null }), { limit: 20 }).run_id).toBeNull();
   });
 });
 

@@ -22,6 +22,12 @@ export const MAX_SUMMARY = 600;
 // A file path in a finding or a convention's evidence.
 export const MAX_PATH = 240;
 export const MAX_AGENT_NAME = 120;
+// An agent's `provider/model` string.
+export const MAX_MODEL = 120;
+// An id the API generated (agent id, run id) or a timestamp it formatted: free strings in the contract.
+export const MAX_ID = 64;
+// A repository's `owner/name` (GitHub allows 39 + 1 + 100).
+export const MAX_REPO = 140;
 export const MAX_RULE = 400;
 export const MAX_DESCRIPTION = 200;
 export const MAX_CONVENTIONS = 50;
@@ -29,5 +35,7 @@ export const MAX_AGENTS = 50;
 // Names or numbers quoted in an error text.
 export const MAX_LISTED = 10;
 export const MAX_ERROR_TEXT = 300;
+// One progress notification: a status line from a run event, not a quoted value.
+export const MAX_PROGRESS_TEXT = 200;
 export const REQUEST_TIMEOUT_MS = 30_000;
 export const DEFAULT_WAIT_SECONDS = 120;
