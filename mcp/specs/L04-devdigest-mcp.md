@@ -151,7 +151,7 @@ Package conventions (written in `mcp/CLAUDE.md`, checked by `mcp/test/boundaries
 "paths": {
   "@devdigest/shared": ["../server/src/vendor/shared/index.ts"],
   "@devdigest/shared/*": ["../server/src/vendor/shared/*"],
-  "zod": ["./node_modules/zod/index.js"]
+  "zod": ["./node_modules/zod"]
 },
 "include": ["src/**/*.ts"]
 ```
@@ -173,8 +173,8 @@ Package conventions (written in `mcp/CLAUDE.md`, checked by `mcp/test/boundaries
 The eleven files of `server/src/vendor/shared` import only the bare specifier `zod`. Left alone,
 a runtime resolves that from the file's own location, `server/node_modules/zod` — a second copy.
 
-- **Type-check (`tsc`):** `paths` apply to every file of the program, so `zod` in the contract files maps to `mcp/node_modules/zod/index.js`, whose sibling `index.d.ts` exists. `reviewer-core/tsconfig.json:24-25` does the same with a directory target.
-- **Runtime (the launcher, D16):** `register({ tsconfig })` loads tsx's ESM hooks with the package's tsconfig. tsx 4.22.4 applies tsconfig path aliases to every importer whose URL does not contain `/node_modules/` and tries each mapped path as a file URL. The mapping therefore targets a file, `./node_modules/zod/index.js` (Zod's ESM entry), not a directory. The SDK's own imports come from inside `node_modules` and resolve normally to the same package.
+- **Type-check (`tsc`):** `paths` apply to every file of the program, so `zod` in the contract files maps to the directory `mcp/node_modules/zod`, resolved through its `package.json` types. A mapping to the file `index.js` does not type-check: `tsc` takes a `paths` substitution that exists as a file literally and does not look for the sibling `index.d.ts` (TS7016 on every contract file). `reviewer-core/tsconfig.json:24-25` uses the directory target.
+- **Runtime (the launcher, D16):** `register({ tsconfig })` loads tsx's ESM hooks with the package's tsconfig. tsx 4.22.4 applies tsconfig path aliases to every importer whose URL does not contain `/node_modules/` and tries each mapped path as a file URL. Checked by running it in phase 2: the directory target `./node_modules/zod` resolves under tsx as well, so the mapping is the directory, not the file `index.js` (see the compatibility record). The SDK's own imports come from inside `node_modules` and resolve normally to the same package.
 - **Tests (`vitest`):** aliases for `@devdigest/shared` (as `reviewer-core/vitest.config.ts:9`) and for exactly `zod` to the same file.
 - **Guard:** `assertSingleZod()` checks `Severity instanceof z.ZodType`, with `Severity` from `@devdigest/shared` and `z` from the package's `zod`. `main.ts` calls it first and exits 1 with a stderr line when it fails. Phase 2 proves it under vitest and through the launcher.
 - **If the in-process form does not apply the aliases** (phase 2): the launcher may instead start tsx's CLI as a child — `tsx/cli` with `--tsconfig <absolute path>` and the entry, standard streams inherited, exit code and `SIGINT` / `SIGTERM` forwarded. Which form is used goes into the compatibility record; the tests do not depend on it.
@@ -446,7 +446,68 @@ Package-level checklist; the cross-package one is in
 
 ## SDK compatibility record
 
-Filled in by phases 2 and 3 (see the plan). Empty at phase 1.
+Static half, filled in phase 2 (2026-10-10). The runtime half (what a client sees over the wire)
+is filled in phase 3.
+
+### Installed versions
+
+| | |
+|---|---|
+| SDK | `@modelcontextprotocol/sdk` 1.32.1 (`^1.32.1` in `package.json`) |
+| Zod range of the SDK | `^3.25 || ^4.0`, in both `peerDependencies` and `dependencies` |
+| Resolved `zod` | one copy, 3.25.76: `npm ls zod` shows the SDK's `zod` and `zod-to-json-schema`'s `zod` both `deduped` to the package's own |
+| Other tools | `tsx` 4.23.15, `typescript` 5.9.3, `vitest` 2.1.9 |
+| Stray files | `mcp/` holds `package-lock.json` and no `pnpm-lock.yaml` or `pnpm-workspace.yaml`; no change outside `mcp/` |
+| `npm audit` | 6 findings, all in the `vitest` 2 dev tree (`vite`, `esbuild`, `tinypool`); `npm audit --omit=dev` reports 0 |
+
+### Import paths (the SDK's `exports` map has `./client`, `./server` and a `./*` wildcard onto `dist/esm/*`)
+
+| Piece | Import |
+|---|---|
+| Server class with tool registration (`McpServer`) | `@modelcontextprotocol/sdk/server/mcp.js` |
+| Stdio server transport (`StdioServerTransport`) | `@modelcontextprotocol/sdk/server/stdio.js` |
+| Client (`Client`) | `@modelcontextprotocol/sdk/client/index.js` |
+| Stdio client transport (`StdioClientTransport`) | `@modelcontextprotocol/sdk/client/stdio.js` |
+| In-memory transport (`InMemoryTransport`) | `@modelcontextprotocol/sdk/inMemory.js` |
+
+### API facts read from the installed typings
+
+- Tool registration: `McpServer.registerTool(name, config, cb)`, where `config` is
+  `{ title?, description?, inputSchema?, outputSchema?, annotations?, _meta? }`; `inputSchema` is a Zod
+  raw shape (or a schema) and `annotations` is `ToolAnnotations`. `server.tool(...)` is `@deprecated`.
+  With an `inputSchema` the callback is `(args, extra)`; without one it is `(extra)`.
+- `new McpServer(serverInfo: Implementation, options?: McpServerOptions)`; `McpServerOptions` extends
+  `ServerOptions`, which takes `instructions?: string`. So the instructions text goes in the options.
+- A tool callback's `extra` (`RequestHandlerExtra`) carries `signal: AbortSignal` (aborted when the
+  sender cancels the request), `_meta?: RequestMeta` whose `progressToken?: string | number` is the
+  request's progress token, `requestId`, and `sendNotification(notification)`. So all three are available.
+
+### One Zod
+
+`npm ls zod` shows one version. The proof that the contracts and the package use the same copy is
+`assertSingleZod()` (`Severity instanceof z.ZodType`):
+
+| Run | Result |
+|---|---|
+| through the launcher (alias applied) | passes |
+| negative control: tsx CLI with a tsconfig that maps `@devdigest/shared` but not `zod` | exits 1, the guard message on stderr (the contracts resolve `server/node_modules/zod`) |
+
+Deviation from the design text: the `zod` entry of `tsconfig.json` `paths` is the directory
+`./node_modules/zod`, not the file `./node_modules/zod/index.js`. `tsc` does not look for a
+sibling `.d.ts` of a mapped file (TS7016 on every contract file), while the directory form
+type-checks and also resolves under tsx (guard passes). The `vitest` alias keeps the file target.
+
+### Launcher form
+
+The **in-process form** is used: `register({ tsconfig })` from `tsx/esm/api`, then `import()` of
+`src/main.ts`. The path aliases apply; the child-process fallback is not needed.
+
+| Run | Exit | stdout | stderr |
+|---|---|---|---|
+| `node mcp/bin/devdigest-mcp.mjs`, working directory = repository root | 0 | empty | `devdigest-mcp: no transport yet` |
+| `node bin/devdigest-mcp.mjs`, working directory = `mcp/` | 0 | empty | `devdigest-mcp: no transport yet` |
+| `node /…/mcp/bin/devdigest-mcp.mjs`, working directory = an unrelated temporary directory | 0 | empty | `devdigest-mcp: no transport yet` |
+| a copy of the launcher in a directory with no `node_modules` | 1 | empty | `devdigest-mcp: dependencies are not installed. Run: cd mcp && npm ci` |
 
 ## Inspector record
 

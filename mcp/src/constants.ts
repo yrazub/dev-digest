@@ -1,0 +1,29 @@
+import { Severity } from '@devdigest/shared';
+
+export const SERVER_NAME = 'devdigest-mcp';
+export const SERVER_VERSION = '0.0.0';
+
+// Shown to the calling model at startup (the `instructions` of the server options).
+export const SERVER_INSTRUCTIONS =
+  'DevDigest reviews GitHub pull requests with reviewer agents. repo is owner/name; pr is the PR number. ' +
+  'To review, call run_agent_on_pr: it waits and returns the verdict and findings (spends LLM credits). ' +
+  "Call list_agents first only when you do not know the agent's id or exact name. " +
+  'If it answers status "running", do not start it again: call get_findings with the returned run_id. ' +
+  'To read an existing review, call get_findings. The DevDigest API must be running locally.';
+
+// Most severe first: CRITICAL, WARNING, SUGGESTION.
+export const SEVERITY_ORDER = Severity.options;
+
+export const DEFAULT_LIMIT = 20;
+export const MAX_LIMIT = 50;
+export const MAX_TITLE = 120;
+export const MAX_RATIONALE = 240;
+export const MAX_SUMMARY = 600;
+export const MAX_DESCRIPTION = 200;
+export const MAX_CONVENTIONS = 50;
+export const MAX_AGENTS = 50;
+// Names or numbers quoted in an error text.
+export const MAX_LISTED = 10;
+export const MAX_ERROR_TEXT = 300;
+export const REQUEST_TIMEOUT_MS = 30_000;
+export const DEFAULT_WAIT_SECONDS = 120;
