@@ -576,3 +576,19 @@ Filled in by the main session after phase 3 and after phase 6 (D17).
   `500 internal_error … read ECONNRESET`: its database was down (the Docker daemon on the machine
   was unresponsive). The tools reported that as E-API-HTTP with the route and the API's message.
   Calls against a healthy API remain to be repeated.
+- **Repeated against a healthy API (2026-10-10, after Docker was restarted):** the developer API
+  on `:3001` with the seeded database, read-only calls only.
+  - `list_agents` — the five seeded agents sorted by name, each with `id`, `name`,
+    `description`, `model` (`provider/model`) and `enabled`; no system prompt.
+  - `get_findings --tool-arg repo=acme/payments-api pr=482 limit=2` — `status: "done"`, verdict
+    `request_changes`, score 61, `counts: { CRITICAL: 1, WARNING: 1, SUGGESTION: 0 }`, the
+    CRITICAL finding first (`src/config.ts`, line 12).
+  - `get_conventions --tool-arg repo=acme/payments-api` — no accepted conventions and the note
+    that 3 candidates are pending.
+  - `run_agent_on_pr` with `agent=no-such-agent` — `isError: true`, "Agent "no-such-agent" was
+    not found. Call list_agents and pass one of its id values."; no run was started.
+  - `get_findings` with `pr=99999` — `isError: true`, "Pull request #99999 is not imported for
+    acme/payments-api. Imported pull requests: #482. …".
+  - `run_agent_on_pr` with a real agent was not called from Inspector: it starts a paid run. It
+    is covered by `server/test/mcp-stdio.it.test.ts` with the mock model.
+
