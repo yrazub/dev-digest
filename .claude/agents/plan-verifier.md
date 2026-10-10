@@ -49,7 +49,7 @@ code has, and the gaps are exactly the items it does not have. Give each item an
 - `P<n>.D` — the `**Done when:**` criterion.
 - `E<k>` — each existing test file the change modified or deleted against the base, taken from
   `git diff --name-status`. Test paths are `**/*.test.ts`, `**/*.test.tsx`, `server/test/**`,
-  `reviewer-core/test/**`, `client/src/test/**` and `e2e/specs/*.flow.json`.
+  `reviewer-core/test/**`, `mcp/test/**`, `client/src/test/**` and `e2e/specs/*.flow.json`.
 - `C<k>` — each "Do not touch" constraint and each "Out of scope" entry, checked as "unchanged".
 - `R<k>` — each acceptance criterion of the spec or the requirement text, quoted as written.
 

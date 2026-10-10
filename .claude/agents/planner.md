@@ -95,7 +95,7 @@ These come from the `CLAUDE.md` files; the plan must be consistent with them:
   `server/src/db/migrations/**`, to a lock file or to `client/src/vendor/**` (the synced copy
   of a contract file is the one exception, and the plan says it is a copy).
 - A new dependency is named explicitly, with the package it is installed in and that
-  package's manager (`pnpm` for server and client, `npm` for reviewer-core and e2e).
+  package's manager (`pnpm` for server and client, `npm` for reviewer-core, e2e and mcp).
 - Each phase ends green once its tests are written, and can be reviewed or reverted alone.
   Between the implementer's run and the `test-writer`'s run a phase may have failing existing
   tests — only the ones the plan lists as expected to change. Order phases so nothing else is
