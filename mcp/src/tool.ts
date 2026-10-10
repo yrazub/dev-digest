@@ -33,7 +33,8 @@ export function toolOk(payload: Record<string, unknown>): CallToolResult {
 }
 
 // Token-like strings, each with a minimum length so ordinary words and identifiers stay readable.
-const PREFIXED_TOKEN = /(?:sk-|sk_|ghp_|gho_|ghs_|ghu_|ghr_|github_pat_|xox)[A-Za-z0-9_-]{16,}/g;
+// A prefix counts only at the start of a word: `task-runner-…` and `fox-xoxo-…` hold `sk-` and `xox` inside.
+const PREFIXED_TOKEN = /(?<![A-Za-z0-9_-])(?:sk-|sk_|ghp_|gho_|ghs_|ghu_|ghr_|github_pat_|xox)[A-Za-z0-9_-]{16,}/g;
 // npm tokens are `npm_` + 36 letters and digits; no `_` or `-`, so `npm_config_user_agent` is left alone.
 const NPM_TOKEN = /npm_[A-Za-z0-9]{36}(?![A-Za-z0-9])/g;
 // AWS access key id: `AKIA` + exactly 16 upper-case letters and digits.

@@ -423,6 +423,44 @@ describe('sanitizeText — token formats', () => {
   });
 });
 
+// Spec, "sanitizeText": a prefix counts only at the start of a word. Finding `file` paths go through
+// sanitizeText, and `task-runner-…` holds `sk-` inside (it used to come back as `src/ta***.ts`).
+describe('sanitizeText — the left boundary of a prefixed token', () => {
+  it.each([
+    ['sk- inside task-runner', 'src/task-runner-integration-tests.ts'],
+    ['sk- inside risk-assessment', 'src/risk-assessment-calculator-v2.ts'],
+    ['sk_ inside ask_me', 'docs/ask_me_anything_about_this_repo.md'],
+    ['xox inside fox-xoxo', 'packages/fox-xoxo-hugs-and-kisses-lib/index.ts'],
+  ])('leaves a path with %s alone', (_label, path) => {
+    expect(sanitizeText(path, 240)).toBe(path);
+  });
+
+  const TOKEN = 'ghp_abcdefghijklmnop1234';
+
+  it.each([
+    ['=', `token=${TOKEN}`, 'token=***'],
+    [':', `token:${TOKEN}`, 'token:***'],
+    ['"', `token "${TOKEN}" end`, 'token "***" end'],
+    ['(', `call(${TOKEN})`, 'call(***)'],
+    ['/', `src/${TOKEN}`, 'src/***'],
+    ['whitespace', `used ${TOKEN} here`, 'used *** here'],
+    ['the start of the string', `${TOKEN} here`, '*** here'],
+  ])('still masks a token after %s', (_boundary, text, masked) => {
+    const out = sanitizeText(text, 240);
+
+    expect(out).toBe(masked);
+    expect(out).not.toContain(TOKEN);
+  });
+
+  it('masks a path segment that itself starts with a prefix (accepted: `/` is a valid left boundary)', () => {
+    expect(sanitizeText('src/sk_live_abcdefghijklmnop.ts', 240)).toBe('src/***.ts');
+  });
+
+  it('keeps a single `Bearer ***` for a prefixed token after Bearer', () => {
+    expect(sanitizeText('Authorization: Bearer ghp_abcdefghijklmnop1234', 240)).toBe('Authorization: Bearer ***');
+  });
+});
+
 describe('the get_blast_radius stub', () => {
   it('declares repo and pr and is read-only', () => {
     expect(getBlastRadius.name).toBe('get_blast_radius');

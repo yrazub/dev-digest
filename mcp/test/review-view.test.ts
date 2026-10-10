@@ -269,6 +269,14 @@ describe('toReviewView — path and agent caps (F3)', () => {
     expect(findingsOf(view)[0]?.file).toBe(exact);
   });
 
+  it('returns a file path that merely contains a token prefix (sk-) exactly as written', () => {
+    const file = 'src/task-runner-integration-tests.ts';
+
+    const view = toReviewView(review([finding({ file })]), { limit: 20 });
+
+    expect(findingsOf(view)[0]?.file).toBe(file);
+  });
+
   it('cuts an agent_name longer than MAX_AGENT_NAME to MAX_AGENT_NAME characters ending with an ellipsis', () => {
     const view = toReviewView(review([], { agent_name: 'A'.repeat(MAX_AGENT_NAME + 50) }), { limit: 20 });
 

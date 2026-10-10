@@ -397,7 +397,12 @@ the launcher, on stderr, before the protocol starts.
 cuts at `max`. Masked, each with a minimum length so ordinary words stay readable:
 
 - a run of 16 or more characters from `[A-Za-z0-9_-]` after one of the prefixes `sk-`, `sk_`,
-  `ghp_`, `gho_`, `ghs_`, `ghu_`, `ghr_`, `github_pat_`, `xox`;
+  `ghp_`, `gho_`, `ghs_`, `ghu_`, `ghr_`, `github_pat_`, `xox`. The prefix counts only at the start
+  of a word: it must not be preceded by a letter, digit, `_` or `-`, so a file name such as
+  `src/task-runner-integration-tests.ts` (which contains `sk-`) is left alone. A token after `=`,
+  `:`, `"`, `(`, `/` or whitespace is still masked. Accepted: a path segment that itself starts
+  with a prefix and has 16 or more such characters after it (`src/sk_live_abcdefghijklmnop.ts`) is
+  masked, because `/` is a valid left boundary;
 - `npm_` followed by exactly 36 letters and digits (so `npm_config_user_agent` is left alone);
 - an AWS access key id: `AKIA` and exactly 16 upper-case letters or digits, not part of a longer word;
 - a Google API key: `AIza` and exactly 35 characters of `[A-Za-z0-9_-]`, not part of a longer word;

@@ -14,6 +14,12 @@ Traps we have already hit in the local MCP server. Append-only. See the root
 **Fix / rule:** pin wording from the plan's error catalogue or the spec; for text neither of them fixes, read the string in the source before asserting on it. A report is a summary, not a source.
 **Evidence:** `src/tools/get-conventions.ts:42` (the pending-count note); the plan's catalogue has no entry for the other branch.
 
+### `sanitizeText` rewrote ordinary file paths: `src/task-runner-integration-tests.ts` → `src/ta***.ts`
+**Date:** 2026-10-10
+**Cause:** the prefixed-token pattern had no left boundary, so `sk-` matched inside `task-`, `sk_` inside `ask_`, `xox` inside `fox-xoxo`. It was harmless while the mask ran only over error texts; the third self-review round routed finding `file` paths and convention evidence through it, and the next round caught the wrong paths.
+**Fix / rule:** a prefix is a token only when it is not preceded by a letter, digit, `_` or `-`. Before pointing a mask at a new kind of text, run it over ordinary values of that kind (file names, identifiers). Accepted remainder: a path segment that itself starts with a prefix and has 16+ characters after it is still masked.
+**Evidence:** `PREFIXED_TOKEN` in `src/tool.ts:37`; the cases in `test/tool.test.ts` ("the left boundary of a prefixed token").
+
 ## Tool & Library Notes
 
 - **2026-10-10** — a `tsc` `paths` target that is a file with a `.js` extension is taken literally: `"zod": ["./node_modules/zod/index.js"]` does not find the sibling `index.d.ts`, and every shared contract file fails with `TS7016`. Map the package directory instead; `tsc`, tsx and the launcher all resolve it (`"zod": ["./node_modules/zod"]`, `tsconfig.json:24`). `vitest.config.ts` keeps the file target.
@@ -37,3 +43,4 @@ Traps we have already hit in the local MCP server. Append-only. See the root
 
 - **2026-10-10** — L04 part 1, `devdigest-mcp`, through the full agent chain: plan revision 3 after the lab page was read, six phases, two Inspector checks, architecture review with three suggestions and a fix round. 271 hermetic tests. Not done at this point: the real-API test never executed (Docker down) — see `../server/INSIGHTS.md`, Open Questions.
 - **2026-10-10** — later the same day: Docker was restarted and the real-API test ran and passed (18 tests); `plan-verifier` then found three tool texts that differed from the spec's catalogue without being recorded (the E-PR-UNKNOWN variant with no stored PR, the adaptive truncation note, a third `get_conventions` note). The code was kept and the spec now states them.
+- **2026-10-10** — pre-PR self-review, four rounds on the `security` skill, every verdict PASS: each round found more of one class — an API-derived or model-written string reaching the caller without a cap or the token mask (tool results first, then progress notifications, then review text). Checking "every string that leaves the process" in one pass, including notifications and error codes, would have saved three rounds. Review text is now masked by a user decision (spec, "Deliberate change"). Left open as suggestions: control and bidi characters survive `sanitizeText`; credentials in URLs, JWTs and PEM blocks are not masked; `repo` has no input length cap before a quadratic trailing-slash regex.
