@@ -68,7 +68,12 @@ export interface McpProcess {
   /** `initialize` followed by `notifications/initialized`; resolves with the initialize result. */
   initialize(): Promise<any>;
   listTools(): Promise<Array<{ name: string; [key: string]: unknown }>>;
-  callTool(name: string, args: Record<string, unknown>): Promise<ToolCallResult>;
+  /** With a `progressToken` the request carries `_meta.progressToken`, so the server may send `notifications/progress`. */
+  callTool(name: string, args: Record<string, unknown>, opts?: { progressToken?: string | number }): Promise<ToolCallResult>;
+  /** The name of every tool the client called, in order. */
+  calledTools: string[];
+  /** Every server-to-client notification (a message with a method and no id), as parsed. */
+  notifications: JsonRpcMessage[];
   /** Closes stdin and waits for the process; kills it if it does not leave. Safe to call twice. */
   stop(): Promise<void>;
 }
@@ -117,6 +122,8 @@ export async function startMcpServer(opts: { apiUrl: string }): Promise<McpProce
 
   const stdoutLines: string[] = [];
   const invalidLines: string[] = [];
+  const calledTools: string[] = [];
+  const notifications: JsonRpcMessage[] = [];
   let stderrText = '';
   let exited = false;
   let buffer = '';
@@ -145,6 +152,7 @@ export async function startMcpServer(opts: { apiUrl: string }): Promise<McpProce
       return;
     }
     const msg = parsed as JsonRpcMessage;
+    if (typeof msg.method === 'string' && msg.id === undefined) notifications.push(msg);
     if (typeof msg.id === 'number' && msg.method === undefined) {
       const waiter = pending.get(msg.id);
       if (waiter) {
@@ -225,6 +233,8 @@ export async function startMcpServer(opts: { apiUrl: string }): Promise<McpProce
     pid,
     stdoutLines,
     invalidLines,
+    calledTools,
+    notifications,
     stderr: () => stderrText,
     request,
     notify: (method, params) => send({ method, ...(params === undefined ? {} : { params }) }),
@@ -243,8 +253,11 @@ export async function startMcpServer(opts: { apiUrl: string }): Promise<McpProce
       if (response.error) throw new Error(`tools/list failed: ${JSON.stringify(response.error)}`);
       return response.result.tools;
     },
-    async callTool(name, args) {
-      const response = await request('tools/call', { name, arguments: args });
+    async callTool(name, args, opts = {}) {
+      calledTools.push(name);
+      const params: Record<string, unknown> = { name, arguments: args };
+      if (opts.progressToken !== undefined) params._meta = { progressToken: opts.progressToken };
+      const response = await request('tools/call', params);
       if (response.error) throw new Error(`tools/call ${name} answered a protocol error: ${JSON.stringify(response.error)}`);
       const content = response.result.content as Array<{ type: string; text: string }>;
       if (!Array.isArray(content) || content.length !== 1 || content[0]?.type !== 'text') {

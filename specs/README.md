@@ -22,7 +22,7 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | [`L03-intent-layer-plan.md`](L03-intent-layer-plan.md) | done |
 | [`L03-smart-diff.md`](L03-smart-diff.md) | implemented |
 | [`L03-smart-diff-plan.md`](L03-smart-diff-plan.md) | done |
-| [`L04-devdigest-mcp.md`](L04-devdigest-mcp.md) | draft |
+| [`L04-devdigest-mcp.md`](L04-devdigest-mcp.md) | implemented |
 | [`L04-devdigest-mcp-plan.md`](L04-devdigest-mcp-plan.md) | approved |
 
 The lesson roadmap (L01–L08) is in the root [`README.md`](../README.md).

@@ -143,6 +143,160 @@ describe('devdigest-mcp over stdio, started as .mcp.json starts it', () => {
   });
 });
 
+interface ListedSchema {
+  type?: string;
+  properties?: Record<string, { type?: string; enum?: unknown[]; description?: string; minimum?: number }>;
+  required?: string[];
+  additionalProperties?: boolean;
+}
+
+describe('the whole server: five tools, their budget and their shape', () => {
+  const FINAL_ORDER = ['list_agents', 'run_agent_on_pr', 'get_findings', 'get_conventions', 'get_blast_radius'];
+  const DESCRIBED = ['repo', 'pr', 'agent', 'run_id'];
+  let server: RunningServer;
+  let listed: Awaited<ReturnType<RunningServer['client']['listTools']>>;
+
+  beforeAll(async () => {
+    server = await start();
+    listed = await server.client.listTools();
+  });
+
+  afterAll(stopAll);
+
+  const schemaOf = (name: string): ListedSchema => {
+    const tool = listed.tools.find((t) => t.name === name);
+    expect(tool, name).toBeDefined();
+    return tool?.inputSchema as ListedSchema;
+  };
+
+  it('lists exactly the five tools in the final order, and neither list_prs nor list_repos', () => {
+    const names = listed.tools.map((t) => t.name);
+
+    expect(names).toEqual(FINAL_ORDER);
+    expect(names).not.toContain('list_prs');
+    expect(names).not.toContain('list_repos');
+  });
+
+  it('keeps the startup payload small: tools/list at most 4,000 characters, the instructions at most 500', () => {
+    expect(JSON.stringify(listed).length).toBeLessThanOrEqual(4_000);
+    const instructions = server.client.getInstructions() ?? '';
+    expect(instructions.length).toBeGreaterThan(0);
+    expect(instructions.length).toBeLessThanOrEqual(500);
+  });
+
+  it('gives every tool a description of at most 240 characters with no JSON in it', () => {
+    for (const tool of listed.tools) {
+      expect(tool.description, tool.name).toBeTruthy();
+      expect(tool.description?.length, tool.name).toBeLessThanOrEqual(240);
+      expect(tool.description, tool.name).not.toContain('{');
+    }
+  });
+
+  it('does not tell the caller to call list_agents first, in its description or in the instructions', () => {
+    const description = listed.tools.find((t) => t.name === 'list_agents')?.description ?? '';
+
+    expect(description).not.toContain('first');
+    expect(description).toBe(
+      "List the reviewer agents configured in DevDigest. Call it when you need an agent's id or exact name for run_agent_on_pr.",
+    );
+    // The instructions make the lookup conditional ("only when you do not know ..."), never a fixed first step.
+    const instructions = server.client.getInstructions() ?? '';
+    expect(instructions).toContain('Call list_agents first only when you do not know');
+    expect(instructions).not.toMatch(/always/i);
+  });
+
+  it('lists no outputSchema on any tool', () => {
+    for (const tool of listed.tools) expect(tool.outputSchema, tool.name).toBeUndefined();
+  });
+
+  it('keeps every input property flat: a string, integer, number, boolean or enum, never an object or array', () => {
+    for (const tool of listed.tools) {
+      const properties = (tool.inputSchema as ListedSchema).properties ?? {};
+      for (const [name, property] of Object.entries(properties)) {
+        const flat = property.enum !== undefined || ['string', 'integer', 'number', 'boolean'].includes(property.type ?? '');
+        expect(flat, `${tool.name}.${name}`).toBe(true);
+        expect(property.type, `${tool.name}.${name}`).not.toBe('object');
+        expect(property.type, `${tool.name}.${name}`).not.toBe('array');
+      }
+    }
+  });
+
+  it('gives list_agents an empty, closed schema: no properties, nothing required, additionalProperties false', () => {
+    const schema = schemaOf('list_agents');
+
+    expect(schema.type).toBe('object');
+    expect(Object.keys(schema.properties ?? {})).toEqual([]);
+    expect(schema.required ?? []).toEqual([]);
+    expect(schema.additionalProperties).toBe(false);
+  });
+
+  it('lists run_agent_on_pr with repo, pr and agent required, and the shared parameter names', () => {
+    const schema = schemaOf('run_agent_on_pr');
+
+    expect(Object.keys(schema.properties ?? {}).sort()).toEqual(['agent', 'pr', 'repo']);
+    expect(schema.required?.slice().sort()).toEqual(['agent', 'pr', 'repo']);
+    expect(schema.properties?.repo?.type).toBe('string');
+    expect(schema.properties?.pr?.type).toBe('integer');
+    expect(schema.properties?.pr?.minimum).toBe(1);
+    expect(schema.properties?.agent?.type).toBe('string');
+    expect(schema.additionalProperties).toBe(false);
+    // The same names recur wherever the same thing is meant.
+    expect(Object.keys(schemaOf('get_findings').properties ?? {})).toEqual(expect.arrayContaining(['repo', 'pr', 'run_id']));
+  });
+
+  it('describes the agent parameter as "agent id or exact name"', () => {
+    expect(schemaOf('run_agent_on_pr').properties?.agent?.description).toBe('agent id or exact name');
+  });
+
+  it('puts a description on repo, pr, agent and run_id only', () => {
+    const described = new Set<string>();
+    for (const tool of listed.tools) {
+      for (const [name, property] of Object.entries((tool.inputSchema as ListedSchema).properties ?? {})) {
+        if (property.description !== undefined) {
+          described.add(name);
+          expect(DESCRIBED, `${tool.name}.${name} carries a description`).toContain(name);
+        } else {
+          expect(DESCRIBED, `${tool.name}.${name} has none`).not.toContain(name);
+        }
+      }
+    }
+    expect([...described].sort()).toEqual([...DESCRIBED].sort());
+  });
+
+  it('marks four tools readOnlyHint true and run_agent_on_pr readOnlyHint false, destructive false, open-world true', () => {
+    for (const tool of listed.tools) {
+      if (tool.name === 'run_agent_on_pr') {
+        expect(tool.annotations?.readOnlyHint, tool.name).toBe(false);
+        expect(tool.annotations?.destructiveHint, tool.name).toBe(false);
+        expect(tool.annotations?.openWorldHint, tool.name).toBe(true);
+      } else {
+        expect(tool.annotations?.readOnlyHint, tool.name).toBe(true);
+      }
+    }
+    expect(listed.tools.filter((t) => t.annotations?.readOnlyHint === true)).toHaveLength(4);
+  });
+
+  it('describes run_agent_on_pr as the paid call and points at get_findings for an existing review', () => {
+    const description = listed.tools.find((t) => t.name === 'run_agent_on_pr')?.description ?? '';
+
+    expect(description).toContain('paid LLM run');
+    expect(description).toContain('get_findings');
+  });
+
+  it('answers run_agent_on_pr against a closed port with isError E-API-UNREACHABLE, started nothing and alive', async () => {
+    const result = await server.client.callTool({
+      name: 'run_agent_on_pr',
+      arguments: { repo: 'acme/payments-api', pr: 482, agent: 'Security Reviewer' },
+    });
+
+    expect(result.isError).toBe(true);
+    const text = (result.content as Array<{ text: string }>)[0]?.text ?? '';
+    expect(text).toMatch(/not reachable at http:\/\/127\.0\.0\.1:\d+/);
+    expect(text).toContain('./scripts/dev.sh');
+    expect(isAlive(server.pid)).toBe(true);
+  });
+});
+
 describe('shutdown', () => {
   afterEach(stopAll);
 

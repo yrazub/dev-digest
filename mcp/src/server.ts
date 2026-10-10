@@ -6,11 +6,13 @@ import { getBlastRadius } from './tools/get-blast-radius.js';
 import { getConventions } from './tools/get-conventions.js';
 import { getFindings } from './tools/get-findings.js';
 import { listAgents } from './tools/list-agents.js';
+import { runAgentOnPr } from './tools/run-agent-on-pr.js';
 import { executeTool, type ToolContext, type ToolDef, type ToolDeps } from './tool.js';
 
-/** In call order; `run_agent_on_pr` is added in a later phase, between `list_agents` and `get_findings`. */
+/** In call order. */
 export const TOOLS: readonly ToolDef[] = [
   listAgents as unknown as ToolDef,
+  runAgentOnPr as unknown as ToolDef,
   getFindings as unknown as ToolDef,
   getConventions as unknown as ToolDef,
   getBlastRadius as unknown as ToolDef,

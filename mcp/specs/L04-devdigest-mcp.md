@@ -1,6 +1,6 @@
 # L04 — `devdigest-mcp`: the package
 
-**Status:** draft · **Cross-package spec:** [`../../specs/L04-devdigest-mcp.md`](../../specs/L04-devdigest-mcp.md) · **Plan:** [`../../specs/L04-devdigest-mcp-plan.md`](../../specs/L04-devdigest-mcp-plan.md) (revision 3)
+**Status:** implemented · **Cross-package spec:** [`../../specs/L04-devdigest-mcp.md`](../../specs/L04-devdigest-mcp.md) · **Plan:** [`../../specs/L04-devdigest-mcp-plan.md`](../../specs/L04-devdigest-mcp-plan.md) (revision 3)
 
 The implementable detail of `devdigest-mcp`: a local, stdio-only MCP server with exactly five
 tools, a thin wrapper over the Fastify API. The cross-package spec holds the requirements
@@ -552,3 +552,27 @@ Filled in by the main session after phase 3 and after phase 6 (D17).
   `isError` result, which is the expected outcome for the stub.
 - **stderr of the server in both runs:** `devdigest-mcp ready (API http://127.0.0.1:3001)`.
 - The API was not running; the stub calls nothing, so it is not needed for this check.
+
+### Phase 6 — all five tools (2026-10-10)
+
+- **Inspector:** `@modelcontextprotocol/inspector` 2.10.1 through `npx`, CLI mode, from the
+  repository root, same invocation form as the phase 3 entry.
+- **List:** `npx -y @modelcontextprotocol/inspector@2.10.1 --cli node mcp/bin/devdigest-mcp.mjs --method tools/list --strict`
+  — exit 0, no schema-portability problem reported. Five tools, in this order, none with an
+  `outputSchema`, every input schema closed (`additionalProperties: false`):
+
+  | Tool | Annotations | Properties | Required |
+  |---|---|---|---|
+  | `list_agents` | `readOnlyHint: true` | none | none |
+  | `run_agent_on_pr` | `readOnlyHint: false`, `destructiveHint: false`, `openWorldHint: true` | `repo` string, `pr` integer, `agent` string | `repo`, `pr`, `agent` |
+  | `get_findings` | `readOnlyHint: true` | `repo` string, `pr` integer, `run_id` string, `min_severity` enum `CRITICAL` / `WARNING` / `SUGGESTION`, `limit` integer | `repo`, `pr` |
+  | `get_conventions` | `readOnlyHint: true` | `repo` string, `status` enum `pending` / `accepted` | `repo` |
+  | `get_blast_radius` | `readOnlyHint: true` | `repo` string, `pr` integer | `repo`, `pr` |
+
+- **Call, stub:** `--method tools/call --tool-name get_blast_radius --tool-arg repo=acme/payments-api pr=482`
+  — `isError: true` with the E-BLAST text.
+- **Calls that need the API — not verified in this run.** `list_agents`, and `run_agent_on_pr`
+  with an unknown agent, both reached the developer API on `:3001`, which answered
+  `500 internal_error … read ECONNRESET`: its database was down (the Docker daemon on the machine
+  was unresponsive). The tools reported that as E-API-HTTP with the route and the API's message.
+  Calls against a healthy API remain to be repeated.

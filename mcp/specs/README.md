@@ -8,6 +8,6 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 
 | Spec | Scope | Status |
 |---|---|---|
-| [`L04-devdigest-mcp.md`](L04-devdigest-mcp.md) | the `devdigest-mcp` stdio server — five tools, the API port, the launcher | draft |
+| [`L04-devdigest-mcp.md`](L04-devdigest-mcp.md) | the `devdigest-mcp` stdio server — five tools, the API port, the launcher | implemented |
 
 The cross-package spec is [`../../specs/L04-devdigest-mcp.md`](../../specs/L04-devdigest-mcp.md).
