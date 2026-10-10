@@ -1,4 +1,5 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { HttpDevDigestApi } from './api-client.js';
 import { loadMcpConfig } from './config.js';
 import { createMcpServer } from './server.js';
 import { assertSingleZod } from './single-zod.js';
@@ -26,7 +27,8 @@ try {
   fail(err);
 }
 
-const server = createMcpServer({ config, log });
+const api = new HttpDevDigestApi({ baseUrl: config.apiUrl });
+const server = createMcpServer({ api, config, log });
 const transport = new StdioServerTransport();
 
 let closing = false;

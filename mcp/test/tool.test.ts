@@ -10,9 +10,11 @@ import {
   type ToolDeps,
 } from '../src/tool.js';
 import { getBlastRadius } from '../src/tools/get-blast-radius.js';
+import { MockDevDigestApi } from '../src/mocks.js';
+import { ApiError } from '../src/ports.js';
 
 function makeDeps(): ToolDeps & { log: ReturnType<typeof vi.fn> } {
-  return { config: { apiUrl: 'http://127.0.0.1:1', waitMs: 1000 }, log: vi.fn() };
+  return { api: new MockDevDigestApi(), config: { apiUrl: 'http://127.0.0.1:1', waitMs: 1000 }, log: vi.fn() };
 }
 
 const inputShape = { name: z.string(), count: z.number().int() };
@@ -141,6 +143,126 @@ describe('toolError', () => {
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain('Invalid arguments for throwaway: pr:');
     expect(deps.log).not.toHaveBeenCalled();
+  });
+});
+
+describe('toolError for an ApiError (E-API-*)', () => {
+  const apiUrl = 'http://127.0.0.1:3001';
+  const deps = (): ToolDeps & { log: ReturnType<typeof vi.fn> } => ({
+    ...makeDeps(),
+    config: { apiUrl, waitMs: 1000 },
+  });
+
+  it('unreachable names the configured URL and ./scripts/dev.sh (E-API-UNREACHABLE)', () => {
+    const d = deps();
+
+    const result = toolError(new ApiError('unreachable', 'GET /agents'), d, 'list_agents');
+
+    expect(result.isError).toBe(true);
+    const text = textOf(result);
+    expect(text).toContain(`not reachable at ${apiUrl}`);
+    expect(text).toContain('./scripts/dev.sh');
+    expect(d.log).not.toHaveBeenCalled();
+  });
+
+  it('timeout names the route, 30 seconds and the /health URL (E-API-TIMEOUT)', () => {
+    const text = textOf(toolError(new ApiError('timeout', 'GET /pulls/:id/reviews'), deps(), 'get_findings'));
+
+    expect(text).toContain('GET /pulls/:id/reviews');
+    expect(text).toContain('within 30 seconds');
+    expect(text).toContain(`${apiUrl}/health`);
+  });
+
+  it('a 429 maps to E-API-RATE: rate limit, the route and "Wait 60 seconds"', () => {
+    const err = new ApiError('http', 'GET /pulls/:id/runs', 429, 'internal_error', 'Rate limit exceeded, retry in 1 minute');
+
+    const result = toolError(err, deps(), 'get_findings');
+
+    expect(result.isError).toBe(true);
+    const text = textOf(result);
+    expect(text).toContain('rate limit');
+    expect(text).toContain('GET /pulls/:id/runs');
+    expect(text).toContain('Wait 60 seconds');
+    expect(text).not.toContain('answered');
+  });
+
+  it('another http status maps to E-API-HTTP: status, code, route, message and the migrate hint', () => {
+    const err = new ApiError('http', 'GET /repos/:id/pulls', 500, 'internal_error', 'relation "pull_requests" does not exist');
+
+    const text = textOf(toolError(err, deps(), 'get_findings'));
+
+    expect(text).toContain('answered 500 internal_error for GET /repos/:id/pulls');
+    expect(text).toContain('relation "pull_requests" does not exist');
+    expect(text).toContain('cd server && pnpm db:migrate');
+  });
+
+  it('an http error without a code still names the status and the route', () => {
+    const err = new ApiError('http', 'GET /agents', 502);
+
+    const text = textOf(toolError(err, deps(), 'list_agents'));
+
+    expect(text).toContain('answered 502');
+    expect(text).toContain('GET /agents');
+  });
+
+  it('invalid_response maps to E-API-SHAPE: unexpected response, the route and a restart step', () => {
+    const text = textOf(toolError(new ApiError('invalid_response', 'POST /pulls/:id/review'), deps(), 'run_agent_on_pr'));
+
+    expect(text).toContain('unexpected response');
+    expect(text).toContain('POST /pulls/:id/review');
+    expect(text).toContain('restart the API with ./scripts/dev.sh');
+  });
+
+  it('masks a token-like string in the API message', () => {
+    const token = 'ghp_abcdefghijklmnop1234';
+    const err = new ApiError('http', 'GET /agents', 500, 'internal_error', `upstream said ${token} is bad`);
+
+    const text = textOf(toolError(err, deps(), 'list_agents'));
+
+    expect(text).not.toContain(token);
+    expect(text).toContain('upstream said *** is bad');
+  });
+
+  it('cuts an API message at 300 characters and collapses its whitespace', () => {
+    const err = new ApiError('http', 'GET /agents', 500, 'internal_error', `first\n\n   second ${'x'.repeat(1000)}`);
+
+    const text = textOf(toolError(err, deps(), 'list_agents'));
+
+    expect(text).toContain('first second ');
+    expect(text).toContain('…');
+    expect(text).not.toContain('x'.repeat(300));
+    expect(text.length).toBeLessThan(700);
+  });
+
+  it('every kind names a next step', () => {
+    const next: Array<[ApiError, RegExp]> = [
+      [new ApiError('unreachable', 'GET /agents'), /Start it/],
+      [new ApiError('timeout', 'GET /agents'), /Check .*\/health, then retry/],
+      [new ApiError('http', 'GET /agents', 429), /Wait 60 seconds, then retry/],
+      [new ApiError('http', 'GET /agents', 500, 'x', 'm'), /pnpm db:migrate/],
+      [new ApiError('invalid_response', 'GET /agents'), /restart the API/],
+    ];
+
+    for (const [err, step] of next) expect(textOf(toolError(err, deps(), 'list_agents'))).toMatch(step);
+  });
+
+  it('an ApiError thrown through a port reaches the caller as its catalogue text, not E-INTERNAL', async () => {
+    const d = deps();
+    d.api = new MockDevDigestApi({}, { fail: { listAgents: new ApiError('unreachable', 'GET /agents') } });
+    const tool = makeTool(async (_args, toolDeps) => ({ agents: await toolDeps.api.listAgents() }));
+
+    const result = await executeTool(tool, { name: 'a', count: 1 }, d);
+
+    expect(result.isError).toBe(true);
+    const text = textOf(result);
+    expect(text).toContain(`not reachable at ${apiUrl}`);
+    expect(text).not.toContain('unexpected error');
+    expect(d.log).not.toHaveBeenCalled();
+  });
+
+  it('a ToolFailure still wins over the API mapping and an unknown Error is still E-INTERNAL', () => {
+    expect(textOf(toolError(new ToolFailure('as written'), deps(), 't'))).toBe('as written');
+    expect(textOf(toolError(new Error('boom'), deps(), 't'))).toContain('unexpected error in t');
   });
 });
 

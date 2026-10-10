@@ -1,6 +1,8 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { McpConfig } from './config.js';
+import { MAX_ERROR_TEXT, REQUEST_TIMEOUT_MS } from './constants.js';
+import { ApiError, type DevDigestApi } from './ports.js';
 
 /** An error whose message is written for the calling model; it is returned as the tool result. */
 export class ToolFailure extends Error {}
@@ -11,6 +13,7 @@ export interface ToolContext {
 }
 
 export interface ToolDeps {
+  api: DevDigestApi;
   config: McpConfig;
   log: (line: string) => void;
 }
@@ -53,12 +56,33 @@ function errorResult(text: string): CallToolResult {
   return { isError: true, content: [{ type: 'text', text }] };
 }
 
+/** The catalogue text (E-API-*) for a failure at the HTTP boundary; the API's own message is sanitized. */
+function apiErrorText(err: ApiError, config: McpConfig): string {
+  switch (err.kind) {
+    case 'unreachable':
+      return `The DevDigest API is not reachable at ${config.apiUrl}. Start it from the repository root with ./scripts/dev.sh, then call this tool again.`;
+    case 'timeout':
+      return `The DevDigest API did not answer ${err.route} within ${REQUEST_TIMEOUT_MS / 1000} seconds. Check ${config.apiUrl}/health, then retry.`;
+    case 'invalid_response':
+      return `The DevDigest API returned an unexpected response for ${err.route}. The API and devdigest-mcp may be on different versions: restart the API with ./scripts/dev.sh and retry.`;
+    case 'http':
+      if (err.status === 429) {
+        return `The DevDigest API rate limit was reached (${err.route}). Wait 60 seconds, then retry once.`;
+      }
+      return (
+        `The DevDigest API answered ${[err.status, err.code].filter((part) => part !== undefined).join(' ')} for ${err.route}: ` +
+        `${sanitizeText(err.message, MAX_ERROR_TEXT)}. If the message names a missing relation, run "cd server && pnpm db:migrate".`
+      );
+  }
+}
+
 /**
  * Turns anything thrown by a tool into an `isError` result. A `ToolFailure` is shown as written;
  * a Zod error becomes E-ARGS; anything else becomes E-INTERNAL and its detail goes to the log only.
  */
 export function toolError(err: unknown, deps: Pick<ToolDeps, 'config' | 'log'>, toolName: string): CallToolResult {
   if (err instanceof ToolFailure) return errorResult(err.message);
+  if (err instanceof ApiError) return errorResult(apiErrorText(err, deps.config));
   if (err instanceof z.ZodError) {
     return errorResult(`Invalid arguments for ${toolName}: ${describeIssues(err)}.`);
   }

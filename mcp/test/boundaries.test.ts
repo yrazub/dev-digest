@@ -124,6 +124,35 @@ describe('stdout is the protocol', () => {
   });
 });
 
+describe('the API port', () => {
+  it('imports of ./mocks appear only in tests: no file under src/ imports it', () => {
+    const importers: string[] = [];
+    for (const file of srcFiles) {
+      for (const spec of importSpecifiers(code(file))) {
+        if (/(^|\/)mocks(\.js|\.ts)?$/.test(spec)) importers.push(`${rel(file)} imports "${spec}"`);
+      }
+    }
+    expect(importers).toEqual([]);
+  });
+
+  it('main.ts, server.ts and the tool files do not import ./mocks', () => {
+    const entry = srcFiles.filter(
+      (file) => file === MAIN || file === path.join(SRC_DIR, 'server.ts') || file.startsWith(path.join(SRC_DIR, 'tools') + path.sep),
+    );
+    expect(entry.length).toBeGreaterThanOrEqual(3);
+    expect(offenders(entry, /\bmocks\b/)).toEqual([]);
+  });
+
+  it('the HTTP adapter and the mock both declare implements DevDigestApi', () => {
+    expect(code(API_CLIENT)).toMatch(/class\s+HttpDevDigestApi\s+implements\s+DevDigestApi\b/);
+    expect(code(path.join(SRC_DIR, 'mocks.ts'))).toMatch(/class\s+MockDevDigestApi\s+implements\s+DevDigestApi\b/);
+  });
+
+  it('ports.ts and api-client.ts declare no object schema of their own (views are .pick() / .extend())', () => {
+    expect(offenders([path.join(SRC_DIR, 'ports.ts'), API_CLIENT], /\bz\s*\.\s*object\s*\(/)).toEqual([]);
+  });
+});
+
 describe('the launcher', () => {
   it('imports nothing but node: builtins and tsx', () => {
     const specs = importSpecifiers(code(LAUNCHER));
