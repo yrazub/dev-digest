@@ -30,8 +30,9 @@ function failureKind(err: unknown): 'timeout' | 'unreachable' {
 }
 
 /**
- * The one place a request is built, and the only caller of `fetch`. It takes a key of
- * `API_ROUTES`, never a method or a path: what the process can ask the API for is that table.
+ * The one place a JSON request is built (`waitForRun` makes its own SSE call). Both callers take
+ * their method and path from `API_ROUTES`, never from a literal: what the process can ask the API
+ * for is that table. This helper takes a key of `API_ROUTES`.
  * `id` is an id that came from an API response; it is percent-encoded into the path.
  */
 async function request(

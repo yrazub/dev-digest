@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { ToolFailure, type ToolDef } from '../tool.js';
+import { acceptNumericString, ToolFailure, type ToolDef } from '../tool.js';
 
 const inputShape = {
   repo: z.string().describe('owner/name'),
-  pr: z.number().int().min(1).describe('pull request number'),
+  pr: acceptNumericString(z.number().int().min(1)).describe('pull request number'),
 };
 
 // An honest stub: no lookup, no API call, nothing that could be mistaken for data.

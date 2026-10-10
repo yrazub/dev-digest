@@ -153,6 +153,29 @@ describe('the API port', () => {
   });
 });
 
+describe('the composition root', () => {
+  const NEW_CLIENT = /\bnew\s+HttpDevDigestApi\b/;
+  const NEW_TRANSPORT = /\bnew\s+StdioServerTransport\b/;
+
+  it('src/main.ts constructs both the HTTP client and the stdio transport (the scan below is not vacuous)', () => {
+    expect(code(MAIN)).toMatch(NEW_CLIENT);
+    expect(code(MAIN)).toMatch(NEW_TRANSPORT);
+  });
+
+  it('new HttpDevDigestApi appears only in src/main.ts', () => {
+    expect(offenders(srcFiles, NEW_CLIENT, [MAIN])).toEqual([]);
+  });
+
+  it('new StdioServerTransport appears only in src/main.ts', () => {
+    expect(offenders(srcFiles, NEW_TRANSPORT, [MAIN])).toEqual([]);
+  });
+
+  it('the scan sees a construction in a file other than main.ts', () => {
+    expect(NEW_CLIENT.test('const a = new HttpDevDigestApi({ baseUrl })')).toBe(true);
+    expect(NEW_TRANSPORT.test('const t = new StdioServerTransport()')).toBe(true);
+  });
+});
+
 describe('the launcher', () => {
   it('imports nothing but node: builtins and tsx', () => {
     const specs = importSpecifiers(code(LAUNCHER));

@@ -116,12 +116,12 @@ resolved against `GET /agents` because `RunRequest.agentId` is a plain string
 | `src/single-zod.ts` | `assertSingleZod()` | 2 |
 | `src/main.ts` | the process entry and composition root | 2, 3, 4 |
 | `src/config.ts` | `McpConfig`, `loadMcpConfig(env)` | 3 |
-| `src/tool.ts` | `ToolDef`, `ToolDeps`, `ToolContext`, `ToolFailure`, `executeTool`, `toolOk`, `toolError`, `sanitizeText` | 3, 4 |
+| `src/tool.ts` | `ToolDef`, `ToolDeps`, `ToolContext`, `ToolFailure`, `executeTool`, `toolOk`, `toolError`, `sanitizeText`, `cutText`, `acceptNumericString` | 3, 4 |
 | `src/server.ts` | `TOOLS` (in call order) and `createMcpServer(deps)` | 3, 5, 6 |
 | `src/ports.ts` | `DevDigestApi`, `API_ROUTES`, the API view schemas, `ApiError` | 4 |
 | `src/api-client.ts` | `HttpDevDigestApi implements DevDigestApi` | 4 |
 | `src/mocks.ts` | `MockDevDigestApi implements DevDigestApi` | 4 |
-| `src/resolve.ts` | `resolveRepo`, `resolvePull`, `resolveAgent` | 5 |
+| `src/resolve.ts` | `resolveRepo`, `resolvePull`, `resolveAgent`; the run-state failures `noReviewFailure`, `runNoReviewFailure`, shared by `get_findings` and `run_agent_on_pr` — they live here, not in either tool, because two tools build the same failure text | 5, 6 |
 | `src/review-view.ts` | `toReviewView` (pure) | 5 |
 | `src/tools/list-agents.ts` · `get-conventions.ts` · `get-findings.ts` · `run-agent-on-pr.ts` · `get-blast-radius.ts` | one `ToolDef` each | 5, 5, 5, 6, 3 |
 | `test/*.test.ts` | the hermetic suite | 2–6 |

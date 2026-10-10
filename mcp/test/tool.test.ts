@@ -339,4 +339,28 @@ describe('the get_blast_radius stub', () => {
     expect(textOf(result)).toContain('Invalid arguments for get_blast_radius');
     expect(textOf(result)).toContain('Expected: repo, pr.');
   });
+
+  it('accepts a numeric string for pr, like get_findings and run_agent_on_pr: it reaches run and yields E-BLAST', async () => {
+    const deps = makeDeps();
+    const viaString = await executeTool(getBlastRadius as unknown as ToolDef, { repo: 'acme/payments-api', pr: '482' }, deps);
+    const viaNumber = await executeTool(getBlastRadius as unknown as ToolDef, { repo: 'acme/payments-api', pr: 482 }, makeDeps());
+
+    expect(viaString.isError).toBe(true);
+    expect(textOf(viaString)).toContain('not implemented');
+    expect(textOf(viaString)).not.toContain('Invalid arguments');
+    expect(textOf(viaString)).toBe(textOf(viaNumber));
+    expect(deps.log).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['"0"', '0'],
+    ['"abc"', 'abc'],
+    ['0', 0],
+  ])('rejects pr %s before run', async (_label, pr) => {
+    const result = await executeTool(getBlastRadius as unknown as ToolDef, { repo: 'a/b', pr }, makeDeps());
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('Invalid arguments for get_blast_radius');
+    expect(textOf(result)).not.toContain('not implemented');
+  });
 });
