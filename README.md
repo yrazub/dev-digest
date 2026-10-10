@@ -15,6 +15,7 @@ aliases, not published modules):
 | `client/`        | `@devdigest/web`            | Next.js 15 web app (the studio)                       | 3000 |
 | `reviewer-core/` | `@devdigest/reviewer-core`  | Pure review engine: diff → prompt → LLM → findings    | —    |
 | `e2e/`           | `@devdigest/e2e`            | Deterministic browser e2e (agent-browser)             | —    |
+| `mcp/`           | `@devdigest/mcp`            | Local stdio MCP server `devdigest-mcp`; an HTTP client of the API | — (stdio) |
 | `server/src/vendor/shared` | `@devdigest/shared` | Zod contracts shared across every package             | —    |
 
 `repo-intel` (the codebase indexer that powers the **Indexed** badge and feeds
@@ -47,10 +48,16 @@ flowchart LR
   API -->|"run review"| ENGINE
   ENGINE --> LLM
 
+  MCPCLIENT["MCP client<br/>Claude Code · MCP Inspector"]
+  MCP["mcp/<br/>devdigest-mcp · stdio<br/>started on its own, not by dev.sh"]
+  MCPCLIENT -->|"stdio · JSON-RPC"| MCP
+  MCP -->|"HTTP · list agents, run a review,<br/>read findings and conventions"| API
+
   SHARED["@devdigest/shared<br/>Zod contracts"]
   SHARED -.->|"one schema, every package"| WEB
   SHARED -.-> API
   SHARED -.-> ENGINE
+  SHARED -.-> MCP
 ```
 
 The review flow end to end: **add a repo** → server clones it and `repo-intel`
@@ -63,11 +70,16 @@ references), drops non-serious findings the reviewer tagged out of the PR's
 scope, and persists structured findings with a severity and score. All local; the only outbound calls are to GitHub (PR data)
 and the LLM (via OpenRouter).
 
+`devdigest-mcp` sits beside that flow, not inside it: an MCP client (Claude Code, MCP Inspector)
+starts it as a child process and it reaches DevDigest only over HTTP, against the running API.
+The review itself still executes in the API (see [MCP server](#mcp-server)).
+
 Each package has its own README with deeper diagrams:
 [`client`](client/README.md) (UI route map) ·
 [`server`](server/README.md) (API map) ·
 [`reviewer-core`](reviewer-core/README.md) (review pipeline) ·
-[`e2e`](e2e/README.md).
+[`e2e`](e2e/README.md) ·
+[`mcp`](mcp/README.md) (the `devdigest-mcp` server).
 
 ## What works on day 1
 
@@ -119,6 +131,9 @@ Postgres keeps running (`docker compose down` to stop it).
 
 Flags: `--no-seed` · `--no-client` · `--db-only` · `--help`.
 
+The script does **not** install or start the `mcp/` package (the `devdigest-mcp` server); see
+[MCP server](#mcp-server).
+
 > Add your keys in `server/.env` (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`,
 > `GITHUB_TOKEN`) or via the Settings UI at runtime.
 
@@ -133,13 +148,40 @@ pnpm db:seed             # idempotent demo data (optional)
 pnpm dev                 # API on :3001
 
 cd ../client && pnpm install && pnpm dev               # web on :3000
+
+cd ../mcp && npm ci                                    # only for devdigest-mcp (npm, not pnpm)
 ```
+
+## MCP server
+
+`mcp/` is `devdigest-mcp`: a local, stdio-only MCP server, a thin HTTP client of the running
+API. It is a separate package with its own launch command and does not start with
+`./scripts/dev.sh`.
+
+- **Prerequisites:** `cd mcp && npm ci` once, and the API running (`./scripts/dev.sh`).
+- **Launch:** `node mcp/bin/devdigest-mcp.mjs` from the repository root. Do not wrap it in `npm run`
+  or `npx`: stdout carries only protocol messages. The same command is the `devdigest-mcp` entry
+  of the repo's [`.mcp.json`](.mcp.json).
+- **Tools:** `list_agents` · `run_agent_on_pr` (starts a paid review and returns the verdict and
+  findings) · `get_findings` · `get_conventions` · `get_blast_radius` (a stub: it always returns an
+  error and calls nothing).
+- **Environment:** `DEVDIGEST_API_URL` (default `http://127.0.0.1:3001`) and
+  `DEVDIGEST_MCP_WAIT_SECONDS` (1–600, default `120`; how long `run_agent_on_pr` waits).
+- **Check it with MCP Inspector:**
+  `npx -y @modelcontextprotocol/inspector@2.10.1 --cli node mcp/bin/devdigest-mcp.mjs --method tools/list`,
+  run from the repository root.
+- **Connect it to Claude Code:** start Claude Code in the repository root, reload it and approve
+  the project's `devdigest-mcp` server; it should list the five tools.
+
+Arguments, results, errors and the exact Inspector commands are in
+[`mcp/README.md`](mcp/README.md).
 
 ## Useful scripts
 
 `server/`: `dev` · `build` · `db:migrate` · `db:seed` · `db:generate` · `test` · `typecheck`
 (unit/integration split: `pnpm exec vitest run --exclude '**/*.it.test.ts'` / `pnpm exec vitest run .it.test`)
 `client/`: `dev` · `build` · `start` · `test` · `typecheck`
+`mcp/` (npm): `test` · `typecheck`
 
 ## Testing & CI
 
@@ -152,10 +194,12 @@ path filter — full strategy in **[`TESTING.md`](TESTING.md)**.
 | server unit (hermetic) | `server-unit.yml` | no |
 | server integration (real Postgres) | `server-integration.yml` | yes |
 | reviewer-core (engine) | `reviewer-core.yml` | no |
+| mcp (`devdigest-mcp`, hermetic) | `mcp.yml` | no |
 | web e2e (agent-browser, real stack) | `e2e-web.yml` | yes |
 
 Server tests split by filename: `*.it.test.ts` are DB-backed (testcontainers
-Postgres); everything else is hermetic. The browser e2e flows live in
+Postgres); everything else is hermetic. The server integration suite also spawns
+`devdigest-mcp` against a real API, so it needs `cd mcp && npm ci` first. The browser e2e flows live in
 [`e2e/`](e2e/README.md) and run deterministically (no LLM).
 
 ## Troubleshooting

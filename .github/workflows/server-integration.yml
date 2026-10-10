@@ -1,4 +1,4 @@
-# Server integration suite — the 12 DB-backed test files (`*.it.test.ts`).
+# Server integration suite — the DB-backed test files (`*.it.test.ts`).
 #
 # Each spins up a real Postgres (pgvector) via testcontainers, builds the
 # Fastify app, migrates + seeds, and exercises the routes end-to-end against
@@ -70,7 +70,7 @@ jobs:
 
       # Inlined rather than `pnpm test:integration`: server/package.json is
       # skip-worktree, so we don't rely on the committed file carrying the split
-      # script. The `.it.test` filter selects exactly the 12 DB-backed files.
+      # script. The `.it.test` filter selects exactly the DB-backed files.
       # vitest's config gives these a 120s timeout for container spin-up; no API
       # keys needed — LLM/git are mocked.
       - run: pnpm exec vitest run .it.test

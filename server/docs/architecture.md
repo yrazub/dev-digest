@@ -140,6 +140,39 @@ single-pass mode there is one call, so a run already inside it keeps going. When
 returns, the success path writes `done`, because `completeAgentRun` updates the row without
 checking its status. (Read from the code, not reproduced; see `../INSIGHTS.md` → Open Questions.)
 
+## Why an external process is an HTTP client
+
+`devdigest-mcp` ([`../../mcp/README.md`](../../mcp/README.md)) is a separate process that starts
+and reads review runs, and it does so only over HTTP, against the running API. It never builds a
+`Container`, never opens the database and never executes a run itself. Three properties of the
+engine above make that the only safe shape:
+
+| Property of the engine | What an in-process or second-process executor would break |
+|---|---|
+| A run executes inside the API process, started fire-and-forget by `POST /pulls/:id/review` | A run executed in another process would bypass the API's container, its run bus and its trace log |
+| `RunBus` is in memory and per process | Events, the cancel flag and completion exist only where the run executes; a second process would stream and cancel an empty bus |
+| The boot reaper marks every `running` row `failed`, assuming no other process owns one | A run owned by another process would be reaped as orphaned the next time the API restarts |
+
+So the MCP process follows a run through existing routes only — `POST /pulls/:id/review` to queue
+it, `GET /runs/:id/events` (SSE) to watch it, `GET /pulls/:id/runs` and `GET /pulls/:id/reviews`
+to read the outcome — plus the read routes for agents, repos, pull requests and conventions. The
+routes it can reach are a fixed table, `API_ROUTES` in
+[`../../mcp/src/ports.ts`](../../mcp/src/ports.ts): one write (queueing a review) and no cancel,
+delete or settings route. No route, contract or table was added for it.
+
+Consequences worth knowing when changing the engine:
+
+- The tool waits on the SSE stream for at most `DEVDIGEST_MCP_WAIT_SECONDS` (default 120 s), then
+  reads the run's status from `GET /pulls/:id/runs`; it never infers the status from the end of the
+  stream. A stream that breaks (for example when the API restarts) ends the wait, and the second
+  read reports whatever the row says — `failed` once the boot reaper has marked it.
+- The MCP process holds no run state between calls. If it is killed, or its client gives up on a
+  call, the run keeps going in the API; it is not cancelled.
+- A second call for the same agent and PR while a run is `running` joins that run instead of
+  queueing another, so a retry after a timeout does not start a second paid run.
+- A change to those three routes' response fields is a change to a client outside `server/`; the
+  MCP package parses only the fields it uses and reports a mismatch as an error naming the route.
+
 ## Who writes which tables
 
 | Module | Writes |
