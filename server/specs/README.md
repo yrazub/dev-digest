@@ -13,6 +13,7 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | [`L02-skills.md`](L02-skills.md) | `skills` (new), `agents`, `reviews` | implemented |
 | [`L02-conventions.md`](L02-conventions.md) | `conventions` | implemented |
 | [`L03-intent-layer.md`](L03-intent-layer.md) | `intent` (new), `reviews` | implemented |
+| [`L03-smart-diff.md`](L03-smart-diff.md) | `smart-diff` (new), `_shared/file-role` (new) | implemented |
 | [`architecture-refactor.md`](architecture-refactor.md) | all (S1: `pulls`, `reviews`) | draft |
 
 Use [`../src/modules/repo-intel`](../src/modules/repo-intel/README.md) as the reference

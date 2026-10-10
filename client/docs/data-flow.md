@@ -29,12 +29,19 @@ A key is `[resource, id]`. The ones the PR screens depend on:
 |---|---|---|---|
 | `["pulls", repoId]` | `usePulls` | `GET /repos/:id/pulls` | polls every 60 s and on window focus; each fetch also syncs the PR list from GitHub server-side |
 | `["pull", prId]` | `usePullDetail` | `GET /pulls/:id` | on mount when stale |
-| `["reviews", prId]` | `usePrReviews` | `GET /pulls/:id/reviews` | invalidated by run-review, a finding action, deleting a review or a run; refetched when a live run ends |
+| `["reviews", prId]` | `usePrReviews` | `GET /pulls/:id/reviews` | invalidated by run-review, a finding action, deleting a review or a run; refetched when a run settles |
 | `["pr-runs", prId]` | `usePrRuns` | `GET /pulls/:id/runs` | polls every 4 s while any run is `running`; invalidated when a live run ends and by deleting a run |
 | `["pr-active-runs", prId]` | `usePrActiveRuns` | `GET /pulls/:id/runs/active` | polls every 4 s while non-empty; invalidated when runs start and end |
 | `["pr-intent", prId]` | `usePrIntent` | `GET /pulls/:id/intent` | polls every 4 s only while a review run is in flight (the page passes `poll`); `useRegenerateIntent` writes the `POST` response straight into it; invalidated when a live run ends |
+| `["smart-diff", prId, headSha]` | `useSmartDiff` | `GET /pulls/:id/smart-diff` | not polled; waits until both `prId` and `pr.head_sha` are known, and a new head SHA is a new query. Every head of one PR shares the prefix `smartDiffKeys.pull(prId)` = `["smart-diff", prId]`, which is what gets invalidated: by a finding action, deleting a review or a run, and when a run settles (see below) |
 | `["run-trace", runId]` | `useRunTrace` | `GET /runs/:id/trace` | fetched when the drawer opens; `retry: false` |
 | `["pr-comments", prId]` | `usePrComments` | `GET /pulls/:id/comments` | invalidated by posting a comment |
+
+The Files changed tab joins two of these. From `["smart-diff", prId, headSha]` it takes only the
+group each path belongs to and the group order; the findings it draws come from `["reviews", prId]`
+(the newest review of each agent). It does not read the response's `finding_lines`,
+`split_suggestion` or `total_lines`, so the marks follow the reviews refetch; the smart-diff
+refetch that goes with it only refreshes the grouping.
 
 Other screens follow the same shape: `["repos"]`, `["settings"]`, `["agents"]` /
 `["agent", id]`, and `["repo-intel-state", repoId]`, which polls every 1.5 s while indexing.
@@ -60,11 +67,19 @@ Keep server data in the query cache. Do not copy it into `useState`; derive from
    per run (`/runs/:id/events`). Events are appended to the live log. An `error` event also
    becomes a toast, because it never passes through the query cache where the global toasts
    live.
-4. **Settle.** When every stream closes, `RunStatus` calls `onDone`, and the page invalidates
-   `pr-active-runs`, `pr-runs` and `pr-intent` and refetches `reviews`. The Timeline, the
-   Review-runs cards and their severity counters update from that.
+4. **Settle.** When every stream closes, `RunStatus` calls `onDone`, which the page wires to the
+   function `useRunSettledRefresh(prId)` returns (`src/lib/hooks/reviews.ts`). It invalidates
+   `pr-active-runs`, `pr-runs`, `reviews`, `pr-intent` and `["smart-diff", prId]`; the page
+   observes `reviews`, so that one refetches at once. The Timeline, the Review-runs cards and their
+   severity counters update from that, and so do the dots, stripes and group marks on Files changed.
 5. **Converge anyway.** `pr-runs` and `pr-active-runs` poll every 4 s while something is running,
-   so a missed SSE message or a mid-run reload still ends in the right state.
+   so a missed SSE message or a mid-run reload still ends in the right state. The same hook also
+   watches the page's `pr-active-runs` query (one request, shared by key) and runs the refresh
+   itself when its length goes from non-empty to empty, **on any tab**. That is how a run that
+   ends while the user is on Files changed still brings that tab its findings, within one poll
+   interval. It stays quiet on the first answer for a PR (including a first answer that is already
+   empty) and when the PR changes. On the Agent runs tab both paths fire; the second is a harmless
+   repeat, and the repeat's own empty answer is `0 → 0`, which is not a transition.
 
 The PR's intent is the one piece of review data that is *not* in the run's event stream. The
 server derives it as the run's first step, so the Intent card (above the run on the Agent runs
@@ -77,8 +92,11 @@ next fetch: on mount if the data is older than 30 s, every 60 s, or on window fo
 ## Example: accepting a finding
 
 `FindingCard`'s **Accept** (or `a` on the focused card) calls `useFindingAction`:
-`POST /findings/:id/accept`. On success only `["reviews", prId]` is invalidated, and the card
-re-renders muted with `accepted_at` set.
+`POST /findings/:id/accept`. On success `["reviews", prId]` and `["smart-diff", prId]` are
+invalidated (when the call carries a `prId`), and the card re-renders muted with `accepted_at` set.
+The same card appears under its line on Files changed (`InlineFinding`), so Accept and Dismiss
+work there too. Dismissing changes what the Files changed tab counts: the finding keeps its card
+but no longer feeds the dot, the line stripe and tag, or the group mark. Accepting does not.
 
 Nothing else refreshes, and nothing else needs to: the severity counters, the Timeline badges and
 the PR-list popover count every finding of a run, whether accepted, dismissed or open. Those

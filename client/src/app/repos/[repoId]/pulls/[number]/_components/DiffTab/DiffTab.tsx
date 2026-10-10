@@ -1,27 +1,74 @@
 "use client";
 
 import React from "react";
-import { SectionLabel, Button } from "@devdigest/ui";
-import { DiffViewer, type DiffCommentApi } from "@/components/diff-viewer";
-import { usePrComments, useCreatePrComment } from "@/lib/hooks/reviews";
+import { useTranslations } from "next-intl";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { SectionLabel, Button, Skeleton } from "@devdigest/ui";
+import { DiffViewer, type DiffCommentApi, type DiffFindingApi } from "@/components/diff-viewer";
+import { usePrComments, useCreatePrComment, usePrReviews } from "@/lib/hooks/reviews";
+import { useSmartDiff } from "@/lib/hooks/smart-diff";
 import { notify } from "@/lib/toast";
-import type { PrFile } from "@devdigest/shared";
+import type { FindingRecord, PrDetail } from "@devdigest/shared";
+import { InlineFinding } from "./_components/InlineFinding";
+import { OrderSwitch, type FilesOrder } from "./_components/OrderSwitch";
+import { RoleGroup } from "./_components/RoleGroup";
+import { SKELETON_ROW_KEYS } from "./constants";
+import { countedInDiff, diffBodyMode, findingsOfLatestReviews, joinGroups } from "./helpers";
+import { s } from "./styles";
 
 interface DiffTabProps {
   prId: string | null;
-  filesCount: number;
-  files: PrFile[];
+  pr: PrDetail;
+  repoFullName?: string | null;
   /** Inline commenting is offered only on open PRs (GitHub rejects otherwise). */
   canComment?: boolean;
 }
 
-export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
+export function DiffTab({ prId, pr, repoFullName, canComment }: DiffTabProps) {
+  const t = useTranslations("prReview");
   const { data: comments } = usePrComments(prId);
+  const { data: reviews } = usePrReviews(prId);
   const create = useCreatePrComment(prId);
-  // Comments start hidden so the diff is clean by default — toggle to reveal.
-  const [showComments, setShowComments] = React.useState(false);
+  const smartDiff = useSmartDiff(prId, pr.head_sha);
+  const router = useRouter();
+  const pathname = usePathname();
+  const search = useSearchParams();
+  // One switch for GitHub comments and finding cards; both start visible.
+  const [showComments, setShowComments] = React.useState(true);
 
-  const commentCount = comments?.length ?? 0;
+  const shownFindings = React.useMemo(() => findingsOfLatestReviews(reviews ?? []), [reviews]);
+  // The order lives in the URL so it survives a reload: `order=original`, anything else is smart.
+  const order: FilesOrder = search.get("order") === "original" ? "original" : "smart";
+  const handleOrderChange = (next: FilesOrder) => {
+    const sp = new URLSearchParams(search.toString());
+    if (next === "original") sp.set("order", "original");
+    else sp.delete("order");
+    const qs = sp.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  };
+
+  const joined = React.useMemo(
+    () => (smartDiff.data ? joinGroups(smartDiff.data.groups, pr.files) : null),
+    [smartDiff.data, pr.files],
+  );
+  const groups = joined?.groups.filter((g) => g.files.length > 0) ?? [];
+  // One mode drives the label, the notice and the body, so they cannot disagree.
+  const mode = diffBodyMode({
+    order,
+    isError: smartDiff.isError,
+    hasData: !!joined,
+    fileCount: pr.files.length,
+  });
+  const switchCount = (comments?.length ?? 0) + countedInDiff(shownFindings, pr.files);
+
+  const headSha = pr.head_sha;
+  const renderFinding = React.useCallback(
+    (finding: FindingRecord) =>
+      prId ? (
+        <InlineFinding finding={finding} prId={prId} repoFullName={repoFullName} headSha={headSha} />
+      ) : null,
+    [prId, repoFullName, headSha],
+  );
 
   const commenting: DiffCommentApi = {
     comments: comments ?? [],
@@ -40,26 +87,70 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
     },
   };
 
+  const findings: DiffFindingApi = {
+    findings: shownFindings,
+    showFindings: showComments,
+    renderFinding,
+  };
+
   return (
     <section>
       <SectionLabel
         icon="Code"
         right={
-          commentCount > 0 ? (
+          switchCount > 0 ? (
             <Button
               kind="ghost"
               size="sm"
               icon={showComments ? "EyeOff" : "Eye"}
+              title={t("smartDiff.commentsSwitchHint")}
               onClick={() => setShowComments((v) => !v)}
             >
-              {showComments ? "Hide comments" : "Show comments"} ({commentCount})
+              {t(showComments ? "smartDiff.hideComments" : "smartDiff.showComments", {
+                count: switchCount,
+              })}
             </Button>
           ) : undefined
         }
       >
-        Files changed · {filesCount} files
+        {t(mode === "groups" && groups.length > 0 ? "smartDiff.groupedByRole" : "smartDiff.filesChanged")}
       </SectionLabel>
-      <DiffViewer files={files} commenting={commenting} />
+      <div style={s.totalsRow}>
+        <p style={s.totals}>
+          {t("smartDiff.totals", {
+            files: pr.files_count,
+            additions: pr.additions,
+            deletions: pr.deletions,
+          })}
+        </p>
+        <OrderSwitch value={order} onChange={handleOrderChange} />
+      </div>
+      {reviews?.length === 0 ? <p style={s.notice}>{t("smartDiff.noReviewYet")}</p> : null}
+      {mode === "unavailable" ? <p style={s.notice}>{t("smartDiff.groupingUnavailable")}</p> : null}
+      {mode === "pending" ? (
+        <div style={s.skeletonList}>
+          {SKELETON_ROW_KEYS.map((key) => (
+            <Skeleton key={key} height={38} />
+          ))}
+        </div>
+      ) : null}
+      {mode === "flat" || mode === "unavailable" ? <DiffViewer files={pr.files} commenting={commenting} findings={findings} /> : null}
+      {mode === "groups" ? (
+        <div style={s.groups}>
+          {groups.map((g) => (
+            <RoleGroup
+              key={g.role}
+              role={g.role}
+              files={g.files}
+              commenting={commenting}
+              findings={findings}
+            />
+          ))}
+          {joined && joined.ungrouped.length > 0 ? (
+            <DiffViewer files={joined.ungrouped} commenting={commenting} findings={findings} />
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }

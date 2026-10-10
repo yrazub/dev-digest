@@ -55,6 +55,25 @@ Traps we have already hit in the server. Append-only. See the root
 - **2026-10-05** — `new OctokitGitHubClient(token, { fetch })` is the adapter's test seam: the stub receives every SDK request (`request: { fetch }`, `src/adapters/github/octokit.ts:54-57`). A 403 makes exactly one request, a 429 or 5xx is retried with backoff, and Octokit percent-encodes the contents path (`contents/docs%2Fspec.md`), so a stub decodes the URL before matching. Example: `test/github-octokit.test.ts`.
 - **2026-10-05** — a shared pre-step of a review run logs with `runLog.tool` / `info`, never `runLog.step`: `step` emits an `error` event when its callback throws and the client turns every `error` event into a toast (`deriveIntent` in `src/modules/reviews/run-executor.ts:379-386`).
 - **2026-10-05** — `MockLLMProvider({ structuredBySchema })` runs a multi-call flow (classifier + review) through one app; calls are told apart by `req.schemaName`, not by order (`runAndTrace` in `test/reviews-skills.it.test.ts`, `test/reviews-intent.it.test.ts`). In an `.it` file a seeded row cannot be restored once a test corrupts it (`seed()` uses `onConflictDoNothing()`), so corrupt a row the test created; a `PUT /settings` persists for the rest of the file and is undone in `finally` (`test/intent-routes.it.test.ts`).
+  **Extended 2026-10-07:** PR #482's `pr_files` are the exception. The Smart Diff seed block runs outside `if (!pr)`, inserts each fixture path that is missing and fills a patch only where it is null, so a test may delete those rows and call `seed(db)` in `finally` to get them back (`src/db/seed.ts:36`, `test/smart-diff.it.test.ts`). The PR row, its review and its findings are still not restorable.
+
+- **2026-10-06** — `pr_files` is filled only by `GET /pulls/:id` (`PullsRepository.saveDetail`
+  deletes and re-inserts the rows on every successful GitHub refresh) and by the seed, the
+  table has no position column, and `storedFilesAndCommits` selects it without `ORDER BY`. A
+  route that reads `pr_files` therefore cannot return GitHub's file order, and it reads an
+  empty table when it is called in parallel with the first detail request of a freshly
+  imported PR. Order by `path`, and have the client wait for the detail before asking
+  (`src/modules/pulls/repository.ts:128`, `:167`; `specs/L03-smart-diff.md` D3, D9).
+- **2026-10-07** — `pr_files` has no unique index on `(pr_id, path)` (`src/db/schema/pulls.ts:36`), so
+  `onConflictDoNothing()` on it never conflicts and a re-seed inserts duplicates. A seed block for
+  that table reads the existing paths and inserts only the missing ones (`SMART_DIFF_EXTRA_FILES`
+  in `src/db/seed.ts:36`); its test counts rows after a second `seed()`, it does not just check
+  that the call succeeds.
+- **2026-10-07** — to prove a route calls no external port, wrap the `Mock*` double in a `Proxy`
+  whose `get` trap records the name of every function it hands out, and assert the list is empty
+  after all requests. The mocks track calls unevenly (`posted`, `issueRequests`, …); the proxy
+  also counts a method added to the port later (`new Proxy` in `test/smart-diff.it.test.ts:33`).
+
 
 ## Tool & Library Notes
 
@@ -124,6 +143,15 @@ Traps we have already hit in the server. Append-only. See the root
 
 - **2026-10-05** — a GitHub 404 is a value at the port, not an exception: `getIssue` resolves `null` and `getFileContent` resolves `RepoFileResult` with a miss reason (`not_found` · `too_large` · `not_a_file` · `empty`); every other failure is rethrown by the adapter as `ExternalServiceError` (`httpStatus`, `githubFailure` in `src/adapters/github/octokit.ts:30-44`), and no service reads `err.status`. Rejected: `statusOf(err) === 404` in the intent service — it decided a persisted contract value from the SDK's error shape, and the mock could not produce that shape. Only these two methods were converted; the other methods of the class still rethrow the raw SDK error.
 - **2026-10-05** — contract-shaped `jsonb` and text-enum columns of `pr_intent` are parsed on read in the repository mapper (`mapRow`, `src/modules/intent/repository.ts:35`); a row that fails is reported through the port's `onUnreadable` callback (`:151`) and returned as `undefined`, so `GET /pulls/:id/intent` answers `{ intent: null }` and the next derivation overwrites it. Rejected: throwing (a 500 on a `GET` polled every 4 s, and a row that never heals) and parsing on write (the values already passed `IntentClassification`).
+- **2026-10-07** — `src/modules/_shared/file-role/` holds a pure domain rule (`classifyFile`), and no
+  `arch:check` rule guards its purity: `dep-domain-framework-free` matches only
+  `src/vendor/shared/` and a module's `domain` / `ports` files (`.dependency-cruiser.cjs:23`), and
+  `_shared/` is exempt as a source from the cross-module, Fastify and container rules. Accepted
+  as is after the L03 architecture review, with the config unchanged; the alternative was to add
+  `_shared/file-role/` to that rule's `from`. Anything added to that folder stays free of I/O,
+  Fastify and `src/db` by convention. `reviewer-core` cannot import it (`core-stays-pure`), so if
+  the L08 prompt filter is built inside the engine, the classifier moves to `@devdigest/shared`.
+
 
 ## Recurring Errors & Fixes
 
@@ -177,6 +205,7 @@ entry was not read first. Only `repo-intel-symbol-clamp.it.test.ts` ran in two p
 while `docker info` alone took 0.65 s. `pnpm exec vitest run .it.test --pool=forks
 --poolOptions.forks.singleFork=true` also works: all 8 files ran, 30 tests passed. The helper is
 `test/helpers/pg.ts:23`, with the 5000 ms timeout at `:27`.
+**Evidence 2026-10-07:** under Docker load the full `pnpm test` failed with `Error: Hook timed out in 120000ms.` in the `beforeAll` of 11 `.it` files and reported 97 tests as skipped, with no assertion failing; files the branch did not touch were among them. The two lanes run separately (`--exclude '**/*.it.test.ts'`, then `.it.test --no-file-parallelism`) passed 553 and 97. A leftover testcontainer from an aborted run makes it more likely.
 
 ### `TS2353: … 'findingsBySeverity' does not exist in type` at the `completeAgentRun` call site
 **Date:** 2026-09-22
@@ -246,3 +275,5 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
 - **2026-10-01** — L02 conventions module (extract pipeline, candidate routes); `feature-models` moved to `modules/_shared/repository/feature-models.repo.ts` taking `Db`, which removed its two baselined violations.
 - **2026-10-02** — review runs: per-run deadline (`RUN_DEADLINE_MS`) and Cancel now abort the in-flight model call via `RunBus.signalFor`; OpenRouter skips `open-inference` by default (`OPENROUTER_IGNORED_PROVIDERS`). **See also:** `../reviewer-core/INSIGHTS.md` (runaway generation, provider slugs).
 - **2026-10-05** — L03 intent module, review-run pre-step and scope filter wiring; review fixes (parse on read, port-level GitHub outcomes); root cause of the `reviews-skills.it` flake; `renderIntentBlock` `map` bug found by the phase 6 tests. Plan: `specs/L03-intent-layer-plan.md` (revision 3).
+- **2026-10-06** — L03 Smart Diff specified, no code yet (`specs/L03-smart-diff.md`, `server/specs/`, `client/specs/`); `pr_files` ordering and fill-time recorded above.
+- **2026-10-07** — L03 Smart Diff: the `file-role` classifier, the read-only `smart-diff` module, nine seeded files for PR #482; entries above. Plan: `specs/L03-smart-diff-plan.md` (revision 2).

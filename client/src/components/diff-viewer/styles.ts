@@ -66,6 +66,46 @@ export const s = {
   } satisfies CSSProperties,
 } as const;
 
+/** Finding marks: the file dot, the line tag and the end-of-file block. */
+export const fs = {
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    flexShrink: 0,
+    display: "inline-block",
+  } satisfies CSSProperties,
+  tag: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "center",
+    marginLeft: "auto",
+    marginRight: 10,
+    padding: "0 6px",
+    borderRadius: 4,
+    fontSize: 11,
+    fontWeight: 600,
+    lineHeight: "16px",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+  unanchoredWrap: {
+    borderTop: "1px solid var(--border)",
+    margin: "4px 14px 4px 14px",
+    paddingTop: 10,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  } satisfies CSSProperties,
+  unanchoredTitle: {
+    fontSize: 11,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+} as const;
+
 /** Chevron rotates 90deg when the file card is open. */
 export function chevronFor(open: boolean): CSSProperties {
   return {
@@ -76,9 +116,11 @@ export function chevronFor(open: boolean): CSSProperties {
 }
 
 /** Row background per line kind (add/del tinted, others transparent). */
-export function lineRowFor(kind: Line["kind"]): CSSProperties {
+export function lineRowFor(kind: Line["kind"], stripe?: string): CSSProperties {
   const background = kind === "add" ? "var(--code-add)" : kind === "del" ? "var(--code-del)" : "transparent";
-  return { display: "flex", alignItems: "stretch", fontSize: 13, lineHeight: "20px", background };
+  const base: CSSProperties = { display: "flex", alignItems: "stretch", fontSize: 13, lineHeight: "20px", background };
+  // The stripe is an inset shadow so the line does not shift when it appears.
+  return stripe ? { ...base, boxShadow: `inset 3px 0 0 ${stripe}` } : base;
 }
 
 /** Gutter sign colour per line kind. */

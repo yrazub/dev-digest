@@ -49,6 +49,10 @@ Anything that should survive a reload or a shared link lives in the URL, set wit
 - PR detail tabs: `?tab=overview | findings | diff`. The `findings` tab is labelled
   **"Agent runs"** in the UI and implemented by `FindingsTab`; there is no separate findings
   screen.
+- The Files changed order: `?order=original` shows the PR's files as `GET /pulls/:id` returns them,
+  with no role headers. Smart order is the default and has no parameter: choosing it deletes
+  `order`. `DiffTab` reads it with `useSearchParams()` and writes it with `router.replace`,
+  keeping every other parameter (`tab=diff` stays).
 - The Run Trace drawer: `?trace=<runId>`.
 - PR list filters and sort: `?status=…&sort=…`.
 
@@ -62,6 +66,13 @@ Pages stay thin; feature logic lives in `_components/<Name>/` next to the route 
 folder layout is in [`../CLAUDE.md`](../CLAUDE.md) → Naming). Components shared across routes live
 in `src/components/` (`app-shell`, `diff-viewer`, `page-shell`, `mermaid-diagram`,
 `repo-not-found`).
+
+Shared components never import from `src/app/`. `diff-viewer` shows findings without knowing
+where the finding card lives: the Files changed route passes a `DiffFindingApi`
+(`src/components/diff-viewer/findings.ts`) whose `renderFinding` returns its own `InlineFinding`,
+and without that prop the viewer renders as it did before (the skills route uses it that way). The
+viewer exports `isCounted` and `mostSevere` so the route's group marks count a finding the same
+way the file dot and the line tag do.
 
 One exception today: `FindingsPopover` lives under `app/repos/[repoId]/pulls/_components/` but is
 used by both the PR list and the PR detail Timeline. If a third screen needs it, move it to

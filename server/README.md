@@ -7,7 +7,7 @@ Adapters (LLM, GitHub, git, ast-grep, …) sit behind a DI container so they can
 swapped for mocks in tests.
 
 > This is the **starter** module set. Later course lessons add their own modules
-> (skills, smart-diff, blast, brief/context/onboarding, eval/ci/hooks,
+> (skills, blast, brief/context/onboarding, eval/ci/hooks,
 > memory, plugins, …) — each is a self-contained `modules/<name>/` plugin plus,
 > usually, a slot it starts feeding the reviewer prompt. The DB schema already
 > contains **every** table; the unused ones simply sit empty until a lesson fills
@@ -75,6 +75,7 @@ flowchart TB
   subgraph Review["Review & runs"]
     reviews["reviews<br/>/pulls/:id/review · /reviews · /findings/:id/(accept|dismiss)<br/>/runs/:id/(events|trace)"]
     intent["intent<br/>/pulls/:id/intent (GET read · POST re-derive)"]
+    smartDiff["smart-diff<br/>/pulls/:id/smart-diff (GET, read-only)"]
   end
   subgraph Agents["Agents & skills (Skills Lab)"]
     agents["agents<br/>/agents · /agents/:id · /agents/:id/skills (link + order)"]
@@ -98,6 +99,20 @@ in [`src/modules/intent/README.md`](src/modules/intent/README.md)). Both answer 
 |---|---|
 | `GET /pulls/:id/intent` | Reads the stored intent and never computes. `stale` is computed on read. `404` for an unknown PR; `{ intent: null }` when nothing is stored, or when the stored row no longer parses |
 | `POST /pulls/:id/intent` | Always recomputes (the card's **Derive intent** and **Re-run**). Rate limit 10/min. `404` for an unknown PR; `400` code `intent_unavailable` when the configured provider has no key; `502` `external_service_error` for any other failure (model error, timeout, an answer cut off at the output limit or one that does not match the schema) |
+
+**Smart Diff route** ([`src/modules/smart-diff/routes.ts`](src/modules/smart-diff/routes.ts)). The
+module groups a PR's changed files by role for the **Files changed** tab. It reads Postgres only —
+`pull_requests`, `pr_files`, `reviews` and `findings` — and writes nothing; it calls neither GitHub
+nor a model, so it answers for a PR that has never been reviewed. The role of a path comes from
+[`classifyFile`](src/modules/_shared/file-role/README.md).
+
+| Route | Behaviour |
+|---|---|
+| `GET /pulls/:id/smart-diff` | Answers a `SmartDiffResponse`. `groups` always holds five entries in the order `core`, `tests`, `wiring`, `docs`, `boilerplate`; a role with no file has `files: []`. Files inside a group are sorted by path (code-unit order). Each file carries `additions`, `deletions` and `finding_lines`: the distinct, ascending `start_line` values of the counted findings (below) for that path. `split_suggestion` is `{ too_big: false, total_lines, proposed_splits: [] }`, where `total_lines` is the sum of additions and deletions; `pseudocode_summary` is never set. `404` code `not_found` for an unknown PR or one of another workspace; `422` for an id that is not a uuid |
+
+*Counted* findings are those of the newest review of each agent (reviews with no `agent_id` count as one
+agent) that are not dismissed; an accepted finding still counts. A finding whose `file` is not one of
+the PR's files is ignored. The rules are in [`src/modules/smart-diff/domain.ts`](src/modules/smart-diff/domain.ts).
 
 ## Environment
 

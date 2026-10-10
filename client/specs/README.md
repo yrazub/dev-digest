@@ -13,6 +13,7 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | [`L02-skills.md`](L02-skills.md) | `/skills` · `/skills/:id` · `/agents` · `/agents/:id` | implemented |
 | [`L02-conventions.md`](L02-conventions.md) | `/repos/:repoId/conventions` | implemented |
 | [`L03-intent-layer.md`](L03-intent-layer.md) | `/repos/:repoId/pulls/:number` | implemented |
+| [`L03-smart-diff.md`](L03-smart-diff.md) | `/repos/:repoId/pulls/:number?tab=diff` | implemented |
 | [`architecture-refactor.md`](architecture-refactor.md) | all (C1: `src/lib/hooks`) | draft |
 
 Browser-level acceptance for a finished screen belongs in [`../e2e/specs`](../../e2e/specs).

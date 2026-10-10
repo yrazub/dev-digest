@@ -103,3 +103,4 @@ a CI artifact by `.github/workflows/e2e-web.yml`).
 | `08-skills` | `/skills` → create a skill → link it on the Test Quality Reviewer's Skills tab → reload |
 | `09-conventions` | sidebar → Conventions → reject one, accept two → reload → Create skill → `/skills` lists `repo-conventions` |
 | `10-pr-intent` | PR #482 → the Intent card renders from the seeded `pr_intent` row on Overview and again on Agent runs (no model call) |
+| `11-pr-smart-diff` | PR #482 → Files changed tab grouped by role: the five group hints, the seeded finding and its `blocker` tag under `src/config.ts`, the Boilerplate group opening onto `package-lock.json`, then Original order (`?order=original`, shows `README.md`) and back to Smart order (no model call, nothing pressed that changes data). The section label is uppercased by CSS, so that one step uses `wait --fn` on the lowercased page text |
