@@ -1,6 +1,6 @@
 # L04 — Blast Radius (`devdigest-mcp`)
 
-**Status:** draft · **Cross-package spec:** [`../../specs/L04-blast-radius.md`](../../specs/L04-blast-radius.md)
+**Status:** implemented · **Cross-package spec:** [`../../specs/L04-blast-radius.md`](../../specs/L04-blast-radius.md)
 
 The MCP part of Blast Radius: `get_blast_radius` stops being a stub. It resolves the pull
 request, reads `GET /pulls/:id/blast` and returns that map in a compact form. It computes

@@ -16,6 +16,7 @@ the model is actually sent is in its "Review context" section; neither is repeat
 |---|---|---|
 | Built at construction | `config` `db` `secrets` `auth` `jobs` `runBus` | `runBus` is the process-wide singleton from `src/platform/sse.ts` |
 | Lazy getters | `git` `agentsRepo` `reviewRepo` `intent` `codeIndex` `repoIntel` `depgraph` `tokenizer` `priceBook` | created on first use, then reused |
+| Plain getter | `repoIntelLimits` | returns `{ callersPerSymbol }`, the facade's `MAX_CALLERS_PER_SYMBOL`; nothing is created |
 | Async, need a secret | `github()` · `llm(provider)` · `embedder()` | cached after the first call; a missing key throws `ConfigError` **at resolve time**, which is why the server boots with no keys at all |
 
 - `llm('openrouter')` is `reviewer-core`'s `OpenRouterProvider`, with the container's `priceBook`
@@ -24,6 +25,10 @@ the model is actually sent is in its "Review context" section; neither is repeat
   dependencies — an `IntentRepository`, the lazy `github()` and `llm(provider)` resolvers, and
   `tokenizer` — rather than inside its module. The `reviews` run needs it too, and a module
   never imports another module, so the container is where the two meet.
+- `repoIntelLimits` exists so the `blast` module can state the facade's per-symbol caller cap in its
+  response (`caller_limit`) without importing `modules/repo-intel/constants.ts`. The container is the
+  composition root and already imports that module; the `blast` module reaches the number through
+  this getter and the facade through `repoIntel`, both from its `routes.ts`.
 - `embedder()` is gated by config: when embeddings are disabled it throws before creating a
   client, so the app makes no OpenAI requests.
 - After a key changes in Settings, `invalidateSecretCaches()` drops the cached LLM, GitHub and
@@ -180,6 +185,7 @@ Consequences worth knowing when changing the engine:
 | `reviews` | `agent_runs` · `run_traces` · `reviews` · `findings` · `pull_requests` (review freshness only) |
 | `intent` | `pr_intent` (reads `pull_requests` · `repos` · `pr_files` and the `feature_models` key of `settings`) |
 | `smart-diff` | nothing — read-only (reads `pull_requests` · `pr_files` · `reviews` · `findings`; no GitHub, no model call) |
+| `blast` | nothing — read-only (reads `pull_requests` · `pr_files` itself, and the index tables through one `getBlastRadius` and one `getIndexState` call on the `repo-intel` facade; no GitHub, no model call) |
 | `pulls` | `pull_requests` · `pr_files` · `pr_commits` (GitHub import and backfill) |
 | `polling` | `pull_requests` · `repos` |
 | `repos` | `repos` |
@@ -201,3 +207,10 @@ Three read models sit on top:
   the files of each group by path. The route is in [`../README.md`](../README.md) → "API map"; the
   classifier is explained in
   [`../src/modules/_shared/file-role/README.md`](../src/modules/_shared/file-role/README.md).
+- **Per PR blast map**, `GET /pulls/:id/blast` reads the PR's stored file paths and asks the
+  `repo-intel` facade for the callers of the symbols declared in them, then groups, orders and counts
+  the answer on read. It never touches the clone, GitHub or a model, and it stays read-only even when
+  the index is stale or missing: the answer carries a `degraded` mark and a `reason` instead. Resyncing
+  the index is a separate call (`POST /repos/:id/resync`). The route, the mark's resolution order and the
+  contract are in [`../README.md`](../README.md) → "API map"; the facade's side is in
+  [`../src/modules/repo-intel/README.md`](../src/modules/repo-intel/README.md).

@@ -9,7 +9,7 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | Spec | Scope | Status |
 |---|---|---|
 | [`L04-devdigest-mcp.md`](L04-devdigest-mcp.md) | the `devdigest-mcp` stdio server — five tools, the API port, the launcher | implemented |
-| [`L04-blast-radius.md`](L04-blast-radius.md) | `get_blast_radius` — the working tool, the ninth API route, the compact view | draft |
+| [`L04-blast-radius.md`](L04-blast-radius.md) | `get_blast_radius` — the working tool, the ninth API route, the compact view | implemented |
 
 The cross-package specs are [`../../specs/L04-devdigest-mcp.md`](../../specs/L04-devdigest-mcp.md) and
 [`../../specs/L04-blast-radius.md`](../../specs/L04-blast-radius.md).

@@ -33,7 +33,7 @@ flowchart TD
   SETTINGS["/settings/:section<br/>API keys · models"]
 
   PULLS -->|"GET /repos/:id/pulls · /repos/:id/index-state"| API
-  PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments · /pulls/:id/intent · /pulls/:id/smart-diff<br/>POST /pulls/:id/review · /pulls/:id/intent · /findings/:id/(accept|dismiss)"| API
+  PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments · /pulls/:id/intent · /pulls/:id/smart-diff · /pulls/:id/blast<br/>POST /pulls/:id/review · /pulls/:id/intent · /repos/:id/resync · /findings/:id/(accept|dismiss)"| API
   AGENTS -->|"/agents · /agents/:id · /agents/:id/skills"| API
   SKILLS -->|"/skills · /skills/:id/versions · /skills/import/(file|url)"| API
   CONV -->|"/repos/:id/conventions · /extract · /skill-draft · /skill<br/>PATCH /conventions/:id"| API
@@ -51,6 +51,30 @@ The PR page (`/repos/:repoId/pulls/:number`) also shows the PR's derived intent 
 - **`FindingCard`** shows an *Outside PR scope* badge on a finding the reviewer tagged
   `out_of_scope` (with the filter on, only a serious one survives).
 - **The run trace drawer** adds a badge with the number of out-of-scope findings filtered.
+
+The **Overview** tab also shows the **Blast radius** block (L04, `BlastRadiusCard`), above the
+description, for what the PR's changes can reach. It renders one answer of `GET /pulls/:id/blast`
+without regrouping or recounting it:
+
+- **Summary row.** Four numbers — changed symbols, callers, endpoints, cron jobs — taken from the
+  response's `totals`.
+- **Tree view** (default). One group per changed symbol that has callers, in the server's order: its
+  callers as `file:line` (a link to that line on GitHub at the indexed commit, falling back to the PR's
+  head, opening in a new tab; plain text when the repository name is unknown) with the calling symbol
+  beside it, then the endpoints as chips, and the cron jobs as chips in a separate list. A group at the
+  server's per-symbol caller limit shows `+` after its count. A closing line counts the changed symbols
+  that have no callers.
+- **Graph view.** `?blast=graph` (see [`docs/ui-architecture.md`](docs/ui-architecture.md) → "URL
+  state") draws the same data as an inline SVG in three columns: changed symbols, callers, endpoints and
+  crons. An edge joins a caller to each changed symbol it reaches and a changed symbol to each of its
+  endpoints and crons; no edge joins a caller to an endpoint, because the response attributes endpoints to
+  the symbol's group, not to a caller. It scrolls sideways inside the block.
+- **States.** Loading skeleton; a load failure with *Try again*; no stored files for the PR (only the
+  note); no symbols declared in the changed files; symbols without callers.
+- **Incomplete maps.** A response with `degraded: true` shows a note with the sentence of its
+  `reason`, and the map stays under it. For `index_partial`, `index_failed` and `no_data` the note also
+  holds a **Resync index** button: it starts `POST /repos/:id/resync`, waits for the index row to change
+  and reads the map again ([`docs/data-flow.md`](docs/data-flow.md)).
 
 The **Files changed** tab (`?tab=diff`, `DiffTab`) is the Smart Diff view (L03):
 

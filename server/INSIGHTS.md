@@ -82,6 +82,9 @@ Traps we have already hit in the server. Append-only. See the root
   (`src/modules/repo-intel/service.ts:386`), so `getBlastRadius` returns at most 20 callers for the
   whole PR. The ripgrep fallback path has no cap at all. `specs/L04-blast-radius.md` (Q2) changes
   it to a cap per `viaSymbol`; until that lands, a count of callers per symbol is not reliable.
+  **Superseded 2026-10-11:** the cap is now per `viaSymbol` (`cappedCallers` in `tryPersistentBlast`,
+  `src/modules/repo-intel/service.ts`), pinned by `test/repo-intel-blast-cap.it.test.ts`. The
+  fallback path still has no cap.
 - **2026-10-11** — `getBlastRadius` cannot tell a consumer that the index is incomplete.
   `tryPersistentBlast` accepts `status` `full` and `partial` alike
   (`src/modules/repo-intel/service.ts:320`) and answers `degraded: false` for both; the only reason
@@ -90,6 +93,18 @@ Traps we have already hit in the server. Append-only. See the root
   `flag_off` exist in `DegradedReason` but no path of this method returns them. A feature that
   must show "index incomplete" reads `getIndexState` as well and derives the reason itself. Also
   `BFS_DEPTH` is not read by `getBlastRadius`: its callers are direct references only.
+
+- **2026-10-11** — a module that needs another module's types or constants declares its own
+  structural port instead of importing them: `dep-no-cross-module` rejects even `import type`
+  across `modules/*`. `blast` types the facade as `BlastSource` (`src/modules/blast/ports.ts`) and
+  `routes.ts` assigns `container.repoIntel` to it, which is the compile-time tie; the caller limit
+  arrives through `container.repoIntelLimits` (`src/platform/container.ts`), not an import of
+  `repo-intel/constants`.
+- **2026-10-11** — a count that readers could derive from two arrays of a response belongs in the
+  response. `symbols_without_callers` was first computed as `changed_symbols.length -
+  downstream.length` in the client and in `mcp`, which miscounts when two same-named changed
+  symbols share one group; it is now `totals.symbols_without_callers`, counted by name in
+  `toBlastRadius` (`src/modules/blast/domain.ts`). **See also:** `../mcp/INSIGHTS.md`.
 
 ## Tool & Library Notes
 
@@ -247,6 +262,20 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
 **Evidence:** the two line pairs above; `Tests 1 failed | 198 passed (199)` in a plain `pnpm test`, `Tests 3 passed (3)` for the file alone.
 **See also 2026-10-05:** the poll now lives in `waitForRunTrace` (`test/helpers/runs.ts`); the local `readTrace` named above was removed.
 
+### `.it` files skip with `Expected Reaper to map exposed port 8080` or a 120 s `beforeAll` timeout, and `docker ps` shows many `pgvector` containers
+**Date:** 2026-10-11
+**Cause:** two vitest runs that use Testcontainers overlapped (an agent started a second command
+while `pnpm test` was still running). The containers of the interrupted run are not reaped, and
+each later full run slows down further; the full `pnpm test` then reports the integration files
+as skipped, which looks like a pass at a glance.
+**Fix / rule:** never start a second test command, in any package, while a server run is in
+flight. When it has happened, run the integration lane alone and serially,
+`pnpm exec vitest run .it.test --no-file-parallelism`, and read the summary for `skipped`. The
+orphan containers (random names, image `pgvector/pgvector:pg16`, not `devdigest-postgres`) have
+to be removed by the user.
+**Evidence:** `test/helpers/` Testcontainers start-up used by every `*.it.test.ts`; in this
+session the serial lane gave `Test Files 19 passed (19)` right after a full run that skipped 19.
+
 ## Open Questions
 
 - **2026-09-26** — can a cancelled **single-pass** run come back as `done`? `cancelRun`
@@ -298,3 +327,4 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
 - **2026-10-07** — L03 Smart Diff: the `file-role` classifier, the read-only `smart-diff` module, nine seeded files for PR #482; entries above. Plan: `specs/L03-smart-diff-plan.md` (revision 2).
 - **2026-10-10** — L04 `devdigest-mcp`: no file under `src/` changed; one integration test and its helper added, not yet executed (Open Questions). The package's own findings are in `../mcp/INSIGHTS.md`.
 - **2026-10-11** — L04 Blast Radius specified, no code yet (`specs/L04-blast-radius.md`, `server/specs/`, `client/specs/`, `mcp/specs/`); the facade's real caller cap and degraded behaviour recorded above.
+- **2026-10-11** — L04 Blast Radius built: the `blast` module and `GET /pulls/:id/blast`, the per-symbol cap, seeded index rows for PR #482; entries above. Plan: `specs/L04-blast-radius-plan.md` (revision 2).

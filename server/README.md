@@ -7,7 +7,7 @@ Adapters (LLM, GitHub, git, ast-grep, …) sit behind a DI container so they can
 swapped for mocks in tests.
 
 > This is the **starter** module set. Later course lessons add their own modules
-> (skills, blast, brief/context/onboarding, eval/ci/hooks,
+> (skills, brief/context/onboarding, eval/ci/hooks,
 > memory, plugins, …) — each is a self-contained `modules/<name>/` plugin plus,
 > usually, a slot it starts feeding the reviewer prompt. The DB schema already
 > contains **every** table; the unused ones simply sit empty until a lesson fills
@@ -76,6 +76,7 @@ flowchart TB
     reviews["reviews<br/>/pulls/:id/review · /reviews · /findings/:id/(accept|dismiss)<br/>/runs/:id/(events|trace)"]
     intent["intent<br/>/pulls/:id/intent (GET read · POST re-derive)"]
     smartDiff["smart-diff<br/>/pulls/:id/smart-diff (GET, read-only)"]
+    blast["blast<br/>/pulls/:id/blast (GET, read-only)"]
   end
   subgraph Agents["Agents & skills (Skills Lab)"]
     agents["agents<br/>/agents · /agents/:id · /agents/:id/skills (link + order)"]
@@ -113,6 +114,45 @@ nor a model, so it answers for a PR that has never been reviewed. The role of a 
 *Counted* findings are those of the newest review of each agent (reviews with no `agent_id` count as one
 agent) that are not dismissed; an accepted finding still counts. A finding whose `file` is not one of
 the PR's files is ignored. The rules are in [`src/modules/smart-diff/domain.ts`](src/modules/smart-diff/domain.ts).
+
+**Blast route** ([`src/modules/blast/routes.ts`](src/modules/blast/routes.ts)). The module maps the
+symbols declared in a PR's changed files to their callers, and to the HTTP endpoints and cron jobs in
+the calling files, for the **Blast radius** block on the PR's Overview tab and for the `get_blast_radius`
+tool of [`devdigest-mcp`](../mcp/README.md). It reads the stored `pull_requests` and `pr_files` rows and
+the ready `repo-intel` index, and writes nothing; it calls neither GitHub nor a model. One request makes one
+`getBlastRadius` and one `getIndexState` call on the `repo-intel` facade, in parallel; a PR with no stored
+files skips `getBlastRadius`. The module never imports `repo-intel`: it declares the facade shapes it reads
+as its own types ([`domain.ts`](src/modules/blast/domain.ts), [`ports.ts`](src/modules/blast/ports.ts)), and
+`routes.ts` assigns `container.repoIntel` to its `BlastSource` port, so a new facade reason or index status
+fails `pnpm typecheck`. Grouping, ordering, totals and the degraded mark are the pure mapper
+`toBlastRadius` in `domain.ts`.
+
+| Route | Behaviour |
+|---|---|
+| `GET /pulls/:id/blast` | Answers a `BlastRadiusResponse`, which also parses as `BlastRadius`. `changed_symbols` lists the symbols declared in the PR's files. `downstream` holds one entry per changed symbol that has callers (symbol, `callers` as `name`/`file`/`line`, `endpoints_affected`, `crons_affected`); a symbol without callers stays in `changed_symbols` only. A caller in the file that declares the symbol is dropped, and so is a second caller on the same file and line. Callers are ordered by rank (descending), then file, then line; groups by their highest caller rank, then symbol name (code-unit order). A group's endpoints and crons are the sorted, distinct union of the index's facts for its caller files. `totals` holds `symbols`, `callers` (the rows listed), `endpoints` and `crons` (distinct across all groups) and `symbols_without_callers` (changed symbols whose name has no group); `summary` is a sentence built from them. `indexed_sha` is the commit the line numbers refer to, `null` when the index row has none. `caller_limit` is the facade's per-symbol cap, read from `container.repoIntelLimits`. `degraded` and `reason` are a mark, not an error: the route answers `200` with whatever map exists. `404` code `not_found` for an unknown PR or one of another workspace; `422` for an id that is not a uuid |
+
+The mark is the first row of this table that matches. The index status comes before the facade's own
+flag because, on a failed index, the facade falls back to the clone and answers `no_data`, which would
+hide the real reason.
+
+| # | Condition | `degraded` | `reason` |
+|---|---|---|---|
+| 1 | the PR has no stored files (never opened in the studio: `GET /pulls/:id` writes `pr_files`) | `true` | `pr_files_missing` |
+| 2 | `REPO_INTEL_ENABLED` is off | `true` | `flag_off` |
+| 3 | the index status is `degraded` or `failed` | `true` | the index state's reason, else `index_failed` |
+| 4 | the facade answered `degraded: true` | `true` | the facade's reason, else `no_data` |
+| 5 | the index status is `partial` | `true` | `index_partial` |
+| 6 | otherwise | `false` | `null` |
+
+A repository with no `repo_index_state` row has a synthesised state of status `degraded` and reason
+`no_data`, so it matches row 3. With the real facade row 4 is a safety net: it answers `degraded: true`
+only when the flag is off, when no paths are given or when the index row is missing or neither `full` nor
+`partial`, and rows 1 to 3 catch each of those first.
+
+Each request writes one `info` line, `blast: served from the repo-intel index`, with ids and counts only
+(no path and no symbol name). The demo repository's seed carries a full index for PR #482, so the route
+answers a complete map there with no clone on disk; the rows are listed in
+[`../e2e/specs/seed-fixtures.md`](../e2e/specs/seed-fixtures.md).
 
 ## Environment
 

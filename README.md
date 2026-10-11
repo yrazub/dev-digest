@@ -163,8 +163,9 @@ API. It is a separate package with its own launch command and does not start wit
   or `npx`: stdout carries only protocol messages. The same command is the `devdigest-mcp` entry
   of the repo's [`.mcp.json`](.mcp.json).
 - **Tools:** `list_agents` · `run_agent_on_pr` (starts a paid review and returns the verdict and
-  findings) · `get_findings` · `get_conventions` · `get_blast_radius` (a stub: it always returns an
-  error and calls nothing).
+  findings) · `get_findings` · `get_conventions` · `get_blast_radius` (the impact map of a PR: its
+  changed symbols, their callers and the endpoints and cron jobs in them, read from the API's
+  `GET /pulls/:id/blast`).
 - **Environment:** `DEVDIGEST_API_URL` (default `http://127.0.0.1:3001`) and
   `DEVDIGEST_MCP_WAIT_SECONDS` (1–600, default `120`; how long `run_agent_on_pr` waits).
 - **Check it with MCP Inspector:**

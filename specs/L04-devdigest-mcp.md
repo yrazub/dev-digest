@@ -56,7 +56,7 @@ and never opens the database (D2).
 | `run_agent_on_pr` | Runs one agent on a PR, waits (120 s by default), returns the verdict and findings; the only write tool | `readOnlyHint: false`, `destructiveHint: false`, `openWorldHint: true` |
 | `get_findings` | Returns the verdict and findings of a finished review: the latest, or the run given by `run_id`. Never starts a review | `readOnlyHint: true` |
 | `get_conventions` | Returns the accepted coding conventions of a repository (`pending` on request) | `readOnlyHint: true` |
-| `get_blast_radius` | Stub: always `isError: true` ("not implemented"), calls nothing | `readOnlyHint: true` |
+| `get_blast_radius` | Was a stub when this lesson shipped; now the working impact-map tool over `GET /pulls/:id/blast` — see [`L04-blast-radius.md`](L04-blast-radius.md) | `readOnlyHint: true` |
 
 Arguments are flat: `repo` is `owner/name`, `pr` is the PR number, `agent` is an agent id or its
 exact unique name, `run_id` is a run id. `list_prs` and `list_repos` are deliberately not

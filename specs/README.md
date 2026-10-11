@@ -24,8 +24,8 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | [`L03-smart-diff-plan.md`](L03-smart-diff-plan.md) | done |
 | [`L04-devdigest-mcp.md`](L04-devdigest-mcp.md) | implemented |
 | [`L04-devdigest-mcp-plan.md`](L04-devdigest-mcp-plan.md) | approved |
-| [`L04-blast-radius.md`](L04-blast-radius.md) | draft |
-| [`L04-blast-radius-plan.md`](L04-blast-radius-plan.md) | approved |
+| [`L04-blast-radius.md`](L04-blast-radius.md) | implemented |
+| [`L04-blast-radius-plan.md`](L04-blast-radius-plan.md) | done |
 
 The lesson roadmap (L01–L08) is in the root [`README.md`](../README.md).
 When you add a spec, add a row above.
