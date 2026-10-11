@@ -108,10 +108,16 @@ jobs:
           curl -fsS http://localhost:3000 >/dev/null 2>&1 || { echo "::error::web never became reachable"; cat "$RUNNER_TEMP/web.log"; exit 1; }
 
       # --- agent-browser CLI (Rust + CDP) + Chrome for Testing ---
+      # Pinned: an unpinned install takes whatever npm serves that day, and the flows
+      # depend on the CLI's `find` behaviour. The runner is pointed at this exact
+      # binary so another `agent-browser` on PATH cannot be picked up instead.
       - name: Install agent-browser
         run: |
-          npm i -g agent-browser
+          npm i -g agent-browser@0.39.0
           agent-browser install --with-deps
+          echo "AGENT_BROWSER_BIN=$(npm prefix -g)/bin/agent-browser" >> "$GITHUB_ENV"
+          echo "on PATH:"; which -a agent-browser
+          "$(npm prefix -g)/bin/agent-browser" --version
 
       - name: Run e2e flows
         working-directory: e2e
