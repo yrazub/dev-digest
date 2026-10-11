@@ -77,6 +77,20 @@ Traps we have already hit in the server. Append-only. See the root
 - **2026-10-10** — `tsconfig.json` includes `src/**` only (`:28`), so `pnpm typecheck` never checks `test/**`; a type error in a test file or helper shows up only when vitest runs it.
 
 
+- **2026-10-11** — `MAX_CALLERS_PER_SYMBOL` is not applied per symbol: `tryPersistentBlast` ends with
+  `callers.slice(0, MAX_CALLERS_PER_SYMBOL)` on the flat, rank-sorted list
+  (`src/modules/repo-intel/service.ts:386`), so `getBlastRadius` returns at most 20 callers for the
+  whole PR. The ripgrep fallback path has no cap at all. `specs/L04-blast-radius.md` (Q2) changes
+  it to a cap per `viaSymbol`; until that lands, a count of callers per symbol is not reliable.
+- **2026-10-11** — `getBlastRadius` cannot tell a consumer that the index is incomplete.
+  `tryPersistentBlast` accepts `status` `full` and `partial` alike
+  (`src/modules/repo-intel/service.ts:320`) and answers `degraded: false` for both; the only reason
+  the method ever emits is `no_data`, from the fallback path (`service.ts:233`, `:302`), which also
+  runs when `REPO_INTEL_ENABLED` is off. `index_partial`, `index_failed`, `repo_too_large` and
+  `flag_off` exist in `DegradedReason` but no path of this method returns them. A feature that
+  must show "index incomplete" reads `getIndexState` as well and derives the reason itself. Also
+  `BFS_DEPTH` is not read by `getBlastRadius`: its callers are direct references only.
+
 ## Tool & Library Notes
 
 - **2026-09-27** — dependency-cruiser's `--ignore-known` takes an **optional** file argument, so
@@ -283,3 +297,4 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
 - **2026-10-06** — L03 Smart Diff specified, no code yet (`specs/L03-smart-diff.md`, `server/specs/`, `client/specs/`); `pr_files` ordering and fill-time recorded above.
 - **2026-10-07** — L03 Smart Diff: the `file-role` classifier, the read-only `smart-diff` module, nine seeded files for PR #482; entries above. Plan: `specs/L03-smart-diff-plan.md` (revision 2).
 - **2026-10-10** — L04 `devdigest-mcp`: no file under `src/` changed; one integration test and its helper added, not yet executed (Open Questions). The package's own findings are in `../mcp/INSIGHTS.md`.
+- **2026-10-11** — L04 Blast Radius specified, no code yet (`specs/L04-blast-radius.md`, `server/specs/`, `client/specs/`, `mcp/specs/`); the facade's real caller cap and degraded behaviour recorded above.
