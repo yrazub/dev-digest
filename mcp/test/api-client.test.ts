@@ -140,6 +140,27 @@ const conventionsBody = {
   ],
 };
 
+const blastBody = {
+  changed_symbols: [
+    { name: 'rateLimit', file: 'src/middleware/ratelimit.ts', kind: 'function' },
+    { name: 'unused', file: 'src/util.ts', kind: 'function' },
+  ],
+  downstream: [
+    {
+      symbol: 'rateLimit',
+      callers: [{ name: 'publicRouter', file: 'src/api/public/index.ts', line: 23 }],
+      endpoints_affected: ['GET /api/public/items'],
+      crons_affected: [],
+    },
+  ],
+  summary: '2 changed symbols, 1 caller, 1 endpoint, 0 cron jobs.',
+  totals: { symbols: 2, callers: 1, endpoints: 1, crons: 0 },
+  degraded: false,
+  reason: null,
+  indexed_sha: 'abc123',
+  caller_limit: 20,
+};
+
 const startedBody = {
   pr_id: 'pr-1',
   runs: [{ run_id: 'run-9', agent_id: 'agent-1', agent_name: 'Security reviewer' }],
@@ -228,6 +249,13 @@ describe('the request methods', () => {
       route: API_ROUTES.getConventions,
       path: '/repos/repo-1/conventions',
       body: conventionsBody,
+    },
+    {
+      name: 'getBlastRadius',
+      call: (a) => a.getBlastRadius('pr-1'),
+      route: API_ROUTES.getBlastRadius,
+      path: '/pulls/pr-1/blast',
+      body: blastBody,
     },
     {
       name: 'startReview',
@@ -330,6 +358,26 @@ describe('the request methods', () => {
     });
   });
 
+  it('getBlastRadius returns the whole map the route answers', async () => {
+    const { api } = clientWith(() => json(blastBody));
+
+    expect(await api.getBlastRadius('pr-1')).toEqual(blastBody);
+  });
+
+  it.each([
+    ['a missing totals', { ...blastBody, totals: undefined }],
+    ['a downstream that is not a list', { ...blastBody, downstream: 'none' }],
+    ['a reason the contract does not know', { ...blastBody, degraded: true, reason: 'because' }],
+    ['a caller without a line', { ...blastBody, downstream: [{ ...blastBody.downstream[0], callers: [{ name: 'a', file: 'b' }] }] }],
+  ])('getBlastRadius rejects %s with invalid_response naming the route', async (_label, body) => {
+    const { api } = clientWith(() => json(body));
+
+    const err = await failure(api.getBlastRadius('pr-1'));
+
+    expect(err.kind).toBe('invalid_response');
+    expect(err.route).toBe('GET /pulls/:id/blast');
+  });
+
   it('percent-encodes an id that contains a slash or a space in the path', async () => {
     const { api, seen } = clientWith(() => json([pullBody]));
 
@@ -346,6 +394,7 @@ describe('an id that cannot be put in a path (F1)', () => {
     { name: 'listRuns', route: API_ROUTES.listRuns, call: (a, id) => a.listRuns(id) },
     { name: 'listReviews', route: API_ROUTES.listReviews, call: (a, id) => a.listReviews(id) },
     { name: 'getConventions', route: API_ROUTES.getConventions, call: (a, id) => a.getConventions(id) },
+    { name: 'getBlastRadius', route: API_ROUTES.getBlastRadius, call: (a, id) => a.getBlastRadius(id) },
     { name: 'startReview', route: API_ROUTES.startReview, call: (a, id) => a.startReview(id, 'agent-1') },
   ];
   const badIds: Array<[string, string]> = [
@@ -629,9 +678,10 @@ describe('waitForRun', () => {
   });
 });
 
-describe('permissions (L3): the process can send only the eight requests of API_ROUTES', () => {
-  it('API_ROUTES has exactly eight entries, one per method of the port', () => {
+describe('permissions (L3): the process can send only the nine requests of API_ROUTES', () => {
+  it('API_ROUTES has exactly nine entries, one per method of the port', () => {
     const port: Array<keyof DevDigestApi> = [
+      'getBlastRadius',
       'getConventions',
       'listAgents',
       'listPulls',
@@ -650,14 +700,15 @@ describe('permissions (L3): the process can send only the eight requests of API_
 
     expect(routes.filter((r) => r.startsWith('POST'))).toEqual(['POST /pulls/:id/review']);
     expect(routes.filter((r) => /^(DELETE|PUT|PATCH)\b/.test(r))).toEqual([]);
-    expect(routes.filter((r) => r.startsWith('GET'))).toHaveLength(7);
+    expect(routes.filter((r) => r.startsWith('GET'))).toHaveLength(8);
   });
 
-  it('after calling all eight methods, fetch saw only those eight method-and-path pairs', async () => {
+  it('after calling all nine methods, fetch saw only those nine method-and-path pairs', async () => {
     const { api, seen } = clientWith((s) => {
       if (s.url.endsWith('/events')) return sse(chunkedBody('', 1));
       if (s.method === 'POST') return json(startedBody);
       if (s.url.endsWith('/conventions')) return json(conventionsBody);
+      if (s.url.endsWith('/blast')) return json(blastBody);
       return json([]);
     });
 
@@ -667,6 +718,7 @@ describe('permissions (L3): the process can send only the eight requests of API_
     await api.listRuns('ID');
     await api.listReviews('ID');
     await api.getConventions('ID');
+    await api.getBlastRadius('ID');
     await api.startReview('ID', 'AGENT');
     await api.waitForRun('ID', { timeoutMs: 5000 });
 
@@ -677,7 +729,7 @@ describe('permissions (L3): the process can send only the eight requests of API_
     expect(seen.map((s) => `${s.method} ${s.url}`).sort()).toEqual(expected.sort());
   });
 
-  it("the methods on HttpDevDigestApi's prototype are exactly the eight port names", () => {
+  it("the methods on HttpDevDigestApi's prototype are exactly the nine port names", () => {
     const methods = Object.getOwnPropertyNames(HttpDevDigestApi.prototype).filter((n) => n !== 'constructor');
 
     expect(methods.sort()).toEqual(Object.keys(API_ROUTES).sort());

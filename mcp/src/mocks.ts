@@ -1,5 +1,6 @@
 import type {
   ApiAgent,
+  ApiBlastRadius,
   ApiConventionList,
   ApiPull,
   ApiRepo,
@@ -21,6 +22,8 @@ export interface MockDevDigestApiState {
   reviews: Record<string, ApiReview[]>;
   /** By repo id. */
   conventions: Record<string, ApiConventionList>;
+  /** By PR id. */
+  blast: Record<string, ApiBlastRadius>;
 }
 
 export interface MockDevDigestApiOptions {
@@ -40,6 +43,18 @@ export interface MockDevDigestApiOptions {
 const emptyConventions = (): ApiConventionList => ({
   scan: { last_scan_at: null, sampled_files: null },
   candidates: [],
+});
+
+// `caller_limit: 1`: no reader holds the server's number, so the mock does not invent one.
+const emptyBlast = (): ApiBlastRadius => ({
+  changed_symbols: [],
+  downstream: [],
+  summary: 'No symbols are declared in the changed files.',
+  totals: { symbols: 0, callers: 0, endpoints: 0, crons: 0 },
+  degraded: false,
+  reason: null,
+  indexed_sha: null,
+  caller_limit: 1,
 });
 
 /** An in-memory `DevDigestApi`: a missing state key reads as empty, and every call is recorded. */
@@ -87,6 +102,11 @@ export class MockDevDigestApi implements DevDigestApi {
   async getConventions(repoId: string): Promise<ApiConventionList> {
     this.record('getConventions', [repoId]);
     return this.state.conventions?.[repoId] ?? emptyConventions();
+  }
+
+  async getBlastRadius(prId: string): Promise<ApiBlastRadius> {
+    this.record('getBlastRadius', [prId]);
+    return this.state.blast?.[prId] ?? emptyBlast();
   }
 
   async startReview(prId: string, agentId: string): Promise<{ run_id: string }> {
