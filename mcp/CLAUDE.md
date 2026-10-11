@@ -7,6 +7,7 @@
 | If the task touches… | Read first |
 |---|---|
 | a tool's name, arguments, output or error text | `../specs/L04-devdigest-mcp.md`, then `specs/L04-devdigest-mcp.md` |
+| `get_blast_radius` — its view, caps or notes | `../specs/L04-blast-radius.md`, then `specs/L04-blast-radius.md` |
 | how the server is launched, its environment variables, a client or Inspector that cannot connect | `README.md` |
 | a route it calls or a response it parses | `specs/L04-devdigest-mcp.md`, then `../server/README.md` — API map |
 | a shared contract | `../server/src/vendor/shared` — never redeclare a shape here |
@@ -41,6 +42,7 @@ Note: npm, not pnpm. The lockfile here is `package-lock.json`.
 | `src/mocks.ts` | `MockDevDigestApi implements DevDigestApi` |
 | `src/resolve.ts` | `resolveRepo`, `resolvePull`, `resolveAgent`; the run-state failures shared by `get_findings` and `run_agent_on_pr` (`noReviewFailure`, `runNoReviewFailure`) |
 | `src/review-view.ts` | `toReviewView` (pure) |
+| `src/blast-view.ts` | `toBlastView` (pure) |
 | `src/tools/` | one `ToolDef` per tool |
 | `test/` | the hermetic suite |
 
@@ -48,7 +50,7 @@ The same layout, with the phase that added each file, is in `specs/L04-devdigest
 
 ## Conventions
 
-- **An HTTP client of the API and nothing else**, through the eight routes of `API_ROUTES`.
+- **An HTTP client of the API and nothing else**, through the nine routes of `API_ROUTES`.
   No database, no secret, no filesystem or subprocess import.
 - **stdout is the protocol.** Only `src/main.ts` touches `process.*`; everything else logs
   through `deps.log` (stderr). No `console.*`.
@@ -68,4 +70,3 @@ The same layout, with the phase that added each file, is in `specs/L04-devdigest
 - The API must be running (`./scripts/dev.sh`); the server calls it over HTTP.
 - The test against a real API is `../server/test/mcp-stdio.it.test.ts`, in the server's
   integration lane.
-- `get_blast_radius` is a stub: it returns an error and calls nothing.
