@@ -2,6 +2,8 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { RepoIntelState } from "@/lib/hooks/repo-intel";
 import type { BlastDegradedReason, BlastRadiusResponse } from "@devdigest/shared";
 import blast from "../../../../../../../../messages/en/blast.json";
 import brief from "../../../../../../../../messages/en/brief.json";
@@ -16,11 +18,39 @@ const query: {
 } = { data: undefined, isError: false, refetch: vi.fn() };
 const hookArgs = vi.fn();
 
-vi.mock("@/lib/hooks/blast", () => ({
+// `blastKeys` stays the real one: the Resync tests assert on the key the note invalidates.
+vi.mock("@/lib/hooks/blast", async () => ({
+  ...(await vi.importActual<typeof import("@/lib/hooks/blast")>("@/lib/hooks/blast")),
   useBlastRadius: (prId: string, headSha: string | null) => {
     hookArgs(prId, headSha);
     return query;
   },
+}));
+
+// The repo-intel hooks are mocked with stable objects too: the note's effects depend on the polled
+// query and on the mutation, so a fresh object per call would loop (client/INSIGHTS.md, "vitest
+// run hangs"). A polled answer is simulated by changing `indexState` and re-rendering.
+const OLD_STATE: RepoIntelState = {
+  status: "partial",
+  filesIndexed: 312,
+  filesSkipped: 0,
+  lastIndexedSha: "5bc45f6a6f741f21f7e7a430146a1999cf97ec45",
+  updatedAt: "2026-09-21T20:28:46.312Z",
+};
+const indexState: { data: RepoIntelState | undefined; dataUpdatedAt: number } = {
+  data: OLD_STATE,
+  dataUpdatedAt: 1000,
+};
+const pollArgs: boolean[] = [];
+const resyncMutate = vi.fn((_v: undefined, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+const resyncMutation = { mutate: resyncMutate, isPending: false };
+
+vi.mock("@/lib/hooks/repo-intel", () => ({
+  useRepoIntelStatus: (_repoId: string, poll: boolean) => {
+    pollArgs.push(poll);
+    return indexState;
+  },
+  useResyncRepoIntel: () => resyncMutation,
 }));
 
 // The card reads the view from the URL and writes it with `router.replace`. One stable router and
@@ -36,6 +66,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { BlastRadiusCard } from "./BlastRadiusCard";
+import { RESYNC_MAX_POLLS } from "./constants";
 
 const REPO = "acme/api";
 const HEAD = "headsha1";
@@ -85,7 +116,14 @@ function emptyTotals(symbols: number) {
   return { symbols, callers: 0, endpoints: 0, crons: 0 };
 }
 
+let queryClient: QueryClient;
+
 beforeEach(() => {
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  indexState.data = OLD_STATE;
+  indexState.dataUpdatedAt = 1000;
+  pollArgs.length = 0;
+  resyncMutate.mockClear();
   query.data = mapResponse();
   query.isError = false;
   query.refetch = vi.fn();
@@ -96,12 +134,18 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-function renderCard(repoFullName: string | null = REPO) {
-  return render(
-    <NextIntlClientProvider locale="en" messages={{ blast, brief }}>
-      <BlastRadiusCard prId="pr1" repoFullName={repoFullName} headSha={HEAD} />
-    </NextIntlClientProvider>,
+function card(repoFullName: string | null = REPO) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <NextIntlClientProvider locale="en" messages={{ blast, brief }}>
+        <BlastRadiusCard prId="pr1" repoId="r1" repoFullName={repoFullName} headSha={HEAD} />
+      </NextIntlClientProvider>
+    </QueryClientProvider>
   );
+}
+
+function renderCard(repoFullName: string | null = REPO) {
+  return render(card(repoFullName));
 }
 
 /** The summary stat whose text reads `<number> <label>` (the number is a separate element). */
@@ -535,5 +579,103 @@ describe("BlastRadiusCard — Tree / Graph switch and Graph view", () => {
 
     const mark = screen.getByRole("note", { name: "This map may be incomplete" });
     expect(mark.compareDocumentPosition(graph()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("BlastRadiusCard — Resync on the mark (C6)", () => {
+  const SETTLED_AT = "2026-09-21T20:31:02.100Z";
+
+  /** Renders a degraded answer and presses Resync, as a user does. */
+  async function pressResync(reason: BlastDegradedReason = "index_partial") {
+    const user = userEvent.setup();
+    query.data = mapResponse({ degraded: true, reason });
+    const view = renderCard();
+    await user.click(screen.getByRole("button", { name: "Resync index" }));
+    return view;
+  }
+
+  /** One polled answer of the index state: a new `dataUpdatedAt`, with the given row `updatedAt`. */
+  function answer(view: ReturnType<typeof renderCard>, updatedAt: string) {
+    indexState.data = { ...OLD_STATE, updatedAt };
+    indexState.dataUpdatedAt += 1;
+    view.rerender(card());
+  }
+
+  it.each<[BlastDegradedReason, boolean]>([
+    ["index_partial", true],
+    ["index_failed", true],
+    ["no_data", true],
+    ["flag_off", false],
+    ["repo_too_large", false],
+    ["pr_files_missing", false],
+  ])("for %s the Resync button is shown: %s", (reason, shown) => {
+    query.data = mapResponse({ degraded: true, reason });
+    renderCard();
+
+    const button = screen.queryByRole("button", { name: "Resync index" });
+    if (shown) expect(button).toBeInTheDocument();
+    else expect(button).not.toBeInTheDocument();
+  });
+
+  it("shows no Resync button when the answer is not degraded", () => {
+    renderCard();
+
+    expect(screen.queryByRole("button", { name: "Resync index" })).not.toBeInTheDocument();
+  });
+
+  it("calls the resync mutation once, starts polling and shows Resyncing… on a disabled button", async () => {
+    const user = userEvent.setup();
+    query.data = mapResponse({ degraded: true, reason: "no_data" });
+    renderCard();
+    expect(pollArgs.every((poll) => !poll)).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: "Resync index" }));
+
+    expect(resyncMutate).toHaveBeenCalledTimes(1);
+    expect(pollArgs.at(-1)).toBe(true);
+    const running = screen.getByRole("button", { name: "Resyncing…" });
+    expect(running).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Resync index" })).not.toBeInTheDocument();
+  });
+
+  it("keeps waiting while the index row is unchanged, then invalidates the PR's blast key once and stops polling", async () => {
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const view = await pressResync();
+
+    answer(view, OLD_STATE.updatedAt);
+    answer(view, OLD_STATE.updatedAt);
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(pollArgs.at(-1)).toBe(true);
+    expect(screen.getByRole("button", { name: "Resyncing…" })).toBeDisabled();
+
+    answer(view, SETTLED_AT);
+
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["blast", "pr1"] });
+    expect(pollArgs.at(-1)).toBe(false);
+    expect(screen.getByRole("button", { name: "Resync index" })).toBeEnabled();
+    expect(screen.queryByText("The index has not changed yet. Try again in a minute.")).not.toBeInTheDocument();
+
+    // a later render of the same answer does not invalidate again
+    view.rerender(card());
+    expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives up after RESYNC_MAX_POLLS unchanged answers: polling stops and the slow sentence is shown", async () => {
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const view = await pressResync("index_failed");
+    const slow = "The index has not changed yet. Try again in a minute.";
+
+    for (let i = 0; i < RESYNC_MAX_POLLS - 1; i += 1) answer(view, OLD_STATE.updatedAt);
+    expect(screen.queryByText(slow, { exact: false })).not.toBeInTheDocument();
+    expect(pollArgs.at(-1)).toBe(true);
+    expect(screen.getByRole("button", { name: "Resyncing…" })).toBeDisabled();
+
+    answer(view, OLD_STATE.updatedAt);
+
+    expect(screen.getByRole("note")).toHaveTextContent(slow);
+    expect(pollArgs.at(-1)).toBe(false);
+    expect(screen.getByRole("button", { name: "Resync index" })).toBeEnabled();
+    expect(invalidate).not.toHaveBeenCalled();
   });
 });

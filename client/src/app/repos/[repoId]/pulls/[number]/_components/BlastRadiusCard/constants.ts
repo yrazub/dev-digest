@@ -1,5 +1,5 @@
 import type { IconName } from "@devdigest/ui";
-import type { BlastTotals } from "@devdigest/shared";
+import type { BlastDegradedReason, BlastTotals } from "@devdigest/shared";
 
 /** Icon of the block's section label. */
 export const BLAST_ICON: IconName = "Workflow";
@@ -52,3 +52,13 @@ export const GRAPH_SIZES: GraphSizes = {
   padding: 16,
   labelMax: 26,
 };
+
+/** The degraded reasons a resync can fix; the others (flag off, too large, no changed files) it cannot. */
+export const RESYNC_FIXABLE_REASONS: ReadonlySet<BlastDegradedReason> = new Set<BlastDegradedReason>([
+  "index_partial",
+  "index_failed",
+  "no_data",
+]);
+
+/** Answered polls of the index state (one per 1.5 s) without a change before a resync wait gives up. */
+export const RESYNC_MAX_POLLS = 40;

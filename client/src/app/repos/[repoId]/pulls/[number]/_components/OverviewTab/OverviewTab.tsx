@@ -8,14 +8,15 @@ import { s } from "./styles";
 interface OverviewTabProps {
   prBody: string | null | undefined;
   prId: string | null;
+  repoId: string;
   repoFullName: string | null;
   headSha: string | null;
 }
 
-export function OverviewTab({ prBody, prId, repoFullName, headSha }: OverviewTabProps) {
+export function OverviewTab({ prBody, prId, repoId, repoFullName, headSha }: OverviewTabProps) {
   return (
     <>
-      {prId && <BlastRadiusCard prId={prId} repoFullName={repoFullName} headSha={headSha} />}
+      {prId && <BlastRadiusCard prId={prId} repoId={repoId} repoFullName={repoFullName} headSha={headSha} />}
       {prBody && (
         <section>
           <SectionLabel icon="MessageSquare">Description</SectionLabel>

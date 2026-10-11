@@ -104,6 +104,8 @@ export const s = {
   } satisfies CSSProperties,
   noteIcon: { flexShrink: 0, marginTop: 3 } satisfies CSSProperties,
   noteTitle: { fontWeight: 600 } satisfies CSSProperties,
+  /** The Resync button at the right end of the note. */
+  noteAction: { marginLeft: "auto", flexShrink: 0 } satisfies CSSProperties,
   /** Tree / Graph switch: two plain buttons at the right end of the summary row. */
   viewSwitch: {
     display: "inline-flex",

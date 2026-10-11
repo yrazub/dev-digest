@@ -26,11 +26,12 @@ import { SymbolGroup } from "./_components/SymbolGroup";
 
 interface BlastRadiusCardProps {
   prId: string;
+  repoId: string;
   repoFullName: string | null;
   headSha: string | null;
 }
 
-export function BlastRadiusCard({ prId, repoFullName, headSha }: BlastRadiusCardProps) {
+export function BlastRadiusCard({ prId, repoId, repoFullName, headSha }: BlastRadiusCardProps) {
   const t = useTranslations("blast");
   const tBrief = useTranslations("brief");
   const { data, isError, refetch } = useBlastRadius(prId, headSha);
@@ -92,7 +93,7 @@ export function BlastRadiusCard({ prId, repoFullName, headSha }: BlastRadiusCard
               </div>
             )}
 
-            {data.degraded && data.reason && <DegradedNote reason={data.reason} />}
+            {data.degraded && data.reason && <DegradedNote reason={data.reason} repoId={repoId} prId={prId} />}
 
             {mode === "noSymbols" && <p style={s.message}>{t("noSymbols")}</p>}
             {mode === "noCallers" && (

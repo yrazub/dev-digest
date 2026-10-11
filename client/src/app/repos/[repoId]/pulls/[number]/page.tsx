@@ -148,6 +148,7 @@ export default function PRDetailPage() {
           <OverviewTab
             prBody={pr.body}
             prId={prId}
+            repoId={repoId}
             repoFullName={repoFullName}
             headSha={pr.head_sha}
           />
