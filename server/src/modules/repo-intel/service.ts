@@ -371,6 +371,16 @@ export class RepoIntelService implements RepoIntel {
     }
     callers.sort((a, b) => b.rank - a.rank);
 
+    // Cap per changed symbol, not over the flat list: a hot symbol must not
+    // push the callers of its siblings out. Order stays rank-descending.
+    const perSymbol = new Map<string, number>();
+    const cappedCallers = callers.filter((c) => {
+      const n = perSymbol.get(c.viaSymbol) ?? 0;
+      if (n >= MAX_CALLERS_PER_SYMBOL) return false;
+      perSymbol.set(c.viaSymbol, n + 1);
+      return true;
+    });
+
     // Precomputed facts per caller file (endpoints + crons), so consumers can
     // attribute them to the changed symbol whose callers live in that file.
     const facts = await this.repo.getFileFacts(repoId, callerFiles);
@@ -383,7 +393,7 @@ export class RepoIntelService implements RepoIntel {
 
     return {
       changedSymbols,
-      callers: callers.slice(0, MAX_CALLERS_PER_SYMBOL),
+      callers: cappedCallers,
       impactedEndpoints: [...endpoints],
       factsByFile,
       degraded: false,
