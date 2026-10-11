@@ -67,8 +67,18 @@
     },
     "security": {
       "review": true,
-      "include": ["server/src/**/*.ts", "reviewer-core/src/**/*.ts", "client/src/**/*.{ts,tsx}"],
-      "exclude": ["**/*.test.{ts,tsx}", "**/test/**", "server/src/adapters/mocks.ts"],
+      "include": [
+        "server/src/**/*.ts",
+        "reviewer-core/src/**/*.ts",
+        "client/src/**/*.{ts,tsx}",
+        "mcp/src/**/*.ts"
+      ],
+      "exclude": [
+        "**/*.test.{ts,tsx}",
+        "**/test/**",
+        "server/src/adapters/mocks.ts",
+        "mcp/src/mocks.ts"
+      ],
       "can_block": true,
       "model": "opus",
       "critical_rules": [

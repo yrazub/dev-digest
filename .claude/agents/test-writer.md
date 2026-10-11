@@ -55,7 +55,7 @@ I have not started, because <one sentence: what behaviour is missing or ambiguou
 ## Step 2 — run the suites first
 
 Run the phase's `Verify (phase)` commands, one command at a time, with the package's own manager
-(`pnpm` in server and client, `npm` in reviewer-core and e2e). List every failing test and every
+(`pnpm` in server and client, `npm` in reviewer-core, e2e and mcp). List every failing test and every
 type error inside a test file. Compare the list with the implementer's table; a failure it did
 not list is handled by the same rule as the rest, in step 5.
 

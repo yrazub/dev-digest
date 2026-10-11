@@ -1,6 +1,6 @@
 # DevDigest
 
-Local-first AI pull-request review. Four standalone packages, **no monorepo
+Local-first AI pull-request review. Five standalone packages, **no monorepo
 workspace** — each has its own `package.json` and lockfile; cross-package code is
 shared through tsconfig path aliases, never published modules.
 
@@ -11,7 +11,7 @@ The table below is a routing map, not a substitute for reading the file.
 
 | If the task touches… | Read first |
 |---|---|
-| anything under `client/` `server/` `reviewer-core/` `e2e/` | that module's `CLAUDE.md`, then its `README.md` |
+| anything under `client/` `server/` `reviewer-core/` `e2e/` `mcp/` | that module's `CLAUDE.md`, then its `README.md` |
 | the end-to-end review flow, or "how does X reach Y" | `README.md` — architecture diagram |
 | any test, or deciding where a test belongs | `TESTING.md` |
 | a reviewer system prompt, or choosing a model | `docs/agent-prompts/README.md` |
@@ -40,8 +40,9 @@ Node ≥22 · TypeScript · Fastify 5 · Drizzle + Postgres/pgvector · Next.js 
 | everything up | `./scripts/dev.sh` — flags `--no-seed` `--no-client` `--db-only` |
 | server | `cd server && pnpm dev` (`:3001`) · `pnpm db:migrate` · `pnpm db:seed` |
 | client | `cd client && pnpm dev` (`:3000`) |
-| test one package | `cd <pkg> && pnpm test` (server, client) / `npm test` (reviewer-core, e2e) |
+| test one package | `cd <pkg> && pnpm test` (server, client) / `npm test` (reviewer-core, e2e, mcp) |
 | typecheck | same, `typecheck` |
+| MCP server | `cd mcp && npm ci` once, then `node mcp/bin/devdigest-mcp.mjs` — not part of `./scripts/dev.sh` |
 
 ## Map
 
@@ -51,6 +52,7 @@ Node ≥22 · TypeScript · Fastify 5 · Drizzle + Postgres/pgvector · Next.js 
 | `client/` | `@devdigest/web` | Next.js studio | pnpm |
 | `reviewer-core/` | `@devdigest/reviewer-core` | pure engine: diff → prompt → LLM → findings | npm |
 | `e2e/` | `@devdigest/e2e` | deterministic browser flows | npm |
+| `mcp/` | `@devdigest/mcp` | local `devdigest-mcp` MCP server (stdio), an HTTP client of the API | npm |
 | `server/src/vendor/shared` | `@devdigest/shared` | Zod contracts, one definition for every package | — |
 
 ## Conventions
@@ -58,7 +60,7 @@ Node ≥22 · TypeScript · Fastify 5 · Drizzle + Postgres/pgvector · Next.js 
 - Contracts are defined **once** in `@devdigest/shared` and reused as Fastify route
   schemas and as client types. Never redeclare a shape locally.
 - No workspace: install inside the package, never `pnpm -r`. `server`/`client` use
-  **pnpm**, `reviewer-core`/`e2e` use **npm** — match the lockfile that is there.
+  **pnpm**, `reviewer-core`/`e2e`/`mcp` use **npm** — match the lockfile that is there.
 - One test suite per package, one CI workflow per suite, path-filtered.
 - **Run `/pr-self-review` before opening a PR.** Do not open one while its verdict is blocked.
 
@@ -93,8 +95,9 @@ Cross-package rules; each module's `CLAUDE.md` adds its own file layout.
 - `server/src/db/migrations/**` including the journal — generate with `pnpm db:generate`,
   never hand-edit.
 - **Lock files**: `server/pnpm-lock.yaml` · `client/pnpm-lock.yaml` ·
-  `reviewer-core/package-lock.json` · `e2e/package-lock.json` · `skills-lock.json`. Never
-  hand-edit, delete-and-regenerate, or create one with the other package manager. They change
+  `reviewer-core/package-lock.json` · `e2e/package-lock.json` · `mcp/package-lock.json` ·
+  `skills-lock.json`. Never hand-edit, delete-and-regenerate, or create one with the other
+  package manager. They change
   only as a side effect of `pnpm add` / `npm install` run inside that package, and only when
   the task is a dependency change.
 

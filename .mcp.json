@@ -10,6 +10,10 @@
         "--screenshotMaxWidth=1400",
         "--usageStatistics=false"
       ]
+    },
+    "devdigest-mcp": {
+      "command": "node",
+      "args": ["mcp/bin/devdigest-mcp.mjs"]
     }
   }
 }

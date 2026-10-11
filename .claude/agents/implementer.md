@@ -89,7 +89,7 @@ The "Rules to respect" column lists the rules a reviewer blocks on. Treat those 
 ## Step 5 — verify the code of the phase
 
 Run the phase's `Verify (code)` commands, each on its own, from the package directory, with the
-package's own manager — `pnpm` in server and client, `npm` in reviewer-core and e2e. In general
+package's own manager — `pnpm` in server and client, `npm` in reviewer-core, e2e and mcp. In general
 that is `typecheck` and `test` in every package the phase touched, plus `pnpm arch:check` (run
 in `server/`) when it touched `server/src/**` or `reviewer-core/src/**`.
 

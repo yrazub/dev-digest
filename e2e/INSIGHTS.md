@@ -30,6 +30,17 @@ Traps we have already hit in the browser suite. Append-only. See the root
   pass was not tried; the test-writer chose `--fn` because the binary's text check reads
   `innerText`, which carries the transformed casing. Every other flow uses `--text` on text that
   no CSS transforms.
+- **2026-10-11** — `agent-browser find` does not wait: when nothing matches it exits non-zero in
+  about 50 ms (`✗ No element found by label '…'`, or `✗ N elements have role "link", but none match
+  name "…"`), and when several elements match it takes the first without an error
+  (`find role button click --name e` answered `✓ Done`). `runStep()` therefore retries a `find` step
+  for up to `E2E_FIND_WAIT`, only while `isNoMatch()` recognises one of those two wordings
+  (`run.ts:64`, `lib/assert.ts:60`); a new CLI wording would silently disable the retry.
+- **2026-10-11** — flows `08` and `09` write to the database, so a second `npm test` against the same
+  seeded stack fails at "the new skill's page opens" and "the three seeded candidates are listed".
+  `pnpm db:seed` does not reset anything, and after dropping and re-seeding the schema the running
+  API answered `GET /repos` with `[]` until it was restarted. Rerun on a fresh stack
+  (`../scripts/e2e.sh` starts an ephemeral Postgres each time).
 
 
 ## Recurring Errors & Fixes
@@ -90,9 +101,37 @@ an env var in `next.config`), which has not been done.
 separate dist dir. **See also:** `../client/INSIGHTS.md` — the same shared-`.next` clobbering by
 `next build`.
 
+### Flows `08`, `09` and `11` fail in CI with `Element not found` on elements the screenshot shows
+**Date:** 2026-10-11
+**Cause:** not established. The CI log said `✗ Element not found. Verify the selector is correct
+and the element exists in the DOM.` and `✗ Wait timed out after 30000ms`; neither string is in the
+0.38.2 or 0.39.0 binaries, which say `No element found by …` and time out after 25000 ms, so the
+runner was not executing the `agent-browser` the workflow had just installed with an unpinned
+`npm i -g agent-browser`. Which binary it was executing is unknown: the unpinned runs printed no
+version, and `which -a agent-browser` in the fixed run lists only the toolcache one. The failure
+did not reproduce locally with 0.39.0 and Chrome 155 on `next dev`, on a production build with
+no secrets, under a 6x CPU throttle, or with the linux-x64 binary in a container.
+**Fix / rule:** the workflow pins `agent-browser@0.39.0` and passes its absolute path as
+`AGENT_BROWSER_BIN`; with both in place `09` and `11` passed and the timeout read 25000 ms. Both
+changes landed in one commit, so which one mattered was not separated. The install step prints
+the version — read it first when the CI errors differ from the local wording.
+**Evidence:** `../.github/workflows/e2e-web.yml:116-120` (pin, `AGENT_BROWSER_BIN`, version print).
+
+### A flow's "persisted after reload" check fails: the reloaded page shows the old value
+**Date:** 2026-10-11
+**Cause:** the mutation is optimistic. `useSetAgentSkills` and the conventions patch hook update
+the cache in `onMutate`, so "3 of 7 enabled" is on screen before the request has reached the
+server; a `reload` sent right after the `wait --text` aborts it. In CI the reloaded Skills tab
+showed `2 of 7 enabled` with `e2e-rule` unchecked. It passed locally only because the request won.
+**Fix / rule:** before a `reload` that checks persistence, add `wait --load networkidle`. Text on
+screen proves the optimistic update, not the save.
+**Evidence:** `specs/08-skills.flow.json:25`, `specs/09-conventions.flow.json:16`;
+`../client/src/lib/hooks/agents.ts:129` and `../client/src/lib/hooks/conventions.ts:46` (`onMutate`).
+
 ## Session Notes
 
 - **2026-09-30** — added `08-skills` (create skill → link to agent → persists) and fixed the `04`/`05` click race.
 - **2026-10-01** — added `09-conventions` (reject/accept seeded candidates → reload → create skill) and three seeded convention candidates; fixed the `08` tab-click race.
 - **2026-10-02** — recorded the HW2 demo video with `agent-browser record` + `ffmpeg-static` and burned-in SRT subtitles; noted the ffmpeg, viewport and `fill ''` quirks.
 - **2026-10-07** — added `11-pr-smart-diff` (grouped Files changed tab on the nine seeded files); hermetic run 11/11 with the dev stack stopped first.
+- **2026-10-11** — fixed the PR #16 `e2e web` failure: pinned agent-browser and its path in the workflow, added the `find` retry and failure output to the runner, and made `08`/`09` wait for the save before reloading.

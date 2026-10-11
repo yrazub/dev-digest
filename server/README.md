@@ -189,5 +189,15 @@ hermetic:
   Docker is absent.
 - `pnpm test` runs both.
 
+The integration lane also drives the `devdigest-mcp` server
+([`../mcp/README.md`](../mcp/README.md)). `test/mcp-stdio.it.test.ts` starts the app on a free
+port over the seeded database, spawns the server exactly as the root `.mcp.json` says, and talks
+to it over stdio with the small JSON-RPC client in `test/helpers/mcp-stdio.ts` (no MCP SDK in
+this package). It covers the read tools against the seeded repo and PR, the unknown-repo and
+unknown-PR errors, a clean stdout, and `run_agent_on_pr` with a mock model and mock git. That
+test needs the MCP package's dependencies, which no main script installs: run `cd mcp && npm ci`
+first. A missing install **fails** the test with that command; it never skips for that reason
+(only a missing Docker skips it).
+
 A DB-backed test (one that imports `test/helpers/pg.ts`) **must** use the
 `*.it.test.ts` suffix so the split stays correct. See [`../TESTING.md`](../TESTING.md).

@@ -46,6 +46,7 @@ worse than a short one.
 | `client/**` | `client/INSIGHTS.md` |
 | `reviewer-core/**` | `reviewer-core/INSIGHTS.md` |
 | `e2e/**` | `e2e/INSIGHTS.md` |
+| `mcp/**` | `mcp/INSIGHTS.md` |
 | two or more packages, or none of them — git, CI, Docker, secrets, `scripts/`, the agent workflow itself | root `INSIGHTS.md` |
 | a skill under `.claude/skills/` — how it behaves, what it covers, where its guidance is wrong or out of date | root `INSIGHTS.md`, with a `**Skill:**` line |
 

@@ -73,6 +73,8 @@ Traps we have already hit in the server. Append-only. See the root
   whose `get` trap records the name of every function it hands out, and assert the list is empty
   after all requests. The mocks track calls unevenly (`posted`, `issueRequests`, …); the proxy
   also counts a method added to the port later (`new Proxy` in `test/smart-diff.it.test.ts:33`).
+- **2026-10-10** — `test/mcp-stdio.it.test.ts` drives the `devdigest-mcp` package over stdio with a JSON-RPC client written in the test helper, so the MCP SDK stays out of this package. Its write tests (`describe('run_agent_on_pr (the one write tool)'`, `:260`) must stay after the test that asserts the global `agent_runs` count is unchanged (`left the database as it found it`, `:253`); moving them earlier breaks it. **See also:** `../mcp/INSIGHTS.md`.
+- **2026-10-10** — `tsconfig.json` includes `src/**` only (`:28`), so `pnpm typecheck` never checks `test/**`; a type error in a test file or helper shows up only when vitest runs it.
 
 
 ## Tool & Library Notes
@@ -248,6 +250,9 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
 - **2026-10-05** — `extractReferences` is quadratic on runs of `[` and of `+` (`MARKDOWN_LINK_RE`, `BARE_PATH_RE` in `src/modules/intent/domain.ts:223-225`; the lookbehind of `BARE_PATH_RE` omits `+`, which its body class includes): about 1.6 s for a 65 000-character PR body, and the service passes the uncapped sanitised body (`src/modules/intent/service.ts:461`). Nothing hangs. Not fixed; either cap the text or add `+` to the lookbehind. `test/intent-domain.test.ts` bounds the hostile inputs at 10 s.
   **Superseded 2026-10-05:** fixed without changing detection. Six scans of author text in `src/modules/intent/domain.ts` are linear now (`HTML_COMMENT_RE`, `CLOSING_ISSUE_RE`, `blankMarkdownImages`, `takeMarkdownLinks` with the sticky `LINK_TAIL_RE`, `stripTrailingPunctuation`, the fallback alternative of `BARE_PATH_RE`); the lookbehind was left alone because adding `+` drops `docs/a.md` from `x:notes+docs/a.md`. A 262 144-character hostile body takes 1–12 ms, bounded at 1 000 ms in `test/intent-domain.test.ts`. The rewrite was checked by a differential run against the pre-change file: 117 782 comparisons, 0 mismatches.
 - **2026-10-05** — the casts that pre-date the intent work still stand: `row.trace as RunTrace` (`src/modules/reviews/repository/run.repo.ts:194`) and the `severity` / `category` / `kind` casts in `src/modules/_shared/finding-dto.ts`. They break the same `zod-parse-at-boundary` rule the intent repository now follows; converting them was kept out of the L03 change.
+- **2026-10-10** — `test/mcp-stdio.it.test.ts` (18 tests) has never executed: the Docker daemon was unresponsive for the whole L04 session, and the file skips through `dockerAvailable()` (`:30`) like the other integration files. Unverified against the real API: the five seeded agent names and their order, `line: 12` and the title of the Stripe finding for PR #482, the three seeded conventions and their evidence lines, that the grounding gate keeps exactly one of the fixture's two findings, that the run bus replays at least one event to a late SSE subscriber, and that an inserted PR stays visible after `GET /repos/:id/pulls` syncs against `MockGitHubClient({ pulls: [] })`. Settle it with `pnpm exec vitest run test/mcp-stdio.it.test.ts --no-file-parallelism` and read the summary for `skipped`.
+  **Resolved 2026-10-10:** after Docker was restarted the file ran and passed on its first execution — `✓ test/mcp-stdio.it.test.ts (18 tests)`; the whole integration lane: `Test Files 17 passed (17)` · `Tests 115 passed (115)`, nothing skipped. Every assertion listed above held.
+
 
 ## Session Notes
 
@@ -277,3 +282,4 @@ declarations, and in the `.set({…})` in `run.repo.ts`. The same double declara
 - **2026-10-05** — L03 intent module, review-run pre-step and scope filter wiring; review fixes (parse on read, port-level GitHub outcomes); root cause of the `reviews-skills.it` flake; `renderIntentBlock` `map` bug found by the phase 6 tests. Plan: `specs/L03-intent-layer-plan.md` (revision 3).
 - **2026-10-06** — L03 Smart Diff specified, no code yet (`specs/L03-smart-diff.md`, `server/specs/`, `client/specs/`); `pr_files` ordering and fill-time recorded above.
 - **2026-10-07** — L03 Smart Diff: the `file-role` classifier, the read-only `smart-diff` module, nine seeded files for PR #482; entries above. Plan: `specs/L03-smart-diff-plan.md` (revision 2).
+- **2026-10-10** — L04 `devdigest-mcp`: no file under `src/` changed; one integration test and its helper added, not yet executed (Open Questions). The package's own findings are in `../mcp/INSIGHTS.md`.

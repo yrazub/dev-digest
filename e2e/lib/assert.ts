@@ -43,6 +43,24 @@ export function stdoutContains(stdout: string, needle: string): boolean {
   return stdout.includes(needle);
 }
 
+/** What a failed agent-browser command printed (it explains a failure on stderr). */
+export function failureOutput(e: unknown): string {
+  const { stderr, stdout } = (e ?? {}) as { stderr?: unknown; stdout?: unknown };
+  return [stderr, stdout]
+    .map((out) => (typeof out === "string" ? out.trim() : ""))
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * Whether a failed `find` failed because no element matched yet, as opposed to the action
+ * failing on a matched element. The two wordings are agent-browser's own (0.38–0.39):
+ * `No element found …` and `… elements have role "x", but none match name "y"`.
+ */
+export function isNoMatch(output: string): boolean {
+  return /No element found|but none match name/.test(output);
+}
+
 export function summarize(results: FlowResult[]): string {
   const lines: string[] = [];
   for (const f of results) {

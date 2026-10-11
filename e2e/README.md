@@ -29,6 +29,12 @@ A spec lives in `specs/NN-name.flow.json`:
   (they time out and exit non-zero if the condition never holds).
 - Optional `"assert": { "stdoutIncludes": "…" }` adds a substring check on the
   command's stdout.
+- `wait` polls until its condition holds; `find` looks once. The runner therefore
+  retries a `find` step for up to `E2E_FIND_WAIT` while its failure is "no element
+  matched" (see `docs/runner-internals.md`). A `find` that matches several elements
+  takes the first without an error, so pick a name only one element has.
+- Text on screen after a click can be an optimistic update. Before a `reload` that
+  checks the change was saved, add `wait --load networkidle`.
 - Locators are deterministic only (`--url`, `--text`, `find role|text|label`).
   We never use the AI `chat` command, so runs are stable and key-free.
 
@@ -81,13 +87,15 @@ cd e2e && npm install && npm test
 Env knobs:
 
 - Runner: `E2E_BASE_URL`, `AGENT_BROWSER_BIN` (default `agent-browser`),
-  `E2E_STEP_TIMEOUT` (ms, default 60000).
+  `E2E_STEP_TIMEOUT` (ms, default 60000), `E2E_FIND_WAIT` (ms, default 10000).
 - Hermetic stack (`scripts/e2e.sh`): `E2E_PG_PORT` (5433), `E2E_API_PORT` (3101),
   `E2E_WEB_PORT` (3100), `E2E_PG_CONTAINER` (`devdigest-e2e-postgres`),
   `E2E_PG_IMAGE` (`pgvector/pgvector:pg16`).
 
-Failure screenshots are written to `e2e/test-results/` (git-ignored; uploaded as
-a CI artifact by `.github/workflows/e2e-web.yml`).
+On a failed step the runner prints what `agent-browser` reported and writes
+`<flow>-fail.png` and `<flow>-fail.txt` (the page URL and its accessibility snapshot)
+to `e2e/test-results/` (git-ignored; uploaded as a CI artifact by
+`.github/workflows/e2e-web.yml`).
 
 ## Coverage (typological, not exhaustive)
 

@@ -1,0 +1,29 @@
+import { MAX_AGENTS, MAX_AGENT_NAME, MAX_DESCRIPTION, MAX_ID, MAX_MODEL } from '../constants.js';
+import { cutText, sanitizeText, type ToolDef } from '../tool.js';
+
+const inputShape = {};
+
+export const listAgents: ToolDef<typeof inputShape> = {
+  name: 'list_agents',
+  description:
+    "List the reviewer agents configured in DevDigest. Call it when you need an agent's id or exact name for run_agent_on_pr.",
+  inputShape,
+  annotations: { readOnlyHint: true },
+  async run(_args, deps) {
+    const agents = (await deps.api.listAgents()).sort((a, b) => a.name.localeCompare(b.name, 'en'));
+    if (agents.length === 0) {
+      return { agents: [], note: 'No agents are configured. Create one in the DevDigest UI (Agents).' };
+    }
+
+    const shown = agents.slice(0, MAX_AGENTS).map((agent) => ({
+      id: cutText(agent.id, MAX_ID),
+      name: cutText(agent.name, MAX_AGENT_NAME),
+      description: sanitizeText(agent.description, MAX_DESCRIPTION),
+      model: cutText(`${agent.provider}/${agent.model}`, MAX_MODEL),
+      enabled: agent.enabled,
+    }));
+    return agents.length > shown.length
+      ? { agents: shown, note: `Showing the first ${shown.length} of ${agents.length} agents, sorted by name.` }
+      : { agents: shown };
+  },
+};

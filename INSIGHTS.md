@@ -197,6 +197,9 @@ be obvious to anyone reading the code, it does not belong here.
   children and the servers kept `:3000` and `:3001` (`scripts/dev.sh:109` `trap cleanup EXIT INT TERM`,
   `:120` `wait`). Postgres stays up. Needed before `npm run e2e:hermetic`, which writes into the
   same `client/.next`. **See also:** `e2e/INSIGHTS.md` (the `:3101` entry).
+- **2026-10-10** — Docker Desktop's daemon can stop answering while its containers' ports stay open: `docker ps` and `docker info` return `request returned 500 Internal Server Error for API route and version …, check if the server supports the requested API version` or hang past 120 s, `:5432` is still held by `com.docker.backend`, and the API answers `/health` with `ok` but every database route with `500 internal_error … read ECONNRESET`. The server's integration files then skip without failing. `osascript -e 'quit app "Docker"'` did not stop `com.docker.backend` (same pid afterwards); it was not recovered in the session. Check `docker info` before trusting a green server run. Nothing in the repository governs the daemon. **See also:** `server/INSIGHTS.md` (the `dockerAvailable()` entry).
+- **2026-10-10** — `chrome-devtools` lost the user's Chrome in the middle of a call: `new_page` failed with `Target.createTarget timed out`, the next call still listed 71 pages, and after that Chrome was not running at all. Once Chrome was started again the MCP server kept answering `Could not find DevToolsActivePort` although the file existed and `:9222` was listening; reading the page over raw CDP from that file worked (the `--autoConnect` entry, `.mcp.json:8`). Chrome came back with one tab, so the user's earlier tabs had to be restored by hand.
+- **2026-10-11** — with Tool Search on, a request to list open pull requests went to `gh pr list` first (`command not found: gh`, exit 127) and only then to the GitHub MCP tool `list_pull_requests`: a deferred tool is cheaper in context and less visible to the model. Naming the server in the request avoids the detour. Nothing in the repository shows this; it was observed in a session.
 
 
 ## Decisions
@@ -320,6 +323,8 @@ be obvious to anyone reading the code, it does not belong here.
 
 - **2026-10-05** — review findings go back into the plan as an amendment, not as loose fix instructions: `planner` returns a numbered list of exact replacements for the existing plan text plus one new "review fixes" phase, the main session applies the list with a script (line-prefix asserts, bottom-up inserts) and `implementer` / `test-writer` / `plan-verifier` then work from the revised file. Used for `specs/L03-intent-layer-plan.md` revision 3 (45 replacements, phase 10). Rejected: asking `planner` to re-emit a 650-line plan, and telling `implementer` what to fix without changing the plan — `plan-verifier` would then report every fix as a deviation.
 - **2026-10-05** — when a feature is uncommitted on a branch that already carries unrelated commits, the reviewers get `git diff HEAD` and base ref `HEAD`; the `git merge-base origin/main HEAD` patch of `.claude/agents/README.md` step 5 would have added 18 unrelated files (3192 lines) to the change. And when `test-writer` is skipped for an iteration, every later `implementer` run is told the baseline in full (which tests are known red and why): it has no Test report to start from, and `plan-verifier` returns `FAIL` by construction until the tests exist.
+- **2026-10-10** — a phase whose integration test could not run was committed with that stated in the commit body, instead of being left uncommitted until green, because the next phase edits the same files and the two would otherwise merge into one commit. The phase stays open in the main session's tracking and the gap is recorded as an Open Question in the owning module. This departs from step 4.5 of the feature workflow ("Commit the closed phase", `.claude/agents/README.md:84`); rejected: stopping all work until the environment recovers.
+
 
 ## Recurring Errors & Fixes
 
@@ -384,6 +389,12 @@ the processes it left (`ps -o pid,pgid,command`) and stop that process group bef
 **Evidence:** no repo line shows it; the stray `bash ./scripts/dev.sh` and its `tsx watch` child
 were found in the process list and stopped, and `docs/hw3-video-script.md` was then written with
 the editor tool.
+### `/context` and `/mcp` showed no change after an MCP server's environment was edited
+**Date:** 2026-10-11
+**Cause:** an open Claude Code session keeps the server process it already started. Adding or removing a server showed up in open sessions, but changing the `env` of an existing entry did not restart that server: three sessions kept running the old, unrestricted GitHub container for ten minutes after the entry was changed.
+**Fix / rule:** after changing an existing MCP entry, reconnect that server in `/mcp` or reload the window before reading `/context`; check the running process (for a Docker server, `docker inspect` its environment and start time) before concluding the change did not work. Do not rewrite the entry a second time to "fix" it.
+**Evidence:** nothing in the repository shows it — the entry is in the user-scope config. The project-scoped equivalent is the `devdigest-mcp` entry, `.mcp.json:14-17`, where an `env` edit needs the same reconnect.
+
 
 ## Session Notes
 
@@ -433,3 +444,5 @@ the editor tool.
 - **2026-10-05** — L03 Intent Layer through the full agent chain: phases 1–8, first review, plan revision 3, phase 10, tests for every phase, second review. Module findings are in `server/`, `client/` and `reviewer-core/` `INSIGHTS.md`.
 - **2026-10-07** — L03 Smart Diff through the full agent chain: nine phases, plan-verifier FAIL on one gap (two diff bodies rendered together), fix round, hermetic e2e 11/11. Module findings are in `server/`, `client/` and `e2e/` `INSIGHTS.md`.
 - **2026-10-07** — HW3 delivery: demo PRs #13 and #15, PR #14 description with screenshots, the demo video recorded with `agent-browser` (script in `docs/hw3-video-script.md`); recorded the unquoted-heredoc slip above and the reviewer line-number question in `reviewer-core/INSIGHTS.md`.
+- **2026-10-10** — L04 part 1, `devdigest-mcp`, a fifth package: research, plan revisions 1–3 (the lab page read in the third), six phases, architecture review, docs. Module findings are in `mcp/` and `server/`; the Docker and Chrome failures and the commit-with-a-gap decision are above.
+- **2026-10-11** — L04 follow-up: `devdigest-mcp` connected in Claude Code and driven by hand; the lab's token audit done manually with a local GitHub MCP server (figures and the stale-session trap above). No code changed.

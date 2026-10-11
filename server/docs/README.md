@@ -6,7 +6,7 @@ more room than a README table.
 
 | Document | What it covers |
 |---|---|
-| [`architecture.md`](architecture.md) | What the DI container owns, a review run from `POST /review` to persisted findings, the in-memory run bus and cancellation, and which module writes which tables |
+| [`architecture.md`](architecture.md) | What the DI container owns, a review run from `POST /review` to persisted findings, the in-memory run bus and cancellation, why the external MCP process is an HTTP client, and which module writes which tables |
 | [`schema.md`](schema.md) | The database schema: table groups, which lesson fills which, migration rules |
 
 Add a row when you add a document, and a `Before answering` row in

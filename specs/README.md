@@ -22,6 +22,8 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | [`L03-intent-layer-plan.md`](L03-intent-layer-plan.md) | done |
 | [`L03-smart-diff.md`](L03-smart-diff.md) | implemented |
 | [`L03-smart-diff-plan.md`](L03-smart-diff-plan.md) | done |
+| [`L04-devdigest-mcp.md`](L04-devdigest-mcp.md) | implemented |
+| [`L04-devdigest-mcp-plan.md`](L04-devdigest-mcp-plan.md) | approved |
 
 The lesson roadmap (L01–L08) is in the root [`README.md`](../README.md).
 When you add a spec, add a row above.
@@ -31,4 +33,5 @@ end to end and which package owns which part, then hands off to the per-module s
 the implementable detail — [`server/specs`](../server/specs/README.md) ·
 [`client/specs`](../client/specs/README.md) ·
 [`reviewer-core/specs`](../reviewer-core/specs/README.md) ·
+[`mcp/specs`](../mcp/specs/README.md) ·
 [`e2e/specs`](../e2e/specs/README.md).
