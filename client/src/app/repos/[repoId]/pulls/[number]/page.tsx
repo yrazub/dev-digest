@@ -144,7 +144,14 @@ export default function PRDetailPage() {
           <IntentCard prId={prId} poll={reviewRunning} />
         )}
 
-        {tab === "overview" && <OverviewTab prBody={pr.body} />}
+        {tab === "overview" && (
+          <OverviewTab
+            prBody={pr.body}
+            prId={prId}
+            repoFullName={repoFullName}
+            headSha={pr.head_sha}
+          />
+        )}
 
         {tab === "findings" && (
           <FindingsTab
