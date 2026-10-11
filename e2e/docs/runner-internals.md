@@ -23,11 +23,13 @@ the execution order, not just a naming convention.
 
 1. **The `ab()` command itself throws** (non-zero exit, including a
    `wait --text` / `wait --url` that timed out because its condition never
-   held). This path: capture the error's first line as `detail`, log a `✗`,
-   take a best-effort failure screenshot to `test-results/<flow-id>-fail.png`
-   (swallowing any screenshot error itself — a failed screenshot must never
-   mask the real failure), then `break` out of the step loop. Remaining
-   steps in that flow are never attempted.
+   held). This path: capture the error's first line as `detail`, log a `✗`
+   followed by what agent-browser itself printed (its stderr carries the
+   reason, e.g. `none match name "…"`), save best-effort failure state —
+   `test-results/<flow-id>-fail.png` plus `<flow-id>-fail.txt` with the page
+   URL and accessibility snapshot, each error swallowed so it never masks the
+   real failure — then `break` out of the step loop. Remaining steps in that
+   flow are never attempted.
 2. **The command succeeds but its `assert.stdoutIncludes` substring check
    fails.** Same `break`, but **no screenshot** — this branch doesn't call
    the screenshot fallback, because the browser state itself may be
@@ -40,6 +42,18 @@ the execution order, not just a naming convention.
 A flow's overall `ok` is `steps.every(s => s.ok)` — since a failure always
 `break`s the loop, in practice this means "no step failed," not "all steps
 were attempted."
+
+## `find` steps are retried while nothing matches
+
+`wait` polls until its condition holds, but `find` looks once: when no element
+matches at that instant it exits non-zero within ~50 ms. A `find` placed right
+after a navigation or a re-render therefore races the page, and loses on a
+machine where rendering is slow relative to command dispatch (CI).
+`runStep()` retries a `find` step every 250 ms for up to `E2E_FIND_WAIT`
+(default 10 s), but only while the failure is "no element matched"
+(`isNoMatch()` in `lib/assert.ts` — agent-browser's `No element found …` and
+`… but none match name …`). Any other failure means an element was matched and
+the action on it failed, so it is not repeated and a click is never sent twice.
 
 ## `{BASE}` substitution and command dispatch
 
