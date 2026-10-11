@@ -104,4 +104,59 @@ export const s = {
   } satisfies CSSProperties,
   noteIcon: { flexShrink: 0, marginTop: 3 } satisfies CSSProperties,
   noteTitle: { fontWeight: 600 } satisfies CSSProperties,
+  /** Tree / Graph switch: two plain buttons at the right end of the summary row. */
+  viewSwitch: {
+    display: "inline-flex",
+    marginLeft: "auto",
+    border: "1px solid var(--border)",
+    borderRadius: 6,
+    overflow: "hidden",
+  } satisfies CSSProperties,
+  viewButton: (active: boolean): CSSProperties => ({
+    padding: "4px 10px",
+    border: "none",
+    fontSize: 12,
+    cursor: "pointer",
+    color: active ? "var(--text-primary)" : "var(--text-secondary)",
+    background: active ? "var(--bg-elevated)" : "transparent",
+    fontWeight: active ? 600 : 400,
+  }),
+  /** The graph scrolls sideways inside the block instead of overflowing it. */
+  graphScroll: { overflowX: "auto", maxWidth: "100%" } satisfies CSSProperties,
+  graphSvg: { display: "block" } satisfies CSSProperties,
+  graphEdge: {
+    fill: "none",
+    stroke: "var(--text-muted)",
+    strokeWidth: 1,
+    opacity: 0.6,
+  } satisfies CSSProperties,
+  /** A node box: the changed symbol and the endpoint or cron carry the accent border, a caller a neutral one. */
+  graphNode: (kind: "symbol" | "caller" | "endpoint" | "cron"): CSSProperties => ({
+    fill: kind === "symbol" ? "var(--accent-bg)" : "var(--bg-elevated)",
+    stroke: kind === "caller" ? "var(--border-strong)" : "var(--accent-text)",
+    strokeWidth: 1,
+  }),
+  graphLabel: {
+    fontSize: 12,
+    fill: "var(--text-primary)",
+    dominantBaseline: "central",
+  } satisfies CSSProperties,
+  graphLink: { cursor: "pointer" } satisfies CSSProperties,
+  legend: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 16,
+    fontSize: 12,
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+  legendItem: { display: "inline-flex", alignItems: "center", gap: 6 } satisfies CSSProperties,
+  legendDot: (kind: "symbol" | "caller" | "endpoint"): CSSProperties => ({
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    flexShrink: 0,
+    background: kind === "symbol" ? "var(--accent-bg)" : "var(--bg-elevated)",
+    border: `1px solid ${kind === "caller" ? "var(--border-strong)" : "var(--accent-text)"}`,
+  }),
 } as const;

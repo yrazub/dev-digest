@@ -5,13 +5,22 @@
 "use client";
 
 import React from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Card, Icon, SectionLabel, Skeleton } from "@devdigest/ui";
 import type { BlastRadiusResponse } from "@devdigest/shared";
 import { useBlastRadius } from "@/lib/hooks/blast";
-import { BLAST_ICON, BLAST_STATS, SKELETON_ROWS } from "./constants";
+import {
+  BLAST_ICON,
+  BLAST_STATS,
+  BLAST_VIEW_GRAPH,
+  BLAST_VIEW_PARAM,
+  SKELETON_ROWS,
+  type BlastView,
+} from "./constants";
 import { blastBodyMode, symbolLabel } from "./helpers";
 import { s } from "./styles";
+import { BlastGraph } from "./_components/BlastGraph";
 import { DegradedNote } from "./_components/DegradedNote";
 import { SymbolGroup } from "./_components/SymbolGroup";
 
@@ -25,8 +34,20 @@ export function BlastRadiusCard({ prId, repoFullName, headSha }: BlastRadiusCard
   const t = useTranslations("blast");
   const tBrief = useTranslations("brief");
   const { data, isError, refetch } = useBlastRadius(prId, headSha);
+  const router = useRouter();
+  const pathname = usePathname();
+  const search = useSearchParams();
   const mode = blastBodyMode({ data, isError });
   const title = tBrief("block.blast");
+  // The view lives in the URL so it survives a reload: `blast=graph`, anything else is the tree.
+  const view: BlastView = search.get(BLAST_VIEW_PARAM) === BLAST_VIEW_GRAPH ? "graph" : "tree";
+  const handleViewChange = (next: BlastView) => {
+    const sp = new URLSearchParams(search.toString());
+    if (next === "graph") sp.set(BLAST_VIEW_PARAM, BLAST_VIEW_GRAPH);
+    else sp.delete(BLAST_VIEW_PARAM);
+    const qs = sp.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  };
 
   return (
     <section aria-label={title}>
@@ -65,6 +86,9 @@ export function BlastRadiusCard({ prId, repoFullName, headSha }: BlastRadiusCard
                     </span>
                   );
                 })}
+                {(mode === "map" || mode === "noCallers") && (
+                  <ViewSwitch value={view} onChange={handleViewChange} />
+                )}
               </div>
             )}
 
@@ -72,15 +96,44 @@ export function BlastRadiusCard({ prId, repoFullName, headSha }: BlastRadiusCard
 
             {mode === "noSymbols" && <p style={s.message}>{t("noSymbols")}</p>}
             {mode === "noCallers" && (
-              <p style={s.message}>{t("noDownstream", { count: data.totals.symbols })}</p>
+              <p style={s.message}>
+                {view === "graph" ? t("graph.empty") : t("noDownstream", { count: data.totals.symbols })}
+              </p>
             )}
-            {mode === "map" && (
+            {mode === "map" && view === "graph" && (
+              <BlastGraph
+                downstream={data.downstream}
+                repoFullName={repoFullName}
+                indexedSha={data.indexed_sha}
+                headSha={headSha}
+              />
+            )}
+            {mode === "map" && view === "tree" && (
               <MapBody data={data} repoFullName={repoFullName} headSha={headSha} />
             )}
           </div>
         )}
       </Card>
     </section>
+  );
+}
+
+function ViewSwitch({ value, onChange }: { value: BlastView; onChange: (next: BlastView) => void }) {
+  const t = useTranslations("blast");
+  return (
+    <div style={s.viewSwitch}>
+      {(["tree", "graph"] as const).map((view) => (
+        <button
+          key={view}
+          type="button"
+          aria-pressed={value === view}
+          style={s.viewButton(value === view)}
+          onClick={() => onChange(view)}
+        >
+          {t(`view.${view}`)}
+        </button>
+      ))}
+    </div>
   );
 }
 

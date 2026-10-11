@@ -23,6 +23,18 @@ vi.mock("@/lib/hooks/blast", () => ({
   },
 }));
 
+// The card reads the view from the URL and writes it with `router.replace`. One stable router and
+// one `nav` object: tests change `nav.search`, never replace the router.
+const router = { replace: vi.fn(), push: vi.fn() };
+const PATHNAME = "/repos/r1/pulls/482";
+const nav: { search: URLSearchParams } = { search: new URLSearchParams() };
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => router,
+  usePathname: () => PATHNAME,
+  useSearchParams: () => nav.search,
+}));
+
 import { BlastRadiusCard } from "./BlastRadiusCard";
 
 const REPO = "acme/api";
@@ -78,6 +90,8 @@ beforeEach(() => {
   query.isError = false;
   query.refetch = vi.fn();
   hookArgs.mockClear();
+  router.replace.mockClear();
+  nav.search = new URLSearchParams();
 });
 
 afterEach(cleanup);
@@ -315,5 +329,211 @@ describe("BlastRadiusCard", () => {
     expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
     expect(group("charge()")).toBeInTheDocument();
     expect(stat("7 symbols").length).toBeGreaterThan(0);
+  });
+});
+
+describe("BlastRadiusCard — Tree / Graph switch and Graph view", () => {
+  function graph() {
+    return screen.getByRole("img", { name: "Blast radius graph" });
+  }
+
+  it("shows the tree, with Tree pressed and Graph not, when the URL has no blast parameter", () => {
+    renderCard();
+
+    expect(screen.getByRole("button", { name: "Tree", pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Graph", pressed: false })).toBeInTheDocument();
+    expect(group("charge()")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Blast radius graph" })).not.toBeInTheDocument();
+  });
+
+  it("treats any value of blast other than graph as the tree", () => {
+    nav.search = new URLSearchParams("blast=tree");
+    renderCard();
+
+    expect(screen.getByRole("button", { name: "Tree", pressed: true })).toBeInTheDocument();
+    expect(group("charge()")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Blast radius graph" })).not.toBeInTheDocument();
+  });
+
+  it("shows the graph and not the tree with blast=graph, with Graph pressed", () => {
+    nav.search = new URLSearchParams("blast=graph");
+    renderCard();
+
+    expect(graph()).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Graph", pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tree", pressed: false })).toBeInTheDocument();
+    // none of the tree: no group region, no "no callers" line
+    expect(screen.queryByRole("region", { name: "charge()" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "refund()" })).not.toBeInTheDocument();
+    expect(screen.queryByText("2 more changed symbols have no callers.")).not.toBeInTheDocument();
+    // the summary row stays
+    expect(stat("7 symbols").length).toBeGreaterThan(0);
+  });
+
+  it("draws the symbols, callers, endpoints and crons of the response as nodes of the graph", () => {
+    nav.search = new URLSearchParams("blast=graph");
+    renderCard();
+
+    const svg = within(graph());
+    for (const label of ["charge", "refund", "checkout", "retry", "undo", "POST /pay", "GET /receipt", "nightly-billing"]) {
+      expect(svg.getByText(label, { selector: "text" })).toBeInTheDocument();
+    }
+  });
+
+  it("makes a caller node a link with the URL, target and rel of its tree line", () => {
+    renderCard();
+    const treeHref = within(group("charge()"))
+      .getByRole("link", { name: "src/my dir/checkout.ts:7" })
+      .getAttribute("href");
+    cleanup();
+
+    nav.search = new URLSearchParams("blast=graph");
+    renderCard();
+
+    // jsdom exposes an SVG <a> as a link even inside the svg with role="img"
+    const links = within(graph()).getAllByRole("link");
+    expect(links).toHaveLength(3);
+    const checkout = links.find((a) => a.textContent?.includes("checkout"));
+    expect(checkout).toBeDefined();
+    expect(checkout).toHaveAttribute("href", treeHref);
+    expect(treeHref).toBe(`https://github.com/acme/api/blob/${INDEXED}/src/my%20dir/checkout.ts#L7`);
+    expect(checkout).toHaveAttribute("target", "_blank");
+    expect(checkout).toHaveAttribute("rel", "noopener noreferrer");
+    // symbols and facts are not links
+    expect(links.find((a) => a.textContent?.includes("charge"))).toBeUndefined();
+    expect(links.find((a) => a.textContent?.includes("POST /pay"))).toBeUndefined();
+  });
+
+  it("draws callers as plain nodes, with no link, when the repository name is null", () => {
+    nav.search = new URLSearchParams("blast=graph");
+    renderCard(null);
+
+    expect(graph()).toBeInTheDocument();
+    expect(within(graph()).queryAllByRole("link")).toHaveLength(0);
+    expect(within(graph()).getByText("checkout", { selector: "text" })).toBeInTheDocument();
+  });
+
+  it("names the three kinds of node in a legend", () => {
+    nav.search = new URLSearchParams("blast=graph");
+    renderCard();
+
+    expect(screen.getByText("Changed symbol")).toBeInTheDocument();
+    expect(screen.getByText("Caller")).toBeInTheDocument();
+    expect(screen.getByText("Endpoint or cron")).toBeInTheDocument();
+  });
+
+  it("cuts a long label with an ellipsis in the node and keeps the whole value in its title", () => {
+    const longEndpoint = "GET /api/public/items/with/a/very/long/path/that/never/ends";
+    query.data = mapResponse({
+      downstream: [
+        {
+          symbol: "charge",
+          callers: [{ name: "checkout", file: "src/checkout.ts", line: 7 }],
+          endpoints_affected: [longEndpoint],
+          crons_affected: [],
+        },
+      ],
+    });
+    nav.search = new URLSearchParams("blast=graph");
+    renderCard();
+
+    const svg = within(graph());
+    expect(svg.queryByText(longEndpoint, { selector: "text" })).not.toBeInTheDocument();
+    expect(svg.getByText(longEndpoint, { selector: "title" })).toBeInTheDocument();
+    const cut = svg.getByText(/^GET \/api\/public\/items.*…$/, { selector: "text" });
+    expect(longEndpoint.startsWith((cut.textContent ?? "").slice(0, -1))).toBe(true);
+  });
+
+  it("switches to the graph with router.replace, setting blast=graph and keeping the other parameters", async () => {
+    const user = userEvent.setup();
+    nav.search = new URLSearchParams("tab=overview");
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Graph" }));
+
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    expect(router.replace).toHaveBeenCalledWith(`${PATHNAME}?tab=overview&blast=graph`);
+  });
+
+  it("switches back to the tree by deleting blast and keeping the other parameters", async () => {
+    const user = userEvent.setup();
+    nav.search = new URLSearchParams("tab=overview&blast=graph&order=original");
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Tree" }));
+
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    expect(router.replace).toHaveBeenCalledWith(`${PATHNAME}?tab=overview&order=original`);
+  });
+
+  it("replaces with the bare pathname when blast was the only parameter", async () => {
+    const user = userEvent.setup();
+    nav.search = new URLSearchParams("blast=graph");
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Tree" }));
+
+    expect(router.replace).toHaveBeenCalledWith(PATHNAME);
+  });
+
+  it("says there are no callers to graph, with the switch kept, for noCallers in the graph view", () => {
+    query.data = mapResponse({ downstream: [], totals: emptyTotals(3) });
+    nav.search = new URLSearchParams("blast=graph");
+    renderCard();
+
+    expect(screen.getByText("No downstream callers to graph.")).toBeInTheDocument();
+    expect(screen.queryByText("3 changed symbol(s), no downstream callers found.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Blast radius graph" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Graph", pressed: true })).toBeInTheDocument();
+  });
+
+  it("offers the switch for noCallers in the tree view too", () => {
+    query.data = mapResponse({ downstream: [], totals: emptyTotals(3) });
+    renderCard();
+
+    expect(screen.getByText("3 changed symbol(s), no downstream callers found.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tree", pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Graph", pressed: false })).toBeInTheDocument();
+  });
+
+  it("offers no switch for noSymbols, noFiles, loading or error, whatever the URL says", () => {
+    nav.search = new URLSearchParams("blast=graph");
+
+    query.data = mapResponse({ changed_symbols: [], downstream: [], totals: emptyTotals(0) });
+    renderCard();
+    expect(screen.getByText("No symbols are declared in the changed files.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Tree|Graph/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Blast radius graph" })).not.toBeInTheDocument();
+    cleanup();
+
+    query.data = mapResponse({
+      degraded: true,
+      reason: "pr_files_missing",
+      changed_symbols: [],
+      downstream: [],
+      totals: emptyTotals(0),
+    });
+    renderCard();
+    expect(screen.getByRole("note")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Tree|Graph/ })).not.toBeInTheDocument();
+    cleanup();
+
+    query.data = undefined;
+    renderCard();
+    expect(screen.queryByRole("button", { name: /Tree|Graph/ })).not.toBeInTheDocument();
+    cleanup();
+
+    query.isError = true;
+    renderCard();
+    expect(screen.queryByRole("button", { name: /Tree|Graph/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps the degraded mark above the graph", () => {
+    query.data = mapResponse({ degraded: true, reason: "index_partial" });
+    nav.search = new URLSearchParams("blast=graph");
+    renderCard();
+
+    const mark = screen.getByRole("note", { name: "This map may be incomplete" });
+    expect(mark.compareDocumentPosition(graph()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
