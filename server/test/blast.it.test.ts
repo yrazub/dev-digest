@@ -236,7 +236,7 @@ d('GET /pulls/:id/blast (Testcontainers pg)', () => {
         crons_affected: ['reset-rate-buckets (hourly)'],
       },
     ]);
-    expect(b.totals).toEqual({ symbols: 2, callers: 3, endpoints: 2, crons: 1 });
+    expect(b.totals).toEqual({ symbols: 2, callers: 3, endpoints: 2, crons: 1, symbols_without_callers: 0 });
     expect(b.summary).toBe('2 changed symbols, 3 callers, 2 endpoints, 1 cron job.');
     expect(b.degraded).toBe(false);
     expect(b.reason).toBeNull();
@@ -257,7 +257,7 @@ d('GET /pulls/:id/blast (Testcontainers pg)', () => {
     expect(b.degraded).toBe(true);
     expect(b.reason).toBe('index_partial');
     expect(names(b)).toEqual(['bucketKey', 'rateLimit']);
-    expect(b.totals).toEqual({ symbols: 2, callers: 3, endpoints: 2, crons: 1 });
+    expect(b.totals).toEqual({ symbols: 2, callers: 3, endpoints: 2, crons: 1, symbols_without_callers: 0 });
     expect(b.indexed_sha).toBe(SHA);
   });
 
@@ -269,7 +269,7 @@ d('GET /pulls/:id/blast (Testcontainers pg)', () => {
     expect(b.reason).toBe('index_failed');
     expect(b.changed_symbols).toEqual([]);
     expect(b.downstream).toEqual([]);
-    expect(b.totals).toEqual({ symbols: 0, callers: 0, endpoints: 0, crons: 0 });
+    expect(b.totals).toEqual({ symbols: 0, callers: 0, endpoints: 0, crons: 0, symbols_without_callers: 0 });
     expect(b.indexed_sha).toBe(SHA);
   });
 
@@ -439,7 +439,8 @@ d('GET /pulls/:id/blast (Testcontainers pg)', () => {
       expect(b.reason).toBeNull();
       expect(b.indexed_sha).toBe(SEEDED_SHA);
       expect(b.summary).toBe('4 changed symbols, 5 callers, 3 endpoints, 1 cron job.');
-      expect(b.totals).toEqual({ symbols: 4, callers: 5, endpoints: 3, crons: 1 });
+      // 4 changed symbols, 2 of them with a group: the other 2 have no callers
+      expect(b.totals).toEqual({ symbols: 4, callers: 5, endpoints: 3, crons: 1, symbols_without_callers: 2 });
       expect(b.caller_limit).toBe(MAX_CALLERS_PER_SYMBOL);
       expect(names(b)).toEqual(['bucketKey', 'publicRouter', 'rateLimit', 'webhookHandler']);
 

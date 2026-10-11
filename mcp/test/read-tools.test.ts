@@ -882,7 +882,7 @@ function blastMap(over: Partial<ApiBlastRadius> = {}): ApiBlastRadius {
       },
     ],
     summary: '2 changed symbols, 2 callers, 1 endpoint, 0 cron jobs.',
-    totals: { symbols: 2, callers: 2, endpoints: 1, crons: 0 },
+    totals: { symbols: 2, callers: 2, endpoints: 1, crons: 0, symbols_without_callers: 1 },
     degraded: false,
     reason: null,
     indexed_sha: 'abc123',

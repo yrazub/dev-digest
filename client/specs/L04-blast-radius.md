@@ -86,8 +86,8 @@ response's order:
   A cron value is rendered as the server gave it.
 
 Groups are always open; there is no collapse control (C1 is not built). Under the last group,
-when `changed_symbols` holds more symbols than `downstream`, one muted line says how many
-changed symbols have no callers (`moreWithoutCallers`).
+when `totals.symbols_without_callers` is above zero, one muted line states that number
+(`moreWithoutCallers`). The block does not derive it from array lengths.
 
 **Graph view (C2).** Three columns of nodes — changed symbols, callers, endpoints and crons —
 joined by curved edges, drawn as inline SVG with hand-computed positions (`graphLayout`); no
@@ -128,7 +128,11 @@ row and the body, in every mode except `loading` and `error`. It is a warning-to
 an icon, the title `degraded.title` and one sentence for the reason, `degraded.reason.<value>`,
 keyed by the enum value. The map below it is still shown: a degraded answer can carry data.
 
-**Resync (C6).** For the reasons a resync can fix — `index_partial`, `index_failed`, `no_data` —
+**Resync (C6).** The wait is a hook in the component's folder, `useResyncWait(repoId, prId)`,
+which returns `running`, `slow`, `ready` and `start`; the note renders the button through a
+small child that is mounted only for a fixable reason, so a degraded map with another reason
+makes no index-state request. A failed index-state answer counts towards the give-up limit
+like an unchanged one, so the wait always ends. For the reasons a resync can fix — `index_partial`, `index_failed`, `no_data` —
 the note has a Resync button. It calls `useResyncRepoIntel(repoId)`, then polls
 `useRepoIntelStatus(repoId, true)` and, when `lastIndexedSha` or `updatedAt` advances,
 invalidates `blastKeys.pull(prId)` and stops polling. While it runs the button is disabled and

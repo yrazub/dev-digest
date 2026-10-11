@@ -108,7 +108,7 @@ describe('BlastService.forPull — the facade calls', () => {
     expect(res.reason).toBe('pr_files_missing');
     expect(res.changed_symbols).toEqual([]);
     expect(res.downstream).toEqual([]);
-    expect(res.totals).toEqual({ symbols: 0, callers: 0, endpoints: 0, crons: 0 });
+    expect(res.totals).toEqual({ symbols: 0, callers: 0, endpoints: 0, crons: 0, symbols_without_callers: 0 });
     expect(res.indexed_sha).toBe('abc123');
   });
 

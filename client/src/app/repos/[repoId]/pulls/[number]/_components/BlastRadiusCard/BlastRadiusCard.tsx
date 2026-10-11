@@ -148,7 +148,7 @@ function MapBody({
   headSha: string | null;
 }) {
   const t = useTranslations("blast");
-  const withoutCallers = data.changed_symbols.length - data.downstream.length;
+  const withoutCallers = data.totals.symbols_without_callers;
   return (
     <div style={s.groups}>
       {data.downstream.map((group) => (

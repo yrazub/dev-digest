@@ -15,7 +15,7 @@ function response(over: Partial<BlastRadiusResponse> = {}): BlastRadiusResponse 
       },
     ],
     summary: "",
-    totals: { symbols: 1, callers: 1, endpoints: 0, crons: 0 },
+    totals: { symbols: 1, callers: 1, endpoints: 0, crons: 0, symbols_without_callers: 0 },
     degraded: false,
     reason: null,
     indexed_sha: "idx1",
@@ -55,7 +55,7 @@ describe("blastBodyMode", () => {
     const data = response({
       changed_symbols: [],
       downstream: [],
-      totals: { symbols: 0, callers: 0, endpoints: 0, crons: 0 },
+      totals: { symbols: 0, callers: 0, endpoints: 0, crons: 0, symbols_without_callers: 0 },
     });
     expect(blastBodyMode({ data, isError: false })).toBe("noSymbols");
   });
@@ -63,7 +63,7 @@ describe("blastBodyMode", () => {
   it("is noCallers when there are symbols and no downstream entry", () => {
     const data = response({
       downstream: [],
-      totals: { symbols: 1, callers: 0, endpoints: 0, crons: 0 },
+      totals: { symbols: 1, callers: 0, endpoints: 0, crons: 0, symbols_without_callers: 1 },
     });
     expect(blastBodyMode({ data, isError: false })).toBe("noCallers");
   });
@@ -81,7 +81,7 @@ describe("blastBodyMode", () => {
     expect(blastBodyMode({ data: response(), isError: true })).toBe("map");
     const empty = response({
       downstream: [],
-      totals: { symbols: 1, callers: 0, endpoints: 0, crons: 0 },
+      totals: { symbols: 1, callers: 0, endpoints: 0, crons: 0, symbols_without_callers: 1 },
     });
     expect(blastBodyMode({ data: empty, isError: true })).toBe("noCallers");
   });

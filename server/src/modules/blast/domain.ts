@@ -159,11 +159,14 @@ export function toBlastRadius(result: BlastSourceResult, ctx: BlastContext): Bla
   entries.sort((a, b) => b.topRank - a.topRank || compareText(a.impact.symbol, b.impact.symbol));
   const downstream = entries.map((e) => e.impact);
 
+  const groupedSymbols = new Set(downstream.map((d) => d.symbol));
   const totals: BlastTotals = {
     symbols: changed_symbols.length,
     callers: downstream.reduce((sum, d) => sum + d.callers.length, 0),
     endpoints: allEndpoints.size,
     crons: allCrons.size,
+    // Same-named changed symbols share one group, so this counts names, not array lengths.
+    symbols_without_callers: changed_symbols.filter((s) => !groupedSymbols.has(s.name)).length,
   };
   const { degraded, reason } = resolveDegraded(result, ctx);
 

@@ -32,6 +32,7 @@ export const BlastTotals = z.object({
   callers: z.number().int().nonnegative(),
   endpoints: z.number().int().nonnegative(),
   crons: z.number().int().nonnegative(),
+  symbols_without_callers: z.number().int().nonnegative(),
 });
 
 /** Response of `GET /pulls/:id/blast`. */
@@ -120,6 +121,7 @@ and gets no tighter one.
 | `totals.symbols` | `changed_symbols.length` |
 | `totals.callers` | the sum of `callers.length` over `downstream` |
 | `totals.endpoints`, `totals.crons` | distinct values across all groups |
+| `totals.symbols_without_callers` | the number of `changed_symbols` entries whose `name` is not the `symbol` of any `downstream` entry |
 | `summary` | `buildSummary(totals)` |
 | `degraded`, `reason` | `resolveDegraded(...)`, below |
 | `indexed_sha` | `indexState.lastIndexedSha`, or `null` when it is empty |

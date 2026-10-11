@@ -599,7 +599,7 @@ describe('L04 blast radius contracts', () => {
   };
   const body = {
     ...core,
-    totals: { symbols: 1, callers: 1, endpoints: 1, crons: 1 },
+    totals: { symbols: 1, callers: 1, endpoints: 1, crons: 1, symbols_without_callers: 0 },
     degraded: false,
     reason: null,
     indexed_sha: 'abc1234',
@@ -651,7 +651,7 @@ describe('L04 blast radius contracts', () => {
     expect(BlastRadiusResponse.safeParse({ ...body, caller_limit: 2.5 }).success).toBe(false);
   });
 
-  it.each(['symbols', 'callers', 'endpoints', 'crons'])('rejects a negative or fractional total.%s', (key) => {
+  it.each(['symbols', 'callers', 'endpoints', 'crons', 'symbols_without_callers'])('rejects a negative or fractional total.%s', (key) => {
     expect(
       BlastRadiusResponse.safeParse({ ...body, totals: { ...body.totals, [key]: -1 } }).success,
     ).toBe(false);
@@ -660,8 +660,13 @@ describe('L04 blast radius contracts', () => {
     ).toBe(false);
   });
 
+  it('rejects a body whose totals lack symbols_without_callers', () => {
+    const { symbols_without_callers: _dropped, ...fourNumbers } = body.totals;
+    expect(BlastRadiusResponse.safeParse({ ...body, totals: fourNumbers }).success).toBe(false);
+  });
+
   it('accepts zero totals (an empty map)', () => {
-    const empty = { symbols: 0, callers: 0, endpoints: 0, crons: 0 };
+    const empty = { symbols: 0, callers: 0, endpoints: 0, crons: 0, symbols_without_callers: 0 };
     expect(BlastRadiusResponse.parse({ ...body, totals: empty }).totals).toEqual(empty);
   });
 });

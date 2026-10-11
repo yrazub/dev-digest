@@ -82,7 +82,7 @@ export function toBlastView({ repo, pr, blast }: BlastViewInput): Record<string,
     };
   });
 
-  const withoutCallers = blast.changed_symbols.length - blast.downstream.length;
+  const withoutCallers = blast.totals.symbols_without_callers;
 
   const notes: string[] = [];
   if (blast.degraded && blast.reason !== null) {
@@ -98,7 +98,12 @@ export function toBlastView({ repo, pr, blast }: BlastViewInput): Record<string,
     repo: repoName,
     pr,
     summary: cutText(blast.summary, MAX_SUMMARY),
-    totals: blast.totals,
+    totals: {
+      symbols: blast.totals.symbols,
+      callers: blast.totals.callers,
+      endpoints: blast.totals.endpoints,
+      crons: blast.totals.crons,
+    },
     impact,
     ...(blast.downstream.length > shown.length ? { more_symbols: blast.downstream.length - shown.length } : {}),
     ...(withoutCallers > 0 ? { symbols_without_callers: withoutCallers } : {}),

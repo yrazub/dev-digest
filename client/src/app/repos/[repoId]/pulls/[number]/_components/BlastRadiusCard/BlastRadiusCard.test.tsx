@@ -37,11 +37,16 @@ const OLD_STATE: RepoIntelState = {
   lastIndexedSha: "5bc45f6a6f741f21f7e7a430146a1999cf97ec45",
   updatedAt: "2026-09-21T20:28:46.312Z",
 };
-const indexState: { data: RepoIntelState | undefined; dataUpdatedAt: number } = {
+// A real query shape: the wait reads the time of the last failed answer too (`errorUpdatedAt`, 0 =
+// never failed). The note's tests simulate answers that succeed; the failing ones are in
+// use-resync-wait.test.tsx.
+const indexState: { data: RepoIntelState | undefined; dataUpdatedAt: number; errorUpdatedAt: number } = {
   data: OLD_STATE,
   dataUpdatedAt: 1000,
+  errorUpdatedAt: 0,
 };
 const pollArgs: boolean[] = [];
+const resyncHookCalls = vi.fn();
 const resyncMutate = vi.fn((_v: undefined, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
 const resyncMutation = { mutate: resyncMutate, isPending: false };
 
@@ -50,7 +55,10 @@ vi.mock("@/lib/hooks/repo-intel", () => ({
     pollArgs.push(poll);
     return indexState;
   },
-  useResyncRepoIntel: () => resyncMutation,
+  useResyncRepoIntel: () => {
+    resyncHookCalls();
+    return resyncMutation;
+  },
 }));
 
 // The card reads the view from the URL and writes it with `router.replace`. One stable router and
@@ -103,7 +111,7 @@ function mapResponse(over: Partial<BlastRadiusResponse> = {}): BlastRadiusRespon
       },
     ],
     summary: "",
-    totals: { symbols: 7, callers: 12, endpoints: 4, crons: 2 },
+    totals: { symbols: 7, callers: 12, endpoints: 4, crons: 2, symbols_without_callers: 2 },
     degraded: false,
     reason: null,
     indexed_sha: INDEXED,
@@ -113,7 +121,7 @@ function mapResponse(over: Partial<BlastRadiusResponse> = {}): BlastRadiusRespon
 }
 
 function emptyTotals(symbols: number) {
-  return { symbols, callers: 0, endpoints: 0, crons: 0 };
+  return { symbols, callers: 0, endpoints: 0, crons: 0, symbols_without_callers: symbols };
 }
 
 let queryClient: QueryClient;
@@ -122,7 +130,9 @@ beforeEach(() => {
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   indexState.data = OLD_STATE;
   indexState.dataUpdatedAt = 1000;
+  indexState.errorUpdatedAt = 0;
   pollArgs.length = 0;
+  resyncHookCalls.mockClear();
   resyncMutate.mockClear();
   query.data = mapResponse();
   query.isError = false;
@@ -170,7 +180,9 @@ describe("BlastRadiusCard", () => {
   });
 
   it("uses the singular label for a count of one", () => {
-    query.data = mapResponse({ totals: { symbols: 1, callers: 1, endpoints: 1, crons: 1 } });
+    query.data = mapResponse({
+      totals: { symbols: 1, callers: 1, endpoints: 1, crons: 1, symbols_without_callers: 0 },
+    });
     renderCard();
 
     expect(stat("1 symbol").length).toBeGreaterThan(0);
@@ -256,13 +268,14 @@ describe("BlastRadiusCard", () => {
   });
 
   it("states how many changed symbols have no callers, with the plural rule", () => {
+    // `totals.symbols_without_callers` is the number printed (default fixture: 2)
     renderCard();
-    // 4 changed symbols, 2 with callers
     expect(screen.getByText("2 more changed symbols have no callers.")).toBeInTheDocument();
 
     cleanup();
     query.data = mapResponse({
       changed_symbols: mapResponse().changed_symbols.slice(0, 3),
+      totals: { ...mapResponse().totals, symbols_without_callers: 1 },
     });
     renderCard();
     expect(screen.getByText("1 more changed symbol has no callers.")).toBeInTheDocument();
@@ -270,7 +283,23 @@ describe("BlastRadiusCard", () => {
     cleanup();
     query.data = mapResponse({
       changed_symbols: mapResponse().changed_symbols.slice(0, 2),
+      totals: { ...mapResponse().totals, symbols_without_callers: 0 },
     });
+    renderCard();
+    expect(screen.queryByText(/have no callers|has no callers/)).not.toBeInTheDocument();
+  });
+
+  it("prints totals.symbols_without_callers, not changed_symbols minus downstream", () => {
+    // 4 changed symbols and 2 groups would subtract to 2; the server counted 5 (e.g. same-named
+    // symbols share one group), and the block must show the server's number.
+    query.data = mapResponse({ totals: { ...mapResponse().totals, symbols_without_callers: 5 } });
+    renderCard();
+    expect(screen.getByText("5 more changed symbols have no callers.")).toBeInTheDocument();
+    expect(screen.queryByText("2 more changed symbols have no callers.")).not.toBeInTheDocument();
+
+    // and the other way: arrays that subtract to 2, a server count of 0, no line at all
+    cleanup();
+    query.data = mapResponse({ totals: { ...mapResponse().totals, symbols_without_callers: 0 } });
     renderCard();
     expect(screen.queryByText(/have no callers|has no callers/)).not.toBeInTheDocument();
   });
@@ -616,6 +645,19 @@ describe("BlastRadiusCard — Resync on the mark (C6)", () => {
     if (shown) expect(button).toBeInTheDocument();
     else expect(button).not.toBeInTheDocument();
   });
+
+  it.each<BlastDegradedReason>(["flag_off", "repo_too_large", "pr_files_missing"])(
+    "for %s the note makes no index-state request and builds no resync mutation",
+    (reason) => {
+      query.data = mapResponse({ degraded: true, reason });
+      renderCard();
+
+      expect(screen.getByRole("note")).toBeInTheDocument();
+      expect(pollArgs).toHaveLength(0);
+      expect(resyncHookCalls).not.toHaveBeenCalled();
+      expect(resyncMutate).not.toHaveBeenCalled();
+    },
+  );
 
   it("shows no Resync button when the answer is not degraded", () => {
     renderCard();

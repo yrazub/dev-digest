@@ -6,7 +6,13 @@
  * ("Degraded is a mark, not an error", Q5); plan: `specs/L04-blast-radius-plan.md` (phase 3).
  */
 import { describe, it, expect } from 'vitest';
-import { BlastDegradedReason, BlastRadius, BlastRadiusResponse, type BlastTotals } from '@devdigest/shared';
+import {
+  BlastDegradedReason,
+  BlastRadius,
+  BlastRadiusResponse,
+  BlastTotals as BlastTotalsSchema,
+  type BlastTotals,
+} from '@devdigest/shared';
 import {
   buildSummary,
   resolveDegraded,
@@ -40,11 +46,18 @@ const result = (over: Partial<BlastSourceResult> = {}): BlastSourceResult => ({
   callers: [],
   ...over,
 });
-const totals = (symbols: number, callers: number, endpoints: number, crons: number): BlastTotals => ({
+const totals = (
+  symbols: number,
+  callers: number,
+  endpoints: number,
+  crons: number,
+  symbolsWithoutCallers = 0,
+): BlastTotals => ({
   symbols,
   callers,
   endpoints,
   crons,
+  symbols_without_callers: symbolsWithoutCallers,
 });
 
 const groupOf = (res: ReturnType<typeof toBlastRadius>, symbol: string) => res.downstream.find((d) => d.symbol === symbol)!;
@@ -267,7 +280,8 @@ describe('toBlastRadius — totals, summary, sha, limit', () => {
 
   it('counts symbols, callers, endpoints and crons from the arrays', () => {
     const res = toBlastRadius(source, ctx());
-    expect(res.totals).toEqual(totals(3, 3, 2, 1));
+    // `c` has no caller, so it is the one symbol without callers
+    expect(res.totals).toEqual(totals(3, 3, 2, 1, 1));
     expect(res.summary).toBe('3 changed symbols, 3 callers, 2 endpoints, 1 cron job.');
   });
 
@@ -304,6 +318,73 @@ describe('toBlastRadius — totals, summary, sha, limit', () => {
     expect(res.reason).toBe('index_partial');
     // the map is still there
     expect(res.downstream.length).toBeGreaterThan(0);
+  });
+});
+
+describe('toBlastRadius — totals.symbols_without_callers', () => {
+  it('counts the changed symbols whose name has no group in downstream', () => {
+    const res = toBlastRadius(
+      result({
+        changedSymbols: [sym('used', 'src/decl.ts'), sym('lonely', 'src/decl.ts'), sym('alone', 'src/other.ts')],
+        callers: [caller('used', 'src/use.ts', 3, 1)],
+      }),
+      ctx(),
+    );
+    expect(res.totals.symbols).toBe(3);
+    expect(res.downstream.map((d) => d.symbol)).toEqual(['used']);
+    expect(res.totals.symbols_without_callers).toBe(2);
+  });
+
+  it('counts a symbol whose only caller is dropped (B5) as one without callers', () => {
+    const res = toBlastRadius(
+      result({ changedSymbols: [sym('rateLimit', 'src/limit.ts')], callers: [caller('rateLimit', 'src/limit.ts', 41, 9)] }),
+      ctx(),
+    );
+    expect(res.downstream).toEqual([]);
+    expect(res.totals.symbols_without_callers).toBe(1);
+  });
+
+  it('is 0 when every changed symbol has callers', () => {
+    const res = toBlastRadius(
+      result({
+        changedSymbols: [sym('a', 'src/d.ts'), sym('b', 'src/d.ts')],
+        callers: [caller('a', 'src/x.ts', 1, 2), caller('b', 'src/y.ts', 1, 1)],
+      }),
+      ctx(),
+    );
+    expect(res.totals.symbols_without_callers).toBe(0);
+  });
+
+  it('counts names, not array lengths: two same-named symbols with callers share one group and leave 0 (D6)', () => {
+    const res = toBlastRadius(
+      result({
+        changedSymbols: [sym('handler', 'src/a.ts'), sym('handler', 'src/b.ts')],
+        callers: [caller('handler', 'src/use.ts', 3, 5), caller('handler', 'src/use2.ts', 9, 4)],
+      }),
+      ctx(),
+    );
+    expect(res.changed_symbols).toHaveLength(2);
+    expect(res.downstream).toHaveLength(1);
+    // a subtraction of the two lengths would say 1
+    expect(res.totals.symbols_without_callers).toBe(0);
+  });
+
+  it('counts both of two same-named symbols when neither has callers', () => {
+    const res = toBlastRadius(
+      result({ changedSymbols: [sym('handler', 'src/a.ts'), sym('handler', 'src/b.ts')] }),
+      ctx(),
+    );
+    expect(res.totals.symbols_without_callers).toBe(2);
+  });
+
+  it('parses in BlastTotals and in the whole response', () => {
+    const res = toBlastRadius(
+      result({ changedSymbols: [sym('a', 'src/d.ts'), sym('b', 'src/d.ts')], callers: [caller('a', 'src/x.ts', 1, 2)] }),
+      ctx(),
+    );
+    expect(res.totals.symbols_without_callers).toBe(1);
+    expect(BlastTotalsSchema.parse(res.totals)).toEqual(res.totals);
+    expect(BlastRadiusResponse.safeParse(res).success).toBe(true);
   });
 });
 

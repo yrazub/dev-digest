@@ -53,12 +53,13 @@ the stub needs no change.
 | Field | Rule |
 |---|---|
 | `repo`, `pr` | the resolved repository name, cut at `MAX_REPO`, and the PR number |
-| `summary`, `totals` | the route's values, unchanged |
+| `summary` | the route's value, unchanged |
+| `totals` | the route's four numbers `symbols`, `callers`, `endpoints`, `crons`, unchanged; `symbols_without_callers` is not repeated inside it |
 | `impact` | one entry per `downstream` entry, **in the route's order** |
 | `declared_in` | the `file` of the first `changed_symbols` entry with that name; left out when there is none |
 | `callers` | `"<file>:<line> <name>"`, in the route's order |
 | `endpoints`, `crons` | the route's `endpoints_affected` and `crons_affected` |
-| `symbols_without_callers` | `changed_symbols.length - downstream.length`; left out when 0 |
+| `symbols_without_callers` | the route's `totals.symbols_without_callers`; left out when 0 |
 | `degraded`, `reason`, `note` | present only when the route answered `degraded: true` (below) |
 
 Dropped from the route's answer: the flat `changed_symbols` list (it can be long and its

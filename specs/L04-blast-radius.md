@@ -140,7 +140,10 @@ render that one answer; neither regroups or recounts it.
   (the fallback path), both lists are empty; the response is degraded in that case anyway.
 - **Order is part of the answer (C5).** Callers inside a group: rank descending, then file,
   then line. Groups: highest caller rank descending, then symbol name. Clients keep the order.
-- **Totals are counted once, on the server.** `symbols` is the number of changed symbols,
+- **Totals are counted once, on the server.** `symbols_without_callers` is the number of
+  changed symbols whose name has no group in `downstream`; both readers print it and neither
+  derives it from array lengths (two same-named symbols share one group, D6, so a subtraction
+  of lengths would miscount). `symbols` is the number of changed symbols,
   `callers` the number of caller rows shown, `endpoints` and `crons` the distinct values across
   all groups. `summary` is a sentence built from these four numbers.
 - **Degraded is a mark, not an error.** The route answers `200` with whatever map exists, plus
@@ -178,7 +181,7 @@ render that one answer; neither regroups or recounts it.
 |---|---|
 | `ChangedSymbol`, `BlastCaller`, `DownstreamImpact`, `BlastRadius` (`brief.ts`) | unchanged |
 | `BlastDegradedReason` (`review-api.ts`) | new enum: `flag_off`, `index_failed`, `index_partial`, `repo_too_large`, `no_data`, `pr_files_missing` |
-| `BlastTotals` (`review-api.ts`) | new: `symbols`, `callers`, `endpoints`, `crons`, non-negative integers |
+| `BlastTotals` (`review-api.ts`) | new: `symbols`, `callers`, `endpoints`, `crons`, `symbols_without_callers`, non-negative integers |
 | `BlastRadiusResponse` (`review-api.ts`) | new: `BlastRadius.extend({ totals, degraded, reason, indexed_sha, caller_limit })` |
 
 `BlastRadiusResponse` extends `BlastRadius`, so the route's body still parses as `BlastRadius`
@@ -238,6 +241,7 @@ Settled by the user on 2026-10-11, after the planner's open questions:
 |---|---|---|
 | Q5 | With a failed index the facade falls back and answers `no_data` first, so `index_failed` and `repo_too_large` could never reach the block | **The index status is checked first** (rows 3 and 4 of the degraded table), so a failed index names its real reason and every reason is reachable through the route |
 | Q6 | The contract attributes endpoints and crons to a symbol's group, not to a caller. How does the Graph view connect them? | **An edge from the changed symbol to each of its endpoints and crons.** No caller-to-endpoint edge is drawn, because the data does not hold one |
+| Q8 | Review findings after the last phase (2026-10-11): the count of symbols without callers was derived by subtraction in both readers, and the resync wait was wired inside the note component | Fixed: the count is `totals.symbols_without_callers`, counted on the server; the wait is a hook in the component's folder, `useResyncWait`, mounted only for a reason a resync can fix, and it also gives up when the index-state request keeps failing |
 | Q7 | The planner's other recommendations | Accepted: the `blast` module declares its own structural input types and ports and receives the caller limit through a getter on the container, because `arch:check` forbids a module importing another module, types included; the request logger is a parameter of `forPull`; seeding the index also gives the demo repository's Conventions screen evidence links, which is accepted and recorded in `seed-fixtures.md`; the wording of the new strings is the plan's; the MCP view does not repeat the server's `caller_limit`, since its own cap is lower and always states what was cut |
 
 ## Decided without asking

@@ -103,6 +103,7 @@ export const BlastTotals = z.object({
   callers: z.number().int().nonnegative(),
   endpoints: z.number().int().nonnegative(),
   crons: z.number().int().nonnegative(),
+  symbols_without_callers: z.number().int().nonnegative(),
 });
 export type BlastTotals = z.infer<typeof BlastTotals>;
 

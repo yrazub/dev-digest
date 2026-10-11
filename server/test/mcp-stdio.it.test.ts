@@ -261,7 +261,11 @@ d('devdigest-mcp over stdio against the real API (Testcontainers pg)', () => {
     const body = JSON.parse(result.text);
     expect(body.repo).toBe('acme/payments-api');
     expect(body.pr).toBe(482);
-    expect(body.totals).toEqual(map.totals);
+    // the view keeps the route's four numbers; the fifth moves to the top level, left out when 0
+    const { symbols_without_callers: withoutCallers, ...fourNumbers } = map.totals;
+    expect(body.totals).toEqual(fourNumbers);
+    if (withoutCallers > 0) expect(body.symbols_without_callers).toBe(withoutCallers);
+    else expect(body).not.toHaveProperty('symbols_without_callers');
     expect(body.summary).toBe(map.summary);
     expect(body.impact[0]).toMatchObject({
       symbol: first.symbol,

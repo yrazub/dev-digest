@@ -32,7 +32,7 @@ function blast(over: Partial<ApiBlastRadius> = {}): ApiBlastRadius {
     changed_symbols: [changed('rateLimit')],
     downstream: [impact('rateLimit')],
     summary: '1 changed symbol, 1 caller, 0 endpoints, 0 cron jobs.',
-    totals: { symbols: 1, callers: 1, endpoints: 0, crons: 0 },
+    totals: { symbols: 1, callers: 1, endpoints: 0, crons: 0, symbols_without_callers: 0 },
     degraded: false,
     reason: null,
     indexed_sha: 'abc123',
@@ -83,7 +83,7 @@ describe('toBlastView — the view of a full map', () => {
         },
       ],
       summary: '4 changed symbols, 5 callers, 3 endpoints, 1 cron job.',
-      totals: { symbols: 4, callers: 5, endpoints: 3, crons: 1 },
+      totals: { symbols: 4, callers: 5, endpoints: 3, crons: 1, symbols_without_callers: 2 },
     });
 
     const v = view(full);
@@ -146,7 +146,7 @@ describe('toBlastView — order', () => {
         downstream: names.map((symbol) =>
           impact(symbol, { callers: [caller(30, { name: 'z' }), caller(2, { name: 'a' }), caller(11, { name: 'm' })] }),
         ),
-        totals: { symbols: 3, callers: 9, endpoints: 0, crons: 0 },
+        totals: { symbols: 3, callers: 9, endpoints: 0, crons: 0, symbols_without_callers: 0 },
       }),
     );
 
@@ -188,7 +188,7 @@ describe('toBlastView — the caps (D12)', () => {
     const many = manySymbols(17);
     const totals = { symbols: 17, callers: 412, endpoints: 31, crons: 6 };
 
-    const v = view(blast({ ...many, totals, summary: '17 changed symbols, 412 callers, 31 endpoints, 6 cron jobs.' }));
+    const v = view(blast({ ...many, totals: { ...totals, symbols_without_callers: 0 }, summary: '17 changed symbols, 412 callers, 31 endpoints, 6 cron jobs.' }));
 
     expect(entries(v).map((e) => e.symbol)).toEqual(many.downstream.slice(0, 15).map((d) => d.symbol));
     expect(v.more_symbols).toBe(2);
@@ -205,7 +205,7 @@ describe('toBlastView — the caps (D12)', () => {
       blast({
         changed_symbols: [changed('big'), changed('small')],
         downstream: [impact('big', { callers }), impact('small')],
-        totals: { symbols: 2, callers: 13, endpoints: 0, crons: 0 },
+        totals: { symbols: 2, callers: 13, endpoints: 0, crons: 0, symbols_without_callers: 0 },
       }),
     );
 
@@ -299,7 +299,7 @@ describe('toBlastView — notes instead of errors (D11)', () => {
   });
 
   it('a degraded map with nothing in it still gets only the degraded note', () => {
-    const v = view(degraded('index_failed', { changed_symbols: [], downstream: [], totals: { symbols: 0, callers: 0, endpoints: 0, crons: 0 } }));
+    const v = view(degraded('index_failed', { changed_symbols: [], downstream: [], totals: { symbols: 0, callers: 0, endpoints: 0, crons: 0, symbols_without_callers: 0 } }));
 
     expect(v.note).toBe(
       'The repository index is not available (index_failed), so this map is a best effort and may be incomplete. Resync the repository in DevDigest, then call again.',
@@ -308,7 +308,7 @@ describe('toBlastView — notes instead of errors (D11)', () => {
   });
 
   it('not degraded, no changed symbols: says there is nothing to map', () => {
-    const v = view(blast({ changed_symbols: [], downstream: [], totals: { symbols: 0, callers: 0, endpoints: 0, crons: 0 } }));
+    const v = view(blast({ changed_symbols: [], downstream: [], totals: { symbols: 0, callers: 0, endpoints: 0, crons: 0, symbols_without_callers: 0 } }));
 
     expect(v.note).toBe('No symbols are declared in the changed files of acme/payments-api#482, so there is nothing to map.');
     expect(v).not.toHaveProperty('degraded');
@@ -318,7 +318,7 @@ describe('toBlastView — notes instead of errors (D11)', () => {
   });
 
   it('not degraded, symbols but no callers: says nothing references them, and counts the symbols', () => {
-    const v = view(blast({ changed_symbols: [changed('a'), changed('b')], downstream: [], totals: { symbols: 2, callers: 0, endpoints: 0, crons: 0 } }));
+    const v = view(blast({ changed_symbols: [changed('a'), changed('b')], downstream: [], totals: { symbols: 2, callers: 0, endpoints: 0, crons: 0, symbols_without_callers: 2 } }));
 
     expect(v.note).toBe('Nothing in the indexed repository references the changed symbols.');
     expect(v.symbols_without_callers).toBe(2);
@@ -338,12 +338,35 @@ describe('toBlastView — notes instead of errors (D11)', () => {
 });
 
 describe('toBlastView — symbols_without_callers', () => {
-  it('is changed_symbols minus downstream, and left out when 0', () => {
-    const some = view(blast({ changed_symbols: [changed('a'), changed('b'), changed('c')], downstream: [impact('a')] }));
-    const none = view(blast({ changed_symbols: [changed('a')], downstream: [impact('a')] }));
+  const withTotals = (symbolsWithoutCallers: number, over: Partial<ApiBlastRadius> = {}) =>
+    blast({
+      totals: { symbols: 3, callers: 1, endpoints: 0, crons: 0, symbols_without_callers: symbolsWithoutCallers },
+      ...over,
+    });
+
+  it("is the route's totals.symbols_without_callers, and left out when 0", () => {
+    const some = view(withTotals(2, { changed_symbols: [changed('a'), changed('b'), changed('c')], downstream: [impact('a')] }));
+    const none = view(withTotals(0, { changed_symbols: [changed('a')], downstream: [impact('a')] }));
 
     expect(some.symbols_without_callers).toBe(2);
     expect(none).not.toHaveProperty('symbols_without_callers');
+  });
+
+  it("states the route's number even when it differs from changed_symbols minus downstream (D6)", () => {
+    // Two same-named symbols share one group: the arrays subtract to 1, the route counted 0 ...
+    const sameName = view(withTotals(0, { changed_symbols: [changed('h', 'src/a.ts'), changed('h', 'src/b.ts')], downstream: [impact('h')] }));
+    expect(sameName).not.toHaveProperty('symbols_without_callers');
+
+    // ... and the other way: the arrays subtract to 0, the route counted 3.
+    const counted = view(withTotals(3, { changed_symbols: [changed('a')], downstream: [impact('a')] }));
+    expect(counted.symbols_without_callers).toBe(3);
+  });
+
+  it('is not repeated inside totals, which keeps exactly the four numbers', () => {
+    const v = view(withTotals(2, { changed_symbols: [changed('a'), changed('b'), changed('c')], downstream: [impact('a')] }));
+
+    expect(Object.keys(v.totals as object)).toEqual(['symbols', 'callers', 'endpoints', 'crons']);
+    expect(v.totals).toEqual({ symbols: 3, callers: 1, endpoints: 0, crons: 0 });
   });
 });
 

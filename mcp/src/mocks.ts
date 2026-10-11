@@ -50,7 +50,7 @@ const emptyBlast = (): ApiBlastRadius => ({
   changed_symbols: [],
   downstream: [],
   summary: 'No symbols are declared in the changed files.',
-  totals: { symbols: 0, callers: 0, endpoints: 0, crons: 0 },
+  totals: { symbols: 0, callers: 0, endpoints: 0, crons: 0, symbols_without_callers: 0 },
   degraded: false,
   reason: null,
   indexed_sha: null,
