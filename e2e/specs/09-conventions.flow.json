@@ -13,6 +13,7 @@
     { "cmd": ["wait", "--text", "1 of 2 accepted"], "label": "one accepted" },
     { "cmd": ["find", "role", "button", "click", "--name", "Accept", "--exact"], "label": "accept the last candidate" },
     { "cmd": ["wait", "--text", "2 of 2 accepted"], "label": "both remaining candidates accepted" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "the save requests have finished before the reload" },
     { "cmd": ["reload"], "label": "reload the page" },
     { "cmd": ["wait", "--text", "2 of 2 accepted"], "label": "the decisions persisted on the server" },
     { "cmd": ["wait", "--text", "Show rejected (1)"], "label": "the rejected candidate stays hidden after a reload" },

@@ -33,6 +33,8 @@ A spec lives in `specs/NN-name.flow.json`:
   retries a `find` step for up to `E2E_FIND_WAIT` while its failure is "no element
   matched" (see `docs/runner-internals.md`). A `find` that matches several elements
   takes the first without an error, so pick a name only one element has.
+- Text on screen after a click can be an optimistic update. Before a `reload` that
+  checks the change was saved, add `wait --load networkidle`.
 - Locators are deterministic only (`--url`, `--text`, `find role|text|label`).
   We never use the AI `chat` command, so runs are stable and key-free.
 

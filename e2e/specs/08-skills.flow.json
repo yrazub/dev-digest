@@ -22,6 +22,7 @@
     { "cmd": ["wait", "--text", "2 of 7 enabled"], "label": "the new skill is listed next to the two seeded links, not linked" },
     { "cmd": ["find", "role", "checkbox", "click", "--name", "e2e-rule"], "label": "link the skill to the agent" },
     { "cmd": ["wait", "--text", "3 of 7 enabled"], "label": "the link is shown" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "the save request has finished before the reload" },
     { "cmd": ["reload"], "label": "reload the editor" },
     { "cmd": ["wait", "--text", "3 of 7 enabled"], "label": "the link persisted on the server" }
   ]
