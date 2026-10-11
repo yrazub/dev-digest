@@ -9,12 +9,12 @@
  * would replace a PR's `pr_files`. `changed_symbols` is compared as a set: the facade reads symbols
  * without `ORDER BY`.
  * Spec: `server/specs/L04-blast-radius.md`; degraded order: `specs/L04-blast-radius.md` (Q5);
- * plan: `specs/L04-blast-radius-plan.md` (phase 3).
+ * plan: `specs/L04-blast-radius-plan.md` (phases 3 and 4; phase 4 adds the seeded PR #482 describe).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import { count } from 'drizzle-orm';
+import { count, eq, and } from 'drizzle-orm';
 import { BlastRadius, BlastRadiusResponse } from '@devdigest/shared';
 import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
 import { buildApp } from '../src/app.js';
@@ -394,6 +394,150 @@ d('GET /pulls/:id/blast (Testcontainers pg)', () => {
     await get(full.prId, appFlagOff);
     await get('not-a-uuid');
     expect(await counts()).toEqual(before);
+  });
+
+  // ---- the seeded PR #482 (phase 4, Q3) -----------------------------------------------------------
+  // The map is read through the blast route and the index rows through the database only: never
+  // `GET /pulls/:id`, which would replace the seeded `pr_files` with the GitHub mock's. Expectations
+  // are those of `e2e/specs/seed-fixtures.md` ("PR #482 has a seeded repo-intel index").
+  describe('the seeded PR #482 (Q3)', () => {
+    const SEEDED_SHA = 'b1a57b1a57b1a57b1a57b1a57b1a57b1a57b1a57';
+    const HEALTH = 'src/api/public/health.ts';
+    const SERVER = 'src/server.ts';
+
+    const demoRepoId = async (): Promise<string> => {
+      const [repo] = await pg.handle.db.select().from(t.repos).where(eq(t.repos.fullName, 'acme/payments-api'));
+      return repo!.id;
+    };
+    const seededPrId = async (): Promise<string> => {
+      const [pr] = await pg.handle.db.select().from(t.pullRequests).where(eq(t.pullRequests.number, 482));
+      return pr!.id;
+    };
+    /** Row counts of the five index tables for the demo repo. */
+    async function indexCounts(repoId: string) {
+      const db = pg.handle.db;
+      const n = async (table: typeof t.symbols | typeof t.references | typeof t.fileRank | typeof t.fileFacts | typeof t.repoIndexState) =>
+        (await db.select({ c: count() }).from(table).where(eq(table.repoId, repoId)))[0]!.c;
+      return {
+        repoIndexState: await n(t.repoIndexState),
+        symbols: await n(t.symbols),
+        references: await n(t.references),
+        fileRank: await n(t.fileRank),
+        fileFacts: await n(t.fileFacts),
+      };
+    }
+    const SEEDED_COUNTS = { repoIndexState: 1, symbols: 7, references: 5, fileRank: 5, fileFacts: 4 };
+
+    it('answers the full map of the seeded index: 2 groups, 5 callers, 3 endpoints, 1 cron, not degraded', async () => {
+      const res = await get(await seededPrId());
+      expect(res.statusCode).toBe(200);
+      const json = res.json();
+      expect(BlastRadiusResponse.safeParse(json).success).toBe(true);
+      const b = json as BlastRadiusResponse;
+
+      expect(b.degraded).toBe(false);
+      expect(b.reason).toBeNull();
+      expect(b.indexed_sha).toBe(SEEDED_SHA);
+      expect(b.summary).toBe('4 changed symbols, 5 callers, 3 endpoints, 1 cron job.');
+      expect(b.totals).toEqual({ symbols: 4, callers: 5, endpoints: 3, crons: 1 });
+      expect(b.caller_limit).toBe(MAX_CALLERS_PER_SYMBOL);
+      expect(names(b)).toEqual(['bucketKey', 'publicRouter', 'rateLimit', 'webhookHandler']);
+
+      // rateLimit (top caller rank 0.09) before bucketKey (0.05); callers by rank; the self-reference
+      // at ratelimit.ts:41 is not seeded and no declaring-file caller appears (B5).
+      expect(b.downstream).toEqual([
+        {
+          symbol: 'rateLimit',
+          callers: [
+            { name: 'publicRouter', file: INDEX, line: 23 },
+            { name: 'webhookHandler', file: HOOKS, line: 45 },
+            { name: 'healthCheck', file: HEALTH, line: 11 },
+            { name: 'app', file: SERVER, line: 88 },
+          ],
+          endpoints_affected: ['GET /api/public/health', 'GET /api/public/items', 'POST /api/public/webhooks'],
+          crons_affected: [],
+        },
+        {
+          symbol: 'bucketKey',
+          callers: [{ name: 'resetBuckets', file: RESET, line: 8 }],
+          endpoints_affected: [],
+          crons_affected: ['reset-rate-buckets (hourly)'],
+        },
+      ]);
+    });
+
+    it('seeds exactly 1 repo_index_state, 7 symbols, 5 references, 5 file_rank and 4 file_facts rows for the demo repo', async () => {
+      const repoId = await demoRepoId();
+      expect(await indexCounts(repoId)).toEqual(SEEDED_COUNTS);
+      const [state] = await pg.handle.db.select().from(t.repoIndexState).where(eq(t.repoIndexState.repoId, repoId));
+      expect(state).toMatchObject({ status: 'full', lastIndexedSha: SEEDED_SHA, indexerVersion: INDEXER_VERSION });
+    });
+
+    it('adds no row when the seed runs again', async () => {
+      const repoId = await demoRepoId();
+      await seed(pg.handle.db);
+      expect(await indexCounts(repoId)).toEqual(SEEDED_COUNTS);
+    });
+
+    it('restores every index row after they are deleted, and the route answers the same map', async () => {
+      const db = pg.handle.db;
+      const repoId = await demoRepoId();
+      const prId = await seededPrId();
+      const before = await body(prId);
+
+      try {
+        await db.delete(t.repoIndexState).where(eq(t.repoIndexState.repoId, repoId));
+        await db.delete(t.symbols).where(eq(t.symbols.repoId, repoId));
+        await db.delete(t.references).where(eq(t.references.repoId, repoId));
+        await db.delete(t.fileRank).where(eq(t.fileRank.repoId, repoId));
+        await db.delete(t.fileFacts).where(eq(t.fileFacts.repoId, repoId));
+        expect(await indexCounts(repoId)).toEqual({ repoIndexState: 0, symbols: 0, references: 0, fileRank: 0, fileFacts: 0 });
+      } finally {
+        await seed(db);
+      }
+
+      expect(await indexCounts(repoId)).toEqual(SEEDED_COUNTS);
+      expect(await body(prId)).toEqual(before);
+    });
+
+    it('inserts only the reference that is missing: no duplicate of the four that exist', async () => {
+      const db = pg.handle.db;
+      const repoId = await demoRepoId();
+      try {
+        await db
+          .delete(t.references)
+          .where(and(eq(t.references.repoId, repoId), eq(t.references.fromPath, SERVER), eq(t.references.toSymbol, 'rateLimit')));
+        expect((await indexCounts(repoId)).references).toBe(4);
+      } finally {
+        await seed(db);
+      }
+      expect((await indexCounts(repoId)).references).toBe(5);
+      const rows = await db.select().from(t.references).where(and(eq(t.references.repoId, repoId), eq(t.references.fromPath, SERVER)));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ toSymbol: 'rateLimit', line: 88, declFile: LIMIT });
+    });
+
+    it('does not overwrite a repo_index_state row a test set to partial', async () => {
+      const db = pg.handle.db;
+      const repoId = await demoRepoId();
+      const prId = await seededPrId();
+      try {
+        await db.update(t.repoIndexState).set({ status: 'partial' }).where(eq(t.repoIndexState.repoId, repoId));
+        await seed(db);
+
+        const [state] = await db.select().from(t.repoIndexState).where(eq(t.repoIndexState.repoId, repoId));
+        expect(state!.status).toBe('partial');
+        // and the route reads the row as it stands
+        const b = await body(prId);
+        expect(b.degraded).toBe(true);
+        expect(b.reason).toBe('index_partial');
+      } finally {
+        await db.update(t.repoIndexState).set({ status: 'full' }).where(eq(t.repoIndexState.repoId, repoId));
+      }
+      const b = await body(prId);
+      expect(b.degraded).toBe(false);
+      expect(b.reason).toBeNull();
+    });
   });
 
   // Keep last: it asserts over every request the tests above made.
