@@ -52,6 +52,12 @@ describe("A5 Run Trace drawer (smoke)", () => {
     expect(screen.getByText("Tool calls")).toBeInTheDocument();
   });
 
+  it("shows a tool call's duration in a readable unit, not raw milliseconds", () => {
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+    expect(screen.getByText("1.2s")).toBeInTheDocument();
+    expect(screen.queryByText("1200ms")).not.toBeInTheDocument();
+  });
+
   it("shows the run cost in a COST tile between TOKENS and FINDINGS", () => {
     renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
     const labels = ["DURATION", "TOKENS", "COST", "FINDINGS"].map((l) => screen.getByText(l));

@@ -15,5 +15,6 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | [`L03-intent-layer.md`](L03-intent-layer.md) | `/repos/:repoId/pulls/:number` | implemented |
 | [`L03-smart-diff.md`](L03-smart-diff.md) | `/repos/:repoId/pulls/:number?tab=diff` | implemented |
 | [`architecture-refactor.md`](architecture-refactor.md) | all (C1: `src/lib/hooks`) | draft |
+| [`tool-call-duration.md`](tool-call-duration.md) | `/repos/:repoId/pulls/:number` (run trace drawer) | implemented |
 
 Browser-level acceptance for a finished screen belongs in [`../e2e/specs`](../../e2e/specs).
