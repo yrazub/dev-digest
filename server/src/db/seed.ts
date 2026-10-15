@@ -2,8 +2,9 @@ import 'dotenv/config';
 import { readFileSync } from 'node:fs';
 import { createDb, type Db } from './client.js';
 import * as t from './schema.js';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, inArray } from 'drizzle-orm';
 import { parseSkillMarkdown } from '../modules/skills/import/parse.js';
+import { INDEXER_VERSION } from '../modules/repo-intel/constants.js';
 import {
   GENERAL_REVIEWER_PROMPT,
   SECURITY_REVIEWER_PROMPT,
@@ -72,6 +73,47 @@ const SMART_DIFF_PATCHES: Record<string, string> = {
 };
 
 /**
+ * L04 Blast Radius fixture: the repo-intel index rows that make `GET /pulls/:id/blast` answer a
+ * full map for PR #482 with no clone on disk. `rateLimit` and `bucketKey` are declared in
+ * `src/middleware/ratelimit.ts` (a changed file); the other five symbols are the enclosing
+ * symbols of their callers. `publicRouter` and `webhookHandler` are declared in two more changed
+ * files, so the PR has 4 changed symbols; the declaring file's own line 41 is not a caller (B5).
+ * The values are the contract of `e2e/specs/seed-fixtures.md` and of flow `12`.
+ */
+const BLAST_INDEXED_SHA = 'b1a57b1a57b1a57b1a57b1a57b1a57b1a57b1a57';
+const BLAST_DECL_FILE = 'src/middleware/ratelimit.ts';
+const BLAST_SYMBOLS = [
+  { path: BLAST_DECL_FILE, name: 'rateLimit', line: 12 },
+  { path: BLAST_DECL_FILE, name: 'bucketKey', line: 38 },
+  { path: 'src/api/public/index.ts', name: 'publicRouter', line: 8 },
+  { path: 'src/api/public/webhooks.ts', name: 'webhookHandler', line: 30 },
+  { path: 'src/api/public/health.ts', name: 'healthCheck', line: 6 },
+  { path: 'src/server.ts', name: 'app', line: 10 },
+  { path: 'src/jobs/reset-buckets.ts', name: 'resetBuckets', line: 3 },
+];
+const BLAST_REFERENCES = [
+  { fromPath: 'src/api/public/index.ts', toSymbol: 'rateLimit', line: 23 },
+  { fromPath: 'src/api/public/webhooks.ts', toSymbol: 'rateLimit', line: 45 },
+  { fromPath: 'src/api/public/health.ts', toSymbol: 'rateLimit', line: 11 },
+  { fromPath: 'src/server.ts', toSymbol: 'rateLimit', line: 88 },
+  { fromPath: 'src/jobs/reset-buckets.ts', toSymbol: 'bucketKey', line: 8 },
+];
+/** Distinct ranks fix the caller order: index.ts first, reset-buckets.ts last. */
+const BLAST_FILE_RANKS = [
+  { filePath: 'src/api/public/index.ts', rank: 0.09, percentile: 99 },
+  { filePath: 'src/api/public/webhooks.ts', rank: 0.08, percentile: 95 },
+  { filePath: 'src/api/public/health.ts', rank: 0.07, percentile: 90 },
+  { filePath: 'src/server.ts', rank: 0.06, percentile: 85 },
+  { filePath: 'src/jobs/reset-buckets.ts', rank: 0.05, percentile: 80 },
+];
+const BLAST_FILE_FACTS = [
+  { filePath: 'src/api/public/index.ts', endpoints: ['GET /api/public/items'], crons: [] as string[] },
+  { filePath: 'src/api/public/webhooks.ts', endpoints: ['POST /api/public/webhooks'], crons: [] as string[] },
+  { filePath: 'src/api/public/health.ts', endpoints: ['GET /api/public/health'], crons: [] as string[] },
+  { filePath: 'src/jobs/reset-buckets.ts', endpoints: [] as string[], crons: ['reset-rate-buckets (hourly)'] },
+];
+
+/**
  * Seed the starter's demo data. Idempotent: re-running upserts the default
  * workspace/user and the demo fixtures.
  *
@@ -84,6 +126,10 @@ const SMART_DIFF_PATCHES: Record<string, string> = {
  * `src/api/public/index.ts`, `tsconfig.json`, `README.md` and `package-lock.json`, so the
  * smart-diff view shows all five roles, and patches on `src/config.ts` and `src/api/users.ts`
  * for the anchored finding lines.
+ *
+ * L04 adds, for the demo repo, the repo-intel index rows (`repo_index_state`, `symbols`,
+ * `references`, `file_rank`, `file_facts`) that give PR #482 a full blast-radius map with no
+ * clone on disk; they sit outside `if (!pr)` and never delete or overwrite a row.
  *
  * L02 adds the Test Quality and API Contract Reviewer agents, their six skills
  * from docs/skills/ (linked in order), and three pending convention candidates
@@ -320,6 +366,52 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       sourceHash: null,
       model: 'seed',
     })
+    .onConflictDoNothing();
+
+  // ---- PR #482's repo-intel index rows (L04 Blast Radius) ----
+  // Outside `if (!pr)` for the same reason as the intent row. `repo_index_state`, `symbols`,
+  // `file_rank` and `file_facts` have a primary or unique key, so `onConflictDoNothing()` keeps
+  // a re-seed a no-op. `references` has no unique index: insert only the rows whose
+  // (from_path, to_symbol, line) is missing. Never delete and never overwrite a row, so an
+  // index state a test or the indexer changed is left alone.
+  await db
+    .insert(t.repoIndexState)
+    .values({
+      repoId,
+      lastIndexedSha: BLAST_INDEXED_SHA,
+      indexerVersion: INDEXER_VERSION,
+      status: 'full',
+    })
+    .onConflictDoNothing();
+  await db
+    .insert(t.symbols)
+    .values(BLAST_SYMBOLS.map((s) => ({ repoId, kind: 'function', ...s })))
+    .onConflictDoNothing();
+  const existingRefs = await db
+    .select({ fromPath: t.references.fromPath, toSymbol: t.references.toSymbol, line: t.references.line })
+    .from(t.references)
+    .where(
+      and(
+        eq(t.references.repoId, repoId),
+        inArray(t.references.fromPath, BLAST_REFERENCES.map((r) => r.fromPath)),
+      ),
+    );
+  const existingRefKeys = new Set(existingRefs.map((r) => `${r.fromPath}|${r.toSymbol}|${r.line}`));
+  const missingRefs = BLAST_REFERENCES.filter(
+    (r) => !existingRefKeys.has(`${r.fromPath}|${r.toSymbol}|${r.line}`),
+  );
+  if (missingRefs.length > 0) {
+    await db
+      .insert(t.references)
+      .values(missingRefs.map((r) => ({ repoId, declFile: BLAST_DECL_FILE, ...r })));
+  }
+  await db
+    .insert(t.fileRank)
+    .values(BLAST_FILE_RANKS.map((r) => ({ repoId, hotness: 0, pagerank: r.rank, ...r })))
+    .onConflictDoNothing();
+  await db
+    .insert(t.fileFacts)
+    .values(BLAST_FILE_FACTS.map((f) => ({ repoId, ...f })))
     .onConflictDoNothing();
 
   // ---- built-in agents (the three starter presets + L02's Test Quality and API Contract Reviewers) ----

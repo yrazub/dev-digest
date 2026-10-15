@@ -1,21 +1,22 @@
 import { z } from 'zod';
-import { acceptNumericString, ToolFailure, type ToolDef } from '../tool.js';
+import { toBlastView } from '../blast-view.js';
+import { resolvePull } from '../resolve.js';
+import { acceptNumericString, type ToolDef } from '../tool.js';
 
 const inputShape = {
   repo: z.string().describe('owner/name'),
   pr: acceptNumericString(z.number().int().min(1)).describe('pull request number'),
 };
 
-// An honest stub: no lookup, no API call, nothing that could be mistaken for data.
 export const getBlastRadius: ToolDef<typeof inputShape> = {
   name: 'get_blast_radius',
   description:
-    'Impact map of a pull request: the symbols and callers its changes reach. Not implemented yet: always returns an error, never data. Do not estimate the result.',
+    'Impact map of a pull request: the symbols declared in its changed files, who calls them (file:line) and the HTTP endpoints and cron jobs in those callers. Call it to see what a change can break. Reads a ready index; no LLM call.',
   inputShape,
   annotations: { readOnlyHint: true },
-  async run() {
-    throw new ToolFailure(
-      'get_blast_radius is not implemented yet in this DevDigest build: no impact data exists. Do not estimate or invent it; tell the user it is unavailable. get_findings still returns the review findings of the pull request.',
-    );
+  async run(args, deps) {
+    const { repo, pull } = await resolvePull(deps.api, args.repo, args.pr);
+    const blast = await deps.api.getBlastRadius(pull.id);
+    return toBlastView({ repo: repo.full_name, pr: pull.number, blast });
   },
 };

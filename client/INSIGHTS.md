@@ -46,6 +46,18 @@ Traps we have already hit in the web app. Append-only. See the root
   A test with `{ data: undefined, isError: true }` alone does not cover it.
 
 
+- **2026-10-11** — when a component starts reading the URL or the query client, every existing
+  test that renders it needs the matching setup, and the failure names the cause: `invariant
+  expected app router to be mounted` → `vi.mock("next/navigation")` with one stable `router`
+  object and a mutable search value; `No QueryClient set` → a `QueryClientProvider`. A test that
+  mocks a hooks module which also exports key factories must spread `vi.importActual` and
+  override only the hook, or the component's `blastKeys` import is undefined
+  (`src/app/repos/[repoId]/pulls/[number]/_components/BlastRadiusCard/BlastRadiusCard.test.tsx`).
+- **2026-10-11** — a wait that counts polled answers reads the query's `dataUpdatedAt` and
+  `errorUpdatedAt`, so a failing request still ends the wait; a mocked query without
+  `errorUpdatedAt` turns `Math.max` into `NaN` and the wait silently never starts
+  (`useResyncWait` in `.../BlastRadiusCard/_components/DegradedNote/use-resync-wait.ts`).
+
 ## Tool & Library Notes
 
 - **2026-09-27** — the web app has **no linter at all**: no `lint` script, no `eslint` /
@@ -152,3 +164,4 @@ function identity a component depends on; the original code is in commit `54e2b1
 - **2026-10-01** — L02 Conventions page, candidate cards and the Create-skill-from-conventions modal.
 - **2026-10-05** — L03 Intent card, `usePrIntent` / `useRegenerateIntent`, the out-of-scope badge and the trace count; a stale `.next/types` blocked the first baseline.
 - **2026-10-07** — L03 Smart Diff: findings inside `diff-viewer` behind an optional prop, the grouped Files changed tab, the run-settled refresh hook; review fix for the double body. Plan: `specs/L03-smart-diff-plan.md` (revision 2).
+- **2026-10-11** — L04 Blast radius block on the PR Overview tab: tree and graph views, the degraded note with Resync (`useResyncWait`), `useBlastRadius`; entries above.

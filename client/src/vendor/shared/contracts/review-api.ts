@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { Finding, Verdict } from './findings.js';
-import { Intent, IntentConfidence, IntentRiskArea, IntentSource, SmartDiff } from './brief.js';
+import {
+  BlastRadius,
+  Intent,
+  IntentConfidence,
+  IntentRiskArea,
+  IntentSource,
+  SmartDiff,
+} from './brief.js';
 
 /**
  * A2 — Review-Core API surface contracts. These extend the core
@@ -78,3 +85,34 @@ export type PrIntentResponse = z.infer<typeof PrIntentResponse>;
 /** Smart-diff response for a PR (the SmartDiff). */
 export const SmartDiffResponse = SmartDiff;
 export type SmartDiffResponse = z.infer<typeof SmartDiffResponse>;
+
+/** Why a blast-radius map may be incomplete; the first five are the repo-intel facade's reasons. */
+export const BlastDegradedReason = z.enum([
+  'flag_off',
+  'index_failed',
+  'index_partial',
+  'repo_too_large',
+  'no_data',
+  'pr_files_missing',
+]);
+export type BlastDegradedReason = z.infer<typeof BlastDegradedReason>;
+
+/** Counts over the whole map, stated before any list is cut. */
+export const BlastTotals = z.object({
+  symbols: z.number().int().nonnegative(),
+  callers: z.number().int().nonnegative(),
+  endpoints: z.number().int().nonnegative(),
+  crons: z.number().int().nonnegative(),
+  symbols_without_callers: z.number().int().nonnegative(),
+});
+export type BlastTotals = z.infer<typeof BlastTotals>;
+
+/** Response of `GET /pulls/:id/blast`. */
+export const BlastRadiusResponse = BlastRadius.extend({
+  totals: BlastTotals,
+  degraded: z.boolean(),
+  reason: BlastDegradedReason.nullable(), // null exactly when degraded is false
+  indexed_sha: z.string().nullable(), // the commit the line numbers refer to
+  caller_limit: z.number().int().positive(),
+});
+export type BlastRadiusResponse = z.infer<typeof BlastRadiusResponse>;

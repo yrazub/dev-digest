@@ -8,6 +8,8 @@ import {
   FEATURE_MODELS,
   PromptAssembly,
   BlastRadius,
+  BlastRadiusResponse,
+  BlastDegradedReason,
   Risks,
   PrHistory,
   SmartDiff,
@@ -579,5 +581,92 @@ describe('L03 intent layer contracts', () => {
     const entry = FEATURE_MODELS.find((m) => m.id === 'review_intent');
     expect(entry?.defaultProvider).toBe('openrouter');
     expect(entry?.defaultModel).toBe('deepseek/deepseek-v4-flash');
+  });
+});
+
+describe('L04 blast radius contracts', () => {
+  const core = {
+    changed_symbols: [{ name: 'rateLimit', file: 'src/rate-limit.ts', kind: 'function' }],
+    downstream: [
+      {
+        symbol: 'rateLimit',
+        callers: [{ name: 'publicRouter', file: 'src/router.ts', line: 23 }],
+        endpoints_affected: ['GET /webhooks'],
+        crons_affected: ['nightly-sync'],
+      },
+    ],
+    summary: '1 symbol changed; 1 caller, 1 endpoint, 1 cron.',
+  };
+  const body = {
+    ...core,
+    totals: { symbols: 1, callers: 1, endpoints: 1, crons: 1, symbols_without_callers: 0 },
+    degraded: false,
+    reason: null,
+    indexed_sha: 'abc1234',
+    caller_limit: 20,
+  };
+
+  it('BlastRadiusResponse parses a full body, and the same body parses as BlastRadius (B2)', () => {
+    const parsed = BlastRadiusResponse.parse(body);
+    expect(parsed.totals).toEqual(body.totals);
+    expect(parsed.caller_limit).toBe(20);
+    expect(BlastRadius.parse(body)).toEqual(core);
+  });
+
+  it('BlastDegradedReason has the six values in spec order', () => {
+    expect(BlastDegradedReason.options).toEqual([
+      'flag_off',
+      'index_failed',
+      'index_partial',
+      'repo_too_large',
+      'no_data',
+      'pr_files_missing',
+    ]);
+  });
+
+  it('accepts every reason on a degraded body', () => {
+    for (const reason of BlastDegradedReason.options) {
+      expect(BlastRadiusResponse.parse({ ...body, degraded: true, reason }).reason).toBe(reason);
+    }
+  });
+
+  it('rejects an unknown reason', () => {
+    expect(BlastRadiusResponse.safeParse({ ...body, degraded: true, reason: 'timeout' }).success).toBe(false);
+    expect(BlastDegradedReason.safeParse('timeout').success).toBe(false);
+  });
+
+  it('keeps reason null and indexed_sha null (unknown, never an empty string)', () => {
+    const parsed = BlastRadiusResponse.parse({ ...body, reason: null, indexed_sha: null });
+    expect(parsed.reason).toBeNull();
+    expect(parsed.indexed_sha).toBeNull();
+  });
+
+  it.each(['reason', 'indexed_sha', 'degraded', 'caller_limit', 'totals'])('requires `%s`', (key) => {
+    const { [key]: _dropped, ...rest } = body as Record<string, unknown>;
+    expect(BlastRadiusResponse.safeParse(rest).success).toBe(false);
+  });
+
+  it('rejects caller_limit 0 and a fractional caller_limit', () => {
+    expect(BlastRadiusResponse.safeParse({ ...body, caller_limit: 0 }).success).toBe(false);
+    expect(BlastRadiusResponse.safeParse({ ...body, caller_limit: 2.5 }).success).toBe(false);
+  });
+
+  it.each(['symbols', 'callers', 'endpoints', 'crons', 'symbols_without_callers'])('rejects a negative or fractional total.%s', (key) => {
+    expect(
+      BlastRadiusResponse.safeParse({ ...body, totals: { ...body.totals, [key]: -1 } }).success,
+    ).toBe(false);
+    expect(
+      BlastRadiusResponse.safeParse({ ...body, totals: { ...body.totals, [key]: 1.5 } }).success,
+    ).toBe(false);
+  });
+
+  it('rejects a body whose totals lack symbols_without_callers', () => {
+    const { symbols_without_callers: _dropped, ...fourNumbers } = body.totals;
+    expect(BlastRadiusResponse.safeParse({ ...body, totals: fourNumbers }).success).toBe(false);
+  });
+
+  it('accepts zero totals (an empty map)', () => {
+    const empty = { symbols: 0, callers: 0, endpoints: 0, crons: 0, symbols_without_callers: 0 };
+    expect(BlastRadiusResponse.parse({ ...body, totals: empty }).totals).toEqual(empty);
   });
 });

@@ -53,6 +53,10 @@ Anything that should survive a reload or a shared link lives in the URL, set wit
   with no role headers. Smart order is the default and has no parameter: choosing it deletes
   `order`. `DiffTab` reads it with `useSearchParams()` and writes it with `router.replace`,
   keeping every other parameter (`tab=diff` stays).
+- The Blast radius view on the Overview tab: `?blast=graph` shows the Graph view. The Tree view is the
+  default and has no parameter: choosing it deletes `blast`, and any other value reads as the Tree.
+  `BlastRadiusCard` reads it with `useSearchParams()` and writes it with `router.replace`, keeping every
+  other parameter; a reload keeps the view.
 - The Run Trace drawer: `?trace=<runId>`.
 - PR list filters and sort: `?status=…&sort=…`.
 
@@ -73,6 +77,11 @@ where the finding card lives: the Files changed route passes a `DiffFindingApi`
 and without that prop the viewer renders as it did before (the skills route uses it that way). The
 viewer exports `isCounted` and `mostSevere` so the route's group marks count a finding the same
 way the file dot and the line tag do.
+
+A rule two routes share, and that has no UI, goes to a pure file in `src/lib/` rather than into either
+route's `_components/`: `resyncSettled` (`src/lib/repo-intel-resync.ts`) decides when a resync has
+finished for both the Conventions `IndexStatus` and the Blast radius note, and it is a file of its own
+so that component tests that replace `hooks/repo-intel.ts` wholesale still reach it.
 
 One exception today: `FindingsPopover` lives under `app/repos/[repoId]/pulls/_components/` but is
 used by both the PR list and the PR detail Timeline. If a third screen needs it, move it to

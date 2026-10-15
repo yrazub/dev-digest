@@ -4,12 +4,14 @@ import { MockDevDigestApi, type MockDevDigestApiOptions, type MockDevDigestApiSt
 import {
   ApiError,
   type ApiAgent,
+  type ApiBlastRadius,
   type ApiConvention,
   type ApiFinding,
   type ApiReview,
   type ApiRun,
 } from '../src/ports.js';
 import { executeTool, type ToolDef, type ToolDeps } from '../src/tool.js';
+import { getBlastRadius } from '../src/tools/get-blast-radius.js';
 import { getConventions } from '../src/tools/get-conventions.js';
 import { getFindings } from '../src/tools/get-findings.js';
 import { listAgents } from '../src/tools/list-agents.js';
@@ -859,5 +861,185 @@ describe('L3 — the read tools never start or wait on a run', () => {
     expect(api.calls.map((c) => c.method)).toEqual(['listRepos', 'listPulls', 'listReviews']);
     expect(api.calls[1]?.args).toEqual([REPO.id]);
     expect(api.calls[2]?.args).toEqual([PR.id]);
+  });
+});
+
+function blastMap(over: Partial<ApiBlastRadius> = {}): ApiBlastRadius {
+  return {
+    changed_symbols: [
+      { name: 'rateLimit', file: 'src/middleware/ratelimit.ts', kind: 'function' },
+      { name: 'unused', file: 'src/util.ts', kind: 'function' },
+    ],
+    downstream: [
+      {
+        symbol: 'rateLimit',
+        callers: [
+          { name: 'publicRouter', file: 'src/api/public/index.ts', line: 23 },
+          { name: 'app', file: 'src/server.ts', line: 88 },
+        ],
+        endpoints_affected: ['GET /api/public/items'],
+        crons_affected: [],
+      },
+    ],
+    summary: '2 changed symbols, 2 callers, 1 endpoint, 0 cron jobs.',
+    totals: { symbols: 2, callers: 2, endpoints: 1, crons: 0, symbols_without_callers: 1 },
+    degraded: false,
+    reason: null,
+    indexed_sha: 'abc123',
+    caller_limit: 20,
+    ...over,
+  };
+}
+
+describe('get_blast_radius', () => {
+  const blastDef = asDef(getBlastRadius);
+  const args = { repo: 'acme/payments-api', pr: 482 };
+  const seeded = () => withPr({ blast: { [PR.id]: blastMap() } });
+  const methods = (api: MockDevDigestApi) => api.calls.map((c) => c.method);
+
+  it('makes exactly listRepos, listPulls and getBlastRadius, and returns the compact map, not an error', async () => {
+    const { api, text, isError } = await call(blastDef, args, seeded());
+
+    expect(isError).toBe(false);
+    expect(methods(api)).toEqual(['listRepos', 'listPulls', 'getBlastRadius']);
+    expect(api.calls[1]?.args).toEqual([REPO.id]);
+    expect(api.calls[2]?.args).toEqual([PR.id]);
+    expect(json(text)).toEqual({
+      repo: 'acme/payments-api',
+      pr: 482,
+      summary: '2 changed symbols, 2 callers, 1 endpoint, 0 cron jobs.',
+      totals: { symbols: 2, callers: 2, endpoints: 1, crons: 0 },
+      impact: [
+        {
+          symbol: 'rateLimit',
+          declared_in: 'src/middleware/ratelimit.ts',
+          callers: ['src/api/public/index.ts:23 publicRouter', 'src/server.ts:88 app'],
+          endpoints: ['GET /api/public/items'],
+          crons: [],
+        },
+      ],
+      symbols_without_callers: 1,
+    });
+    expectNoWrite(api);
+  });
+
+  it('accepts pr "482" as a numeric string and answers the same as 482, with the number in the view', async () => {
+    const viaString = await call(blastDef, { repo: 'acme/payments-api', pr: '482' }, seeded());
+    const viaNumber = await call(blastDef, args, seeded());
+
+    expect(viaString.isError).toBe(false);
+    expect(viaString.text).toBe(viaNumber.text);
+    expect(json(viaString.text).pr).toBe(482);
+    expect(methods(viaString.api)).toEqual(['listRepos', 'listPulls', 'getBlastRadius']);
+  });
+
+  it('an unknown repository returns E-REPO-UNKNOWN and makes no getBlastRadius call', async () => {
+    const { api, text, isError } = await call(blastDef, { repo: 'acme/missing', pr: 482 }, seeded());
+
+    expect(isError).toBe(true);
+    expect(text).toContain('Repository "acme/missing" is not imported into DevDigest.');
+    expect(text).toContain('Imported repositories: acme/payments-api');
+    expect(text).toContain('add the repository in the DevDigest UI');
+    expect(methods(api)).toEqual(['listRepos']);
+  });
+
+  it('an unknown pull request returns E-PR-UNKNOWN with its next step and makes no getBlastRadius call', async () => {
+    const { api, text, isError } = await call(blastDef, { repo: 'acme/payments-api', pr: 9999 }, seeded());
+
+    expect(isError).toBe(true);
+    expect(text).toContain('Pull request #9999 is not imported for acme/payments-api.');
+    expect(text).toContain('Imported pull requests: #482.');
+    expect(text).toContain('open acme/payments-api in the DevDigest UI');
+    expect(methods(api)).toEqual(['listRepos', 'listPulls']);
+  });
+
+  it('a malformed repo returns E-REPO-FORMAT and makes no call at all', async () => {
+    const { api, text, isError } = await call(blastDef, { repo: 'payments-api', pr: 482 }, seeded());
+
+    expect(isError).toBe(true);
+    expect(text).toContain('repo must be "owner/name"');
+    expect(api.calls).toEqual([]);
+  });
+
+  it.each([
+    [
+      'unreachable',
+      new ApiError('unreachable', 'GET /pulls/:id/blast'),
+      ['not reachable at http://127.0.0.1:3001', './scripts/dev.sh'],
+    ],
+    [
+      'timeout',
+      new ApiError('timeout', 'GET /pulls/:id/blast'),
+      ['GET /pulls/:id/blast', 'within 30 seconds', 'http://127.0.0.1:3001/health'],
+    ],
+    [
+      'invalid_response',
+      new ApiError('invalid_response', 'GET /pulls/:id/blast'),
+      ['unexpected response for GET /pulls/:id/blast', 'restart the API with ./scripts/dev.sh'],
+    ],
+    [
+      'a 429',
+      new ApiError('http', 'GET /pulls/:id/blast', 429, 'internal_error', 'Rate limit exceeded'),
+      ['rate limit', 'GET /pulls/:id/blast', 'Wait 60 seconds'],
+    ],
+    [
+      'a 500',
+      new ApiError('http', 'GET /pulls/:id/blast', 500, 'internal_error', 'relation "pr_files" does not exist'),
+      ['answered 500 internal_error for GET /pulls/:id/blast', 'relation "pr_files" does not exist', 'cd server && pnpm db:migrate'],
+    ],
+    [
+      'a 404 from the blast route after a successful lookup (E-API-HTTP)',
+      new ApiError('http', 'GET /pulls/:id/blast', 404, 'not_found', 'Pull request not found'),
+      ['answered 404 not_found for GET /pulls/:id/blast: Pull request not found.'],
+    ],
+  ])('an ApiError of kind %s from the blast route maps to its catalogue text', async (_kind, failure, expected) => {
+    const { api, text, isError } = await call(blastDef, args, seeded(), { fail: { getBlastRadius: failure } });
+
+    expect(isError).toBe(true);
+    for (const part of expected) expect(text).toContain(part);
+    expect(methods(api)).toEqual(['listRepos', 'listPulls', 'getBlastRadius']);
+    expectNoWrite(api);
+  });
+
+  it('an unreachable API at the first lookup is the same E-API-UNREACHABLE, and no blast request is made', async () => {
+    const { api, text, isError } = await call(blastDef, args, seeded(), { fail: { listRepos: new ApiError('unreachable', 'GET /repos') } });
+
+    expect(isError).toBe(true);
+    expect(text).toContain('not reachable at http://127.0.0.1:3001');
+    expect(methods(api)).not.toContain('getBlastRadius');
+  });
+
+  it('an empty map is a normal result with a note, never an error (D11)', async () => {
+    const { text, isError } = await call(blastDef, args, withPr());
+
+    expect(isError).toBe(false);
+    expect(json(text).impact).toEqual([]);
+    expect(json(text).note).toBe('No symbols are declared in the changed files of acme/payments-api#482, so there is nothing to map.');
+    expect(json(text)).not.toHaveProperty('degraded');
+  });
+
+  it('a degraded map is a normal result with degraded, reason and a note that names the next step (D11)', async () => {
+    const degraded = blastMap({ degraded: true, reason: 'index_partial' });
+
+    const { text, isError } = await call(blastDef, args, withPr({ blast: { [PR.id]: degraded } }));
+
+    expect(isError).toBe(false);
+    const view = json(text);
+    expect(view.degraded).toBe(true);
+    expect(view.reason).toBe('index_partial');
+    expect(view.note).toContain('Resync the repository in DevDigest');
+    expect(view.impact).toHaveLength(1);
+  });
+
+  it('masks a token-like string that came from the repository index', async () => {
+    const token = 'ghp_abcdefghijklmnop1234';
+    const leaky = blastMap({
+      downstream: [{ symbol: 'rateLimit', callers: [{ name: 'app', file: `src/${token}.ts`, line: 1 }], endpoints_affected: [], crons_affected: [] }],
+    });
+
+    const { text } = await call(blastDef, args, withPr({ blast: { [PR.id]: leaky } }));
+
+    expect(text).not.toContain(token);
+    expect(json(text).impact[0].callers).toEqual(['src/***.ts:1 app']);
   });
 });

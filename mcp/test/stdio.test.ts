@@ -66,16 +66,13 @@ describe('devdigest-mcp over stdio, started as .mcp.json starts it', () => {
     expect(schema.additionalProperties).toBe(false);
   });
 
-  it('answers tools/call get_blast_radius with isError and "not implemented"', async () => {
-    const result = await server.client.callTool({ name: 'get_blast_radius', arguments: { repo: 'acme/payments-api', pr: 7 } });
+  it('lists get_blast_radius with the description the mcp spec fixes, and the instructions point at it (B8)', async () => {
+    const { tools } = await server.client.listTools();
 
-    expect(result.isError).toBe(true);
-    const content = result.content as Array<{ type: string; text: string }>;
-    expect(content).toHaveLength(1);
-    expect(content[0]?.type).toBe('text');
-    expect(content[0]?.text).toContain('not implemented');
-    expect(content[0]?.text).toContain('Do not estimate or invent it');
-    expect(result).not.toHaveProperty('structuredContent');
+    expect(tools.find((t) => t.name === 'get_blast_radius')?.description).toBe(
+      'Impact map of a pull request: the symbols declared in its changed files, who calls them (file:line) and the HTTP endpoints and cron jobs in those callers. Call it to see what a change can break. Reads a ready index; no LLM call.',
+    );
+    expect(server.client.getInstructions()).toContain("For what a PR's changes can reach, call get_blast_radius.");
   });
 
   it('answers an invalid call with isError and the tool name, not with data and not by crashing', async () => {
@@ -315,6 +312,39 @@ describe('shutdown', () => {
   });
 });
 
+const STUB_REPO = {
+  id: 'repo-1',
+  workspace_id: 'ws-1',
+  owner: 'acme',
+  name: 'payments-api',
+  full_name: 'acme/payments-api',
+  default_branch: 'main',
+  clone_path: '/some/where',
+  last_polled_at: null,
+  created_by: null,
+};
+
+const STUB_BLAST = {
+  changed_symbols: [
+    { name: 'rateLimit', file: 'src/middleware/ratelimit.ts', kind: 'function' },
+    { name: 'unused', file: 'src/util.ts', kind: 'function' },
+  ],
+  downstream: [
+    {
+      symbol: 'rateLimit',
+      callers: [{ name: 'publicRouter', file: 'src/api/public/index.ts', line: 23 }],
+      endpoints_affected: ['GET /api/public/items'],
+      crons_affected: [],
+    },
+  ],
+  summary: '2 changed symbols, 1 caller, 1 endpoint, 0 cron jobs.',
+  totals: { symbols: 2, callers: 1, endpoints: 1, crons: 0, symbols_without_callers: 1 },
+  degraded: false,
+  reason: null,
+  indexed_sha: 'abc123',
+  caller_limit: 20,
+};
+
 describe('devdigest-mcp over stdio against a local API stub', () => {
   const SYSTEM_PROMPT = `You are a ruthless reviewer. ${'X'.repeat(5_000)}`;
   const requests: Array<{ method?: string; url?: string }> = [];
@@ -347,6 +377,21 @@ describe('devdigest-mcp over stdio against a local API stub', () => {
             agent('agent-general', 'General Reviewer'),
           ]),
         );
+        return;
+      }
+      if (req.method === 'GET' && req.url === '/repos') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify([STUB_REPO]));
+        return;
+      }
+      if (req.method === 'GET' && req.url === '/repos/repo-1/pulls') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify([{ id: 'pr-482', number: 482, title: 'Add rate limiting', author: 'sam', status: 'open' }]));
+        return;
+      }
+      if (req.method === 'GET' && req.url === '/pulls/pr-482/blast') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(STUB_BLAST));
         return;
       }
       res.writeHead(404, { 'content-type': 'application/json' });
@@ -388,13 +433,47 @@ describe('devdigest-mcp over stdio against a local API stub', () => {
     expect(requests.map((r) => r.url)).toContain('/agents');
   });
 
-  it('answers a repository the stub does not know with isError (the API said 404), not by crashing', async () => {
+  it('answers tools/call get_blast_radius with the compact map and no error, after three GETs and no write', async () => {
+    requests.length = 0;
+
+    const result = await server.client.callTool({ name: 'get_blast_radius', arguments: { repo: 'acme/payments-api', pr: 482 } });
+
+    expect(result.isError).toBeUndefined();
+    expect(result).not.toHaveProperty('structuredContent');
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content).toHaveLength(1);
+    expect(content[0]?.type).toBe('text');
+    const view = JSON.parse(content[0]?.text ?? 'null') as Record<string, unknown>;
+    expect(view).toEqual({
+      repo: 'acme/payments-api',
+      pr: 482,
+      summary: '2 changed symbols, 1 caller, 1 endpoint, 0 cron jobs.',
+      totals: { symbols: 2, callers: 1, endpoints: 1, crons: 0 },
+      impact: [
+        {
+          symbol: 'rateLimit',
+          declared_in: 'src/middleware/ratelimit.ts',
+          callers: ['src/api/public/index.ts:23 publicRouter'],
+          endpoints: ['GET /api/public/items'],
+          crons: [],
+        },
+      ],
+      symbols_without_callers: 1,
+    });
+    expect(requests.map((r) => `${r.method} ${r.url}`)).toEqual([
+      'GET /repos',
+      'GET /repos/repo-1/pulls',
+      'GET /pulls/pr-482/blast',
+    ]);
+  });
+
+  it('answers a route the stub does not serve with isError (the API said 404), not by crashing', async () => {
     const result = await server.client.callTool({ name: 'get_conventions', arguments: { repo: 'acme/payments-api' } });
 
     expect(result.isError).toBe(true);
     const text = (result.content as Array<{ text: string }>)[0]?.text ?? '';
     expect(text).toContain('The DevDigest API answered 404');
-    expect(text).toContain('GET /repos');
+    expect(text).toContain('GET /repos/:id/conventions');
     expect(isAlive(server.pid)).toBe(true);
     expect(requests.every((r) => r.method === 'GET')).toBe(true);
   });

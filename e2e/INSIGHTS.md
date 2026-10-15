@@ -97,6 +97,10 @@ compiled pages.
 `rm -rf client/.next`, and `pnpm dev` again. Better, stop the dev server before running the
 hermetic suite. A lasting fix would give the hermetic web its own build dir (a `distDir` set from
 an env var in `next.config`), which has not been done.
+**Extended 2026-10-11:** the suite also runs from a separate git worktree, which leaves the dev
+server's `client/.next` alone: `git worktree add --detach <dir> HEAD`, install in `server`,
+`client`, `reviewer-core` and `e2e` there, then `cd <dir>/e2e && npm run e2e:hermetic`. Four runs
+in one session gave 12/12 with the dev stack up on :3000/:3001 throughout.
 **Evidence:** `../scripts/e2e.sh:146-148` — `(cd client && pnpm exec next dev -p "$WEB_PORT")`, no
 separate dist dir. **See also:** `../client/INSIGHTS.md` — the same shared-`.next` clobbering by
 `next build`.
@@ -135,3 +139,4 @@ screen proves the optimistic update, not the save.
 - **2026-10-02** — recorded the HW2 demo video with `agent-browser record` + `ffmpeg-static` and burned-in SRT subtitles; noted the ffmpeg, viewport and `fill ''` quirks.
 - **2026-10-07** — added `11-pr-smart-diff` (grouped Files changed tab on the nine seeded files); hermetic run 11/11 with the dev stack stopped first.
 - **2026-10-11** — fixed the PR #16 `e2e web` failure: pinned agent-browser and its path in the workflow, added the `find` retry and failure output to the runner, and made `08`/`09` wait for the save before reloading.
+- **2026-10-11** — added `12-pr-blast-radius` (the seeded Blast radius block and the Graph round trip); hermetic run 12/12 from a separate worktree.

@@ -359,6 +359,10 @@ scalar or an enum. Only `repo`, `pr`, `agent` and `run_id` carry a description.
 
 ### 5. `get_blast_radius` — stub (`readOnlyHint: true`)
 
+> **Replaced (2026-10-11).** The stub below is history. The working tool, its ninth API route,
+> its result and its notes are specified in [`L04-blast-radius.md`](L04-blast-radius.md); E-BLAST
+> no longer exists.
+
 - Description: `Impact map of a pull request: the symbols and callers its changes reach. Not implemented yet: always returns an error, never data. Do not estimate the result.`
 - Input: `repo`, `pr` (required, as above) — the signature the homework will keep.
 - Output: always `isError: true` with E-BLAST. No API call, no lookup.

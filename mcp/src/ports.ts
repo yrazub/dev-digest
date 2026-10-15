@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   Agent,
+  BlastRadiusResponse,
   ConventionCandidate,
   ConventionList,
   FindingRecord,
@@ -72,6 +73,10 @@ export type ApiConvention = z.infer<typeof ApiConvention>;
 export const ApiConventionList = ConventionList.extend({ candidates: z.array(ApiConvention) });
 export type ApiConventionList = z.infer<typeof ApiConventionList>;
 
+// Every field of the blast-radius map is read, so the shared contract is used whole.
+export const ApiBlastRadius = BlastRadiusResponse;
+export type ApiBlastRadius = z.infer<typeof ApiBlastRadius>;
+
 // ---- Errors ----
 
 export type ApiErrorKind = 'unreachable' | 'timeout' | 'http' | 'invalid_response';
@@ -101,6 +106,7 @@ export interface DevDigestApi {
   /** Newest first. */
   listReviews(prId: string): Promise<ApiReview[]>;
   getConventions(repoId: string): Promise<ApiConventionList>;
+  getBlastRadius(prId: string): Promise<ApiBlastRadius>;
   /** Body `{ agentId }`. */
   startReview(prId: string, agentId: string): Promise<{ run_id: string }>;
   /** Waits on the run's SSE stream. Never throws. */
@@ -111,7 +117,7 @@ export interface DevDigestApi {
 }
 
 /**
- * The allow-list: everything this process can ask the API for. Seven reads and one write.
+ * The allow-list: everything this process can ask the API for. Eight reads and one write.
  * A route that is not here cannot be reached from a tool.
  */
 export const API_ROUTES = {
@@ -121,6 +127,7 @@ export const API_ROUTES = {
   listRuns: 'GET /pulls/:id/runs',
   listReviews: 'GET /pulls/:id/reviews',
   getConventions: 'GET /repos/:id/conventions',
+  getBlastRadius: 'GET /pulls/:id/blast',
   startReview: 'POST /pulls/:id/review',
   waitForRun: 'GET /runs/:id/events',
 } as const satisfies Record<keyof DevDigestApi, string>;

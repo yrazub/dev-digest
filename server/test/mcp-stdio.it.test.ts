@@ -25,7 +25,7 @@ import {
 } from '../src/adapters/mocks.js';
 import * as t from '../src/db/schema.js';
 import { eq } from 'drizzle-orm';
-import type { Review } from '@devdigest/shared';
+import type { BlastRadiusResponse, Review } from '@devdigest/shared';
 
 const hasDocker = await dockerAvailable();
 const d = hasDocker ? describe : describe.skip;
@@ -242,6 +242,38 @@ d('devdigest-mcp over stdio against the real API (Testcontainers pg)', () => {
     expect(result.isError).toBe(true);
     expect(result.text).toContain('Pull request #9999 is not imported for acme/payments-api');
     expect(result.text).toContain('#482');
+  });
+
+  it('get_blast_radius for acme/payments-api #482 is not an error and equals GET /pulls/:id/blast in totals, summary and first group (A7)', async () => {
+    // The map is read through the blast route only: `GET /pulls/:id` would replace the seeded `pr_files`
+    // with the GitHub double's, so this test never calls it.
+    const [pr] = await pg.handle.db.select().from(t.pullRequests).where(eq(t.pullRequests.number, 482));
+    const route = await app.inject({ method: 'GET', url: `/pulls/${pr!.id}/blast` });
+    expect(route.statusCode).toBe(200);
+    const map = route.json() as BlastRadiusResponse;
+    expect(map.degraded).toBe(false);
+    expect(map.downstream.length).toBeGreaterThan(0); // the comparison below is not vacuous
+    const first = map.downstream[0]!;
+
+    const result = await call('get_blast_radius', { repo: 'acme/payments-api', pr: 482 });
+
+    expect(result.isError).toBe(false);
+    const body = JSON.parse(result.text);
+    expect(body.repo).toBe('acme/payments-api');
+    expect(body.pr).toBe(482);
+    // the view keeps the route's four numbers; the fifth moves to the top level, left out when 0
+    const { symbols_without_callers: withoutCallers, ...fourNumbers } = map.totals;
+    expect(body.totals).toEqual(fourNumbers);
+    if (withoutCallers > 0) expect(body.symbols_without_callers).toBe(withoutCallers);
+    else expect(body).not.toHaveProperty('symbols_without_callers');
+    expect(body.summary).toBe(map.summary);
+    expect(body.impact[0]).toMatchObject({
+      symbol: first.symbol,
+      callers: first.callers.map((c) => `${c.file}:${c.line} ${c.name}`),
+      endpoints: first.endpoints_affected,
+    });
+    expect(body.impact).toHaveLength(map.downstream.length);
+    expect(body).not.toHaveProperty('degraded');
   });
 
   it('wrote only JSON-RPC messages to stdout, and reported itself ready on stderr', () => {

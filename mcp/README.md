@@ -71,10 +71,30 @@ with `isError: true` whose text names the next step.
 | `run_agent_on_pr` | **starts a paid LLM run** | `repo` (`owner/name`), `pr` (number), `agent` (id or exact name) | waits, then the review result: `status: "done"`, `verdict`, `score`, `summary`, `counts`, `findings` — or `status: "running"` with `run_id` and a `next` text |
 | `get_findings` | read-only | `repo`, `pr`; optional `run_id`, `min_severity` (`CRITICAL` \| `WARNING` \| `SUGGESTION`), `limit` (1–50, default 20) | the same review result for the latest review of the PR, or for the given run; never starts a review |
 | `get_conventions` | read-only | `repo`; optional `status` (`accepted` default, or `pending`) | the repository's extracted conventions with `evidence` as `path:line`; a `note` when none match |
-| `get_blast_radius` | read-only | `repo`, `pr` | **a stub**: always an error, calls nothing |
+| `get_blast_radius` | read-only | `repo`, `pr` | the impact map of the PR: `summary`, `totals`, and `impact` — per changed symbol that has callers, its callers as `file:line name`, `endpoints` and `crons`; a `note` when the map is degraded, empty or cut. Reads the API's ready index; starts no review and calls no model |
 
-`get_blast_radius` exists so a client already lists the tool; its implementation is later work.
-Its error says no impact data exists and tells the model not to invent any.
+`get_blast_radius` was a stub that always answered with an error; it now reads
+`GET /pulls/:id/blast` (the ninth entry of `API_ROUTES`) and renders that one answer in a compact form, the
+same map the **Blast radius** block shows on the PR's Overview tab. After resolving the repository and the
+PR it makes one read and no write. It computes nothing: the symbols, the callers, their order and the four
+`totals` are the route's.
+
+- **Result.** `repo`, `pr`, `summary`, `totals` (`symbols`, `callers`, `endpoints`, `crons`), `impact`, then
+  `more_symbols`, `symbols_without_callers`, `degraded` + `reason` and `note` only when they apply.
+  An `impact` entry holds `symbol`, `declared_in` (the file of the first changed symbol of that name),
+  `callers`, `endpoints` and `crons`, plus `more_callers`, `more_endpoints` or `more_crons` when its list was
+  cut. The shaping is [`src/blast-view.ts`](src/blast-view.ts).
+- **Caps.** The view keeps the first 15 symbols, 10 callers per symbol and 10 endpoints and 10 crons per
+  symbol (`MAX_BLAST_*` in [`src/constants.ts`](src/constants.ts)), in the route's order, highest-ranked
+  first. A cut adds the `more_*` counts and a `note`; `totals` are the route's numbers, not the view's.
+  `indexed_sha` and `caller_limit` are not passed on.
+- **A degraded or empty map is a result, not an error.** `degraded: true` with the route's `reason` and a
+  `note` that names the next step: open the PR in DevDigest once (`pr_files_missing`), resync the repository
+  (`index_partial`, `index_failed`, `no_data`), or what is switched off or too large (`flag_off`,
+  `repo_too_large`). A map that is not degraded but has no symbols, or whose symbols nothing references,
+  gets its own note.
+- **Errors.** An unknown repository or PR returns the existing text and makes no blast request; a failed
+  call maps to the same catalogue as the other tools.
 
 Details that shape a result:
 
@@ -147,22 +167,28 @@ root, with the version of the [Inspector record](specs/L04-devdigest-mcp.md#insp
 # the five tools and their schemas
 npx -y @modelcontextprotocol/inspector@2.10.1 --cli node mcp/bin/devdigest-mcp.mjs --method tools/list --strict
 
-# the stub: an isError result, and Inspector exits 5
+# the impact map of the seeded PR (needs the API and the seeded database)
 npx -y @modelcontextprotocol/inspector@2.10.1 --cli node mcp/bin/devdigest-mcp.mjs \
   --method tools/call --tool-name get_blast_radius --tool-arg repo=acme/payments-api pr=482
 ```
 
 The server command comes right after `--cli`, before `--method`. A call that needs the API
-(`list_agents`, `get_findings`, …) needs `./scripts/dev.sh` running and the database up; add
-`--tool-arg` pairs for its arguments. Inspector's options differ between versions: read its
-`--help` first if you use another one.
+(`list_agents`, `get_findings`, `get_blast_radius`, …) needs `./scripts/dev.sh` running and the
+database up; add `--tool-arg` pairs for its arguments. Inspector's options differ between versions:
+read its `--help` first if you use another one.
+
+On the seeded database the `get_blast_radius` call returns the map of PR #482 as a normal result: the
+summary `4 changed symbols, 5 callers, 3 endpoints, 1 cron job.`, with `rateLimit` first. With no API
+running it is an error result that says so.
 
 What the record has verified: `tools/list` for all five tools (order, annotations, flat closed
-input schemas, no `outputSchema`) and the stub call. The calls that need the API were then repeated
-against a healthy developer API with the seeded database, read-only calls only: `list_agents`,
-`get_findings`, `get_conventions`, and the unknown-agent and unknown-PR errors. `run_agent_on_pr`
-with a real agent was not called from Inspector, because it starts a paid run; the server's
-integration test covers it with a mock model.
+input schemas, no `outputSchema`). The record was made while `get_blast_radius` was a stub, so its
+`get_blast_radius` call entries show the former error, not the working tool; the working tool is covered
+by the scripted stdio tests and by the server's integration test against the seeded database. The calls
+that need the API were repeated against a healthy developer API with the seeded database, read-only calls
+only: `list_agents`, `get_findings`, `get_conventions`, and the unknown-agent and unknown-PR errors.
+`run_agent_on_pr` with a real agent was not called from Inspector, because it starts a paid run; the
+server's integration test covers it with a mock model.
 
 ## Connect it to Claude Code
 

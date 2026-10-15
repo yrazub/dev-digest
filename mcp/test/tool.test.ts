@@ -461,38 +461,11 @@ describe('sanitizeText — the left boundary of a prefixed token', () => {
   });
 });
 
-describe('the get_blast_radius stub', () => {
+describe('the get_blast_radius tool — shape and argument rejection', () => {
   it('declares repo and pr and is read-only', () => {
     expect(getBlastRadius.name).toBe('get_blast_radius');
     expect(Object.keys(getBlastRadius.inputShape)).toEqual(['repo', 'pr']);
     expect(getBlastRadius.annotations.readOnlyHint).toBe(true);
-  });
-
-  it.each([
-    [{ repo: 'acme/payments-api', pr: 7 }],
-    [{ repo: 'other/thing', pr: 12345 }],
-  ])('answers %j with E-BLAST: an error, never data, and nothing logged', async (args) => {
-    const deps = makeDeps();
-
-    const result = await executeTool(getBlastRadius as unknown as ToolDef, args, deps);
-
-    expect(result.isError).toBe(true);
-    const text = textOf(result);
-    expect(text).toContain('not implemented');
-    expect(text).toContain('Do not estimate or invent it');
-    expect(text).toContain('get_findings');
-    // No path, no symbol name, no figure; and nothing echoed from the arguments.
-    expect(text).not.toMatch(/\d/);
-    expect(text).not.toMatch(/\.(ts|js|mjs)\b|\/src\//);
-    expect(text).not.toContain(args.repo);
-    expect(deps.log).not.toHaveBeenCalled();
-  });
-
-  it('gives the same text whatever the arguments are', async () => {
-    const a = await executeTool(getBlastRadius as unknown as ToolDef, { repo: 'a/b', pr: 1 }, makeDeps());
-    const b = await executeTool(getBlastRadius as unknown as ToolDef, { repo: 'c/d', pr: 99 }, makeDeps());
-
-    expect(textOf(a)).toBe(textOf(b));
   });
 
   it('rejects arguments of the wrong shape before it runs', async () => {
@@ -501,18 +474,6 @@ describe('the get_blast_radius stub', () => {
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain('Invalid arguments for get_blast_radius');
     expect(textOf(result)).toContain('Expected: repo, pr.');
-  });
-
-  it('accepts a numeric string for pr, like get_findings and run_agent_on_pr: it reaches run and yields E-BLAST', async () => {
-    const deps = makeDeps();
-    const viaString = await executeTool(getBlastRadius as unknown as ToolDef, { repo: 'acme/payments-api', pr: '482' }, deps);
-    const viaNumber = await executeTool(getBlastRadius as unknown as ToolDef, { repo: 'acme/payments-api', pr: 482 }, makeDeps());
-
-    expect(viaString.isError).toBe(true);
-    expect(textOf(viaString)).toContain('not implemented');
-    expect(textOf(viaString)).not.toContain('Invalid arguments');
-    expect(textOf(viaString)).toBe(textOf(viaNumber));
-    expect(deps.log).not.toHaveBeenCalled();
   });
 
   it.each([

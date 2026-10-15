@@ -69,8 +69,10 @@ or linking another one to that agent, breaks those counts.
 `09-conventions` opens Conventions on `acme/payments-api` and waits for
 `0 of 3 accepted`, then rejects the first card and accepts the other two.
 `seed.ts` inserts three `pending` candidates for that repo, only while it has
-none, ordered by confidence (0.91, 0.78, 0.55), with no `repo_index_state`
-row, so their evidence has no GitHub link. Changing the count breaks the
+none, ordered by confidence (0.91, 0.78, 0.55). The repo has a seeded
+`repo_index_state` row (see "PR #482 has a seeded repo-intel index"), so the candidates'
+evidence links to the seeded SHA `b1a57b1a57b1a57b1a57b1a57b1a57b1a57b1a57` and the
+Conventions index line shows it; the flow asserts nothing about either. Changing the count breaks the
 `N of M accepted` assertions. The flow also expects no skill named
 `repo-conventions` to exist beforehand, because it creates one (`08-skills`
 creates only `e2e-rule`).
@@ -96,6 +98,54 @@ strings a flow may assert on:
 waits for, so the flow's `wait --text` lines are updated in the same change. The
 row's `source_hash` is null, so `GET /pulls/:id/intent` reports `stale: false`
 and a review run recomputes it.
+
+## PR #482 has a seeded repo-intel index
+
+Flow `12-pr-blast-radius` opens PR #482 and waits for the Blast radius block to render the
+map that `GET /pulls/:id/blast` builds from the persistent index, with no clone on disk and
+no model call. `seed.ts` inserts the index rows of the demo repo in a block outside
+`if (!pr)`, so an already-seeded dev database gets them on the next `pnpm db:seed` too. The
+block never deletes a row and never overwrites one: `repo_index_state`, `symbols`,
+`file_rank` and `file_facts` use `onConflictDoNothing()`; `references` has no unique index,
+so a row is inserted only when none with the same `from_path` + `to_symbol` + `line`
+exists.
+
+| Table | Rows |
+|---|---|
+| `repo_index_state` | one row: `status` `full`, `indexer_version` = `INDEXER_VERSION` (2), `last_indexed_sha` `b1a57b1a57b1a57b1a57b1a57b1a57b1a57b1a57` |
+| `symbols` (all kind `function`) | `rateLimit` (line 12) and `bucketKey` (38) in `src/middleware/ratelimit.ts`; `publicRouter` (8) in `src/api/public/index.ts`; `webhookHandler` (30) in `src/api/public/webhooks.ts`; `healthCheck` (6) in `src/api/public/health.ts`; `app` (10) in `src/server.ts`; `resetBuckets` (3) in `src/jobs/reset-buckets.ts` |
+| `references` (`decl_file` `src/middleware/ratelimit.ts`) | `rateLimit` from `src/api/public/index.ts:23`, `src/api/public/webhooks.ts:45`, `src/api/public/health.ts:11`, `src/server.ts:88`; `bucketKey` from `src/jobs/reset-buckets.ts:8` |
+| `file_rank` (`hotness` 0, `pagerank` = `rank`) | `index.ts` 0.09 (percentile 99), `webhooks.ts` 0.08 (95), `health.ts` 0.07 (90), `server.ts` 0.06 (85), `reset-buckets.ts` 0.05 (80) |
+| `file_facts` | `GET /api/public/items` on `index.ts`; `POST /api/public/webhooks` on `webhooks.ts`; `GET /api/public/health` on `health.ts`; the cron `reset-rate-buckets (hourly)` on `reset-buckets.ts` |
+
+`src/middleware/ratelimit.ts:41` is not seeded as a caller of `bucketKey`: it is the declaring
+file (B5).
+
+**The resulting answer** of `GET /pulls/:id/blast` for PR #482 (`degraded: false`,
+`reason: null`, `indexed_sha` `b1a57b1a57b1a57b1a57b1a57b1a57b1a57b1a57`):
+
+- `totals`: 4 symbols, 5 callers, 3 endpoints, 1 cron. `summary`:
+  `4 changed symbols, 5 callers, 3 endpoints, 1 cron job.` The 4 changed symbols are the
+  seeded symbols declared in PR files: `rateLimit` and `bucketKey` (`ratelimit.ts`),
+  `publicRouter` (`index.ts`) and `webhookHandler` (`webhooks.ts`); `healthCheck`, `app` and
+  `resetBuckets` live in files the PR does not change.
+- 2 groups, in the order `rateLimit` (top rank 0.09), then `bucketKey` (0.05). The callers
+  of `rateLimit`, by rank: `publicRouter` at `src/api/public/index.ts:23`, `webhookHandler`
+  at `src/api/public/webhooks.ts:45`, `healthCheck` at `src/api/public/health.ts:11`, `app`
+  at `src/server.ts:88`. The caller of `bucketKey`: `resetBuckets` at
+  `src/jobs/reset-buckets.ts:8`.
+- `rateLimit` affects the endpoints `GET /api/public/health`, `GET /api/public/items` and
+  `POST /api/public/webhooks`, and no cron; `bucketKey` affects the cron
+  `reset-rate-buckets (hourly)` and no endpoint.
+- `src/api/public/index.ts` and `webhooks.ts` are files of PR #482 themselves. A changed
+  file may call a symbol declared in another changed file.
+
+**Contract:** flow `12` asserts on the four stats, `rateLimit`, `src/api/public/index.ts:23`
+and its GitHub link at the seeded SHA, `GET /api/public/items`, `reset-rate-buckets (hourly)`
+and `2 more changed symbols have no callers.` Changing a seeded path, line, SHA, rank order,
+endpoint or cron changes what the flow waits for, so the flow is updated in the same change.
+Adding a symbol to `ratelimit.ts`, `index.ts` or `webhooks.ts`, or a PR file that declares
+one, changes the symbol count. The block runs outside `if (!pr)`; a second run adds no row.
 
 ## PR #482 has nine files, one or more per role, and two patches
 

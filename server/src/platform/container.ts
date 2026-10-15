@@ -29,6 +29,7 @@ import { IntentRepository } from '../modules/intent/repository.js';
 import { IntentService } from '../modules/intent/service.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
+import { MAX_CALLERS_PER_SYMBOL } from '../modules/repo-intel/constants.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
 import { type HttpFetcher, NodeHttpFetcher } from '../adapters/http-fetch/index.js';
@@ -135,6 +136,11 @@ export class Container {
     if (this.overrides.repoIntel) return this.overrides.repoIntel;
     this._repoIntel ??= new RepoIntelService(this);
     return this._repoIntel;
+  }
+
+  /** Read-time limits of the repo-intel facade, for modules that may not import its constants. */
+  get repoIntelLimits(): { callersPerSymbol: number } {
+    return { callersPerSymbol: MAX_CALLERS_PER_SYMBOL };
   }
 
   /** Import-graph builder (dependency-cruiser). T3 indexer pipeline only. */

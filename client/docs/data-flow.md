@@ -34,6 +34,7 @@ A key is `[resource, id]`. The ones the PR screens depend on:
 | `["pr-active-runs", prId]` | `usePrActiveRuns` | `GET /pulls/:id/runs/active` | polls every 4 s while non-empty; invalidated when runs start and end |
 | `["pr-intent", prId]` | `usePrIntent` | `GET /pulls/:id/intent` | polls every 4 s only while a review run is in flight (the page passes `poll`); `useRegenerateIntent` writes the `POST` response straight into it; invalidated when a live run ends |
 | `["smart-diff", prId, headSha]` | `useSmartDiff` | `GET /pulls/:id/smart-diff` | not polled; waits until both `prId` and `pr.head_sha` are known, and a new head SHA is a new query. Every head of one PR shares the prefix `smartDiffKeys.pull(prId)` = `["smart-diff", prId]`, which is what gets invalidated: by a finding action, deleting a review or a run, and when a run settles (see below) |
+| `["blast", prId, headSha]` | `useBlastRadius` | `GET /pulls/:id/blast` | not polled; waits until both `prId` and `pr.head_sha` are known, and a new head SHA is a new query. Every head of one PR shares the prefix `blastKeys.pull(prId)` = `["blast", prId]`. Only a finished Resync from the Blast radius note invalidates it (see "Resync from the Blast radius note"); a finished review run does not, because a review does not change the map |
 | `["run-trace", runId]` | `useRunTrace` | `GET /runs/:id/trace` | fetched when the drawer opens; `retry: false` |
 | `["pr-comments", prId]` | `usePrComments` | `GET /pulls/:id/comments` | invalidated by posting a comment |
 
@@ -45,6 +46,22 @@ refetch that goes with it only refreshes the grouping.
 
 Other screens follow the same shape: `["repos"]`, `["settings"]`, `["agents"]` /
 `["agent", id]`, and `["repo-intel-state", repoId]`, which polls every 1.5 s while indexing.
+
+**Resync from the Blast radius note (L04).** A map marked `index_partial`, `index_failed` or `no_data`
+(`RESYNC_FIXABLE_REASONS` in the card's `constants.ts`) shows a Resync button; the other reasons show
+none. The wait lives in `useResyncWait` (`use-resync-wait.ts` in the card's `_components/DegradedNote/`),
+mounted only for those reasons:
+
+1. The button is enabled once `["repo-intel-state", repoId]` has loaded. Pressing it sends
+   `POST /repos/:id/resync` (`useResyncRepoIntel`) and, on success, remembers the index row's
+   `updatedAt`.
+2. While the wait runs, `useRepoIntelStatus(repoId, true)` polls `["repo-intel-state", repoId]` every
+   1.5 s and the button reads *Resyncing…*.
+3. When an answer's `updatedAt` differs from the remembered one (`resyncSettled` in
+   [`src/lib/repo-intel-resync.ts`](../src/lib/repo-intel-resync.ts), the same rule as the Conventions
+   `IndexStatus`), the wait ends and `["blast", prId]` is invalidated, so the map is read again.
+4. Every other answer counts as one poll, and so does a failed one. After `RESYNC_MAX_POLLS` (40) the
+   wait ends and the note adds *The index has not changed yet. Try again in a minute.*
 
 Skills (L02): `["skills"]` / `["skill", id]`, `["skill-versions", id]`, and
 `["agent-skills", agentId]` (every workspace skill with its link state for one agent). Saving,

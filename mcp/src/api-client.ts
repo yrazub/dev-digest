@@ -4,6 +4,7 @@ import { REQUEST_TIMEOUT_MS } from './constants.js';
 import {
   API_ROUTES,
   ApiAgent,
+  ApiBlastRadius,
   ApiConventionList,
   ApiError,
   ApiPull,
@@ -159,6 +160,10 @@ export class HttpDevDigestApi implements DevDigestApi {
       ApiConventionList,
       await request(this.transport, 'getConventions', { id: repoId }),
     );
+  }
+
+  async getBlastRadius(prId: string) {
+    return parseView('getBlastRadius', ApiBlastRadius, await request(this.transport, 'getBlastRadius', { id: prId }));
   }
 
   async startReview(prId: string, agentId: string): Promise<{ run_id: string }> {

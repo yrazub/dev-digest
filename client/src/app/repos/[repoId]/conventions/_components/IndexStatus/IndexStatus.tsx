@@ -10,6 +10,7 @@ import React from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Button } from "@devdigest/ui";
 import { useRepoIntelStatus, useResyncRepoIntel } from "@/lib/hooks/repo-intel";
+import { resyncSettled } from "@/lib/repo-intel-resync";
 import { useToast } from "@/lib/toast";
 import { RESYNC_TIMEOUT_MS } from "./constants";
 import { shortSha } from "./helpers";
@@ -28,7 +29,7 @@ export function IndexStatus({ repoId }: { repoId: string }) {
   // The job finished when the index row changed; give up after the timeout.
   React.useEffect(() => {
     if (waitingFrom === null || !state) return;
-    if (state.updatedAt !== waitingFrom) {
+    if (resyncSettled(waitingFrom, state)) {
       setWaitingFrom(null);
       toast.success(t("index.updated", { sha: shortSha(state.lastIndexedSha) }));
     }
