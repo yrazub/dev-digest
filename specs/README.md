@@ -7,6 +7,11 @@ that spans packages belongs here.
 
 Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 
+New specs are written by the [`spec-creator`](../.claude/agents/spec-creator.md) agent: the umbrella
+follows the template in that file, with EARS acceptance criteria (`AC-N`), and carries a
+`Spec ID: SPEC-NN` from one running sequence shared with its module specs. Specs written before
+it keep their earlier shape.
+
 | Spec | Status |
 |---|---|
 | [`L01-run-cost.md`](L01-run-cost.md) | draft |
