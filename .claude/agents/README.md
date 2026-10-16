@@ -79,7 +79,8 @@ session carries each step:
 0. For a new feature with no approved spec, write it first:
    1. Save the course task page and the design prototypes to files the agent can `Read` (text and
       screenshots in the scratchpad) — `spec-creator` has no web access and stops on a bare link.
-   2. Run `spec-creator` with pass `discovery`, the request, those paths and the base commit.
+   2. Run `spec-creator` with pass `discovery`, the request, those paths, the base commit and
+      today's date.
    3. Ask the user every Question, Design gap and UX proposal of the Discovery report, with its
       recommended answer first.
    4. Run `spec-creator` with pass `write`, the same paths, the Discovery report and the answers.
@@ -404,7 +405,8 @@ looked for and not adopted as rules.
 | Acceptance criteria in EARS — five patterns (ubiquitous, event-driven, state-driven, unwanted behaviour, optional feature), one condition separated from one response | Mavin, Wilkinson, Harwood, Novak, "Easy Approach to Requirements Syntax (EARS)", IEEE RE'09, 2009 |
 | The umbrella template (Problem and user · Goals / Non-goals · User stories · Acceptance criteria · Edge cases · Non-functional requirements · Inputs and provenance · Untrusted inputs · Open questions), `Spec ID` and `Supersedes` | course material, user decision 2026-10-15 |
 | Two passes, discovery before writing; design gaps, module interaction and UX proposals go to the user, never decided silently | user decision 2026-10-15; a subagent cannot ask the user, so the main session carries the questions ([Sub-agents][sub]) |
-| AC IDs, P1/P2/P3 priorities, a test hint per AC, an Ownership table; one running `SPEC-NN` sequence | user decision 2026-10-15 |
+| AC IDs, P1/P2/P3 priorities, a test hint per AC, an Ownership table | user decision 2026-10-15 |
+| Spec ID `SPEC-YYYY-MM-DD-<slug>` instead of a running counter (no collision between branches); a self-check before returning; vague-to-EARS examples; the `wrapUntrusted()` / `groundFindings()` invariants named; "use proactively" in the description | comparison with the course's reference spec-creator, user decision 2026-10-16. Not adopted from it: `AskUserQuestion` (removed from every subagent — [Sub-agents][sub]), `skills:` preload (C7), writes to `e2e/specs/` |
 | Umbrella in `specs/`, detail in the module `specs/`; designed from the current code, not the repository history; English | project — root `CLAUDE.md`, `specs/README.md` |
 | Write scope enforced by a frontmatter `PreToolUse` hook rather than the prompt alone | user decision 2026-10-15; hooks are deterministic, prompt rules advisory (C6) |
 

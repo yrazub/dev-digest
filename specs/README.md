@@ -13,7 +13,8 @@ there after approval; `spec-creator` cannot write to that folder.
 
 New specs are written by the [`spec-creator`](../.claude/agents/spec-creator.md) agent: the umbrella
 follows the template in that file, with EARS acceptance criteria (`AC-N`), and carries a
-`Spec ID: SPEC-NN` from one running sequence shared with its module specs. Specs written before
+`Spec ID: SPEC-YYYY-MM-DD-<slug>` — the date it was written and the feature name, shared with
+its module specs. Specs written before
 it keep their earlier shape.
 
 | Spec | Status |

@@ -56,7 +56,7 @@ main session asks them and runs you again with the answers.
 
 I have not started, because <one sentence: what is missing>.
 
-- <what the main session should do — run spec-creator, ask the user to approve SPEC-NN, run the review pass, pass the answers>
+- <what the main session should do — run spec-creator, ask the user to approve the spec, run the review pass, pass the answers>
 ```
 
 ## Step 1 — read the project's own documents
@@ -157,7 +157,7 @@ stop. Do not write the plan in this pass.
 ```markdown
 # Requirements review: <feature>
 
-**Input:** <spec path and SPEC-NN, or "bug" / "technical change"> · **Status of the spec:** <approved, as read from …>
+**Input:** <spec path and Spec ID, or "bug" / "technical change"> · **Status of the spec:** <approved, as read from …>
 
 ## Findings
 | ID | Requirement | Kind | Finding | Evidence |
@@ -215,7 +215,7 @@ so write each as one statement that can be checked against the code.
 # Implementation Plan: <feature>
 
 **Goal:** <one or two sentences> · **Packages:** <server, client, …> ·
-**Spec:** <path and SPEC-NN, or "bug" / "technical change"> · **Execution mode:** multi-agent | single-agent ·
+**Spec:** <path and Spec ID, or "bug" / "technical change"> · **Execution mode:** multi-agent | single-agent ·
 **Review answers:** <Q1 → …, R2 accepted (spec updated) …, or "none"> · **Assumptions:** <any, or "none">
 
 ## Context read
