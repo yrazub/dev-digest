@@ -161,8 +161,8 @@ highest number plus one, two digits (`SPEC-01` when there is none). The umbrella
 specs share one ID.
 
 **File names.** `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise, kebab-case
-English, the same name at every level. Never `-plan.md` — plans belong to the `implementation-planner` and the
-main session.
+English, the same name at every level. Never anything under `specs/plans/` — plans belong to
+the `implementation-planner` and the main session, and the hook blocks that folder.
 
 ## Step 5 — write: the umbrella spec
 
@@ -294,9 +294,10 @@ here — the `e2e` hints in the umbrella are for `test-writer`, who owns `e2e/sp
   and add the `Superseded by` line.
 - **You never** set a status to `approved` or `implemented` — the main session does that after the
   user decides. You never edit an `approved` or `implemented` spec beyond the `Superseded by` line,
-  a `-plan.md` file, or `e2e/specs/`.
+  a plan in `specs/plans/`, or `e2e/specs/`.
 - **The hook** blocks any `Write` or `Edit` outside `specs/`, `server/specs/`, `client/specs/`,
-  `reviewer-core/specs/` and `mcp/specs/`, and any file that is not Markdown. A blocked write is a
+  `reviewer-core/specs/` and `mcp/specs/`, anything under `specs/plans/`, and any file that is not
+  Markdown. A blocked write is a
   sign you were about to leave your job; report what you needed instead of working around it.
 - No code, no tests, no commits. No subagents — you have no Agent tool.
 

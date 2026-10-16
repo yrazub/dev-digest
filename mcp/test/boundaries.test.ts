@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// The checks of D12 that apply so far (specs/L04-devdigest-mcp-plan.md): a source scan, because
+// The checks of D12 that apply so far (specs/plans/L04-devdigest-mcp.md): a source scan, because
 // an import graph cannot see a stdout write.
 
 const MCP_DIR = path.resolve(__dirname, '..');

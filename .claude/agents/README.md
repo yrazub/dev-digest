@@ -42,7 +42,7 @@ approved spec / bug ──► implementation-planner (review) ──► findings
                 implementation-planner (plan) ──► Implementation Plan (text)
                              │  user approves; the main session saves it
                              ▼
-                  specs/<feature>-plan.md
+                  specs/plans/<feature>.md
                              │
           single-agent: the main session builds code + tests per phase, runs the same
           Verify lines, commits; plan-verifier optional ──► skip to doc-writer
@@ -97,7 +97,8 @@ session carries each step:
    answers and the chosen mode.
 4. Show the plan to the user in full and wait for approval. Resolve its "Open questions"
    first; a changed plan goes back through `implementation-planner`, not through hand edits.
-5. Save the approved plan **verbatim** to `specs/<feature>-plan.md` and add a row to
+5. Save the approved plan **verbatim** to `specs/plans/<feature>.md` (the same name as the
+   umbrella spec) and add a row to
    [`specs/README.md`](../../specs/README.md). `implementation-planner` has no `Write` tool — if the main
    session does not save the plan, it exists only in the conversation.
 
@@ -180,8 +181,8 @@ What enforces what:
 - **`spec-creator`'s write scope is enforced by a hook.** Its frontmatter registers a
   `PreToolUse` hook on `Write|Edit` that runs
   [`scripts/specs-only-guard.mjs`](scripts/specs-only-guard.mjs): any path that is not a `.md`
-  file under `specs/`, `server/specs/`, `client/specs/`, `reviewer-core/specs/` or `mcp/specs/`
-  is blocked (exit 2), symlinks and `..` resolved, unparseable input blocked too. `e2e/specs/` is
+  file under `specs/`, `server/specs/`, `client/specs/`, `reviewer-core/specs/` or `mcp/specs/`,
+  and anything under `specs/plans/`, is blocked (exit 2), symlinks and `..` resolved, unparseable input blocked too. `e2e/specs/` is
   left out because it belongs to `test-writer`. Which spec files inside those folders it may
   touch, and that it never sets `approved`, are prompt-level.
 - **The push gate still applies.** The `PreToolUse` hook in
@@ -219,7 +220,7 @@ What the main session does with each result:
   spec files and index rows.
 - **Requirements review** — ask the user its Clarifications, Recommendations and the execution
   mode; spec-changing recommendations go to `spec-creator` first; then run the `plan` pass.
-- **Plan** — show it to the user; once approved, save it to `specs/<feature>-plan.md` and add
+- **Plan** — show it to the user; once approved, save it to `specs/plans/<feature>.md` and add
   a row to [`specs/README.md`](../../specs/README.md).
 - **Implementation report** — read it, then pass its "Existing tests failing" table to
   `test-writer`; a `partial` or `blocked` status goes to the user.

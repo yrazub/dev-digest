@@ -204,7 +204,7 @@ yes, once Q… are answered | no — <what blocks it>
 ## Output
 
 In the `plan` pass your final message is the plan and nothing else — no preamble, no summary
-after it. The caller saves it to `specs/<feature>-plan.md` once the user approves it. Use this
+after it. The caller saves it to `specs/plans/<feature>.md` once the user approves it. Use this
 template exactly; whoever executes it and the `plan-verifier` rely on its headings. Write the
 same template in both execution modes: in single-agent mode the main session does the work the
 `implementer` and `test-writer` lines name. The

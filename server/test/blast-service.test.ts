@@ -3,7 +3,7 @@
  * (`BlastStore`, `BlastSource`, `BlastLog`). Hermetic: no database, no app. It pins how the service
  * drives the facade (one `getBlastRadius`, one `getIndexState`, none when the PR has no files), what it
  * throws for an unknown PR, the `caller_limit` it states and the one log line it writes.
- * Spec: `server/specs/L04-blast-radius.md` ("Service"); plan: `specs/L04-blast-radius-plan.md` (phase 3).
+ * Spec: `server/specs/L04-blast-radius.md` ("Service"); plan: `specs/plans/L04-blast-radius.md` (phase 3).
  */
 import { describe, it, expect } from 'vitest';
 import { BlastRadiusResponse } from '@devdigest/shared';

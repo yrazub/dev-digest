@@ -44,7 +44,7 @@ Traps we have already hit in the local MCP server. Append-only. See the root
 
 ## Decisions
 
-- **2026-10-10** — `run_agent_on_pr` returns the full review result (verdict and findings). The lab's `list_agents → run_agent_on_pr → get_findings` is the generic path, not a required one: `list_agents` is skipped when the agent is known, `get_findings` when the review finishes inside the wait. Rejected: returning only verdict, counts and `run_id` so that the third call always happens. Decided by the user (plan D20, `../specs/L04-devdigest-mcp-plan.md`).
+- **2026-10-10** — `run_agent_on_pr` returns the full review result (verdict and findings). The lab's `list_agents → run_agent_on_pr → get_findings` is the generic path, not a required one: `list_agents` is skipped when the agent is known, `get_findings` when the review finishes inside the wait. Rejected: returning only verdict, counts and `run_id` so that the third call always happens. Decided by the user (plan D20, `specs/plans/L04-devdigest-mcp.md`).
 - **2026-10-10** — the server is its own package and not `server/src/mcp/`, by user decision; the cost is that one Zod instance has to be forced by the two tsconfig `paths` and proved at startup, and that the test against a real API lives in `../server/test/mcp-stdio.it.test.ts`. **See also:** `../server/INSIGHTS.md`.
 
 ## Session Notes

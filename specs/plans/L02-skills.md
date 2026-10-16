@@ -2,10 +2,10 @@
 
 **Status:** done 2026-09-30
 
-How [`L02-skills.md`](L02-skills.md) gets built. The *what* is in that spec and its module
-specs ([server](../server/specs/L02-skills.md), [client](../client/specs/L02-skills.md)).
+How [`L02-skills.md`](../L02-skills.md) gets built. The *what* is in that spec and its module
+specs ([server](../../server/specs/L02-skills.md), [client](../../client/specs/L02-skills.md)).
 This file is the *order*: phases, the files each one touches, and how each one is verified.
-The Conventions Extractor ([`L02-conventions.md`](L02-conventions.md)) gets its own plan
+The Conventions Extractor ([`L02-conventions.md`](../L02-conventions.md)) gets its own plan
 once this one lands, because it creates skills and needs the skills module to exist first.
 
 All work goes on `feature/l02-skills-lab`. Each phase ends green (`typecheck`, `test`, and

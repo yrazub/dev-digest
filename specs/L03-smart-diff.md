@@ -11,7 +11,7 @@ first review.
 
 This spec states the feature and the rules that span packages. The implementable detail is in
 the module specs (see Ownership). There is no plan yet: the `planner` agent writes it from this
-spec, and it is saved as `L03-smart-diff-plan.md` once approved.
+spec, and it is saved as `specs/plans/L03-smart-diff.md` once approved.
 
 ## Sources
 

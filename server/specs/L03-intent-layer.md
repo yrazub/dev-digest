@@ -10,7 +10,7 @@ rules. The engine half is [`../../reviewer-core/specs/L03-intent-scope.md`](../.
 Layering follows the `onion-architecture` skill: route → service → store port → repository,
 with `pnpm arch:check` green and no new baseline entry.
 
-This text describes the behaviour after phase 11 of the plan (`specs/L03-intent-layer-plan.md`):
+This text describes the behaviour after phase 11 of the plan (`specs/plans/L03-intent-layer.md`):
 the classifier's risk-area item comes from the contract, and `sanitizeText` and
 `extractReferences` scan author text in linear time with what they detect unchanged.
 

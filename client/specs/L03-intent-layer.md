@@ -9,7 +9,7 @@ Read [`specs/L03-intent-layer.md`](../../specs/L03-intent-layer.md) first — it
 feature and the rules that span packages — and the server half in
 [`../../server/specs/L03-intent-layer.md`](../../server/specs/L03-intent-layer.md), which
 defines the two routes this screen calls. The approved plan is
-[`../../specs/L03-intent-layer-plan.md`](../../specs/L03-intent-layer-plan.md).
+[`specs/plans/L03-intent-layer.md`](../../specs/plans/L03-intent-layer.md).
 
 ## Route and data
 

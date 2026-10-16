@@ -1,6 +1,6 @@
 # L03 — the `intent` prompt slot and the scope filter
 
-**Status:** implemented · **Cross-package spec:** [`../../specs/L03-intent-layer.md`](../../specs/L03-intent-layer.md) · **Plan:** [`../../specs/L03-intent-layer-plan.md`](../../specs/L03-intent-layer-plan.md)
+**Status:** implemented · **Cross-package spec:** [`../../specs/L03-intent-layer.md`](../../specs/L03-intent-layer.md) · **Plan:** [`specs/plans/L03-intent-layer.md`](../../specs/plans/L03-intent-layer.md)
 
 The engine gains one optional prompt slot, `intent`, and one optional post-grounding step, the
 scope filter. The engine derives nothing: the caller (the server's `reviews` module) hands it a

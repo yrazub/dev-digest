@@ -13,7 +13,7 @@ repository was cloned; the feature reads it, regroups it and shows it.
 
 This spec states the feature and the rules that span packages. The implementable detail is in
 the module specs (see Ownership). There is no plan yet: the `planner` agent writes it from this
-spec, and it is saved as `L04-blast-radius-plan.md` once approved.
+spec, and it is saved as `specs/plans/L04-blast-radius.md` once approved.
 
 ## Sources
 

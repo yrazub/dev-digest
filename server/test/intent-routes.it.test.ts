@@ -3,7 +3,7 @@
  * built app and `app.inject`. The outside world is replaced through `overrides`: an empty
  * `MockSecretsProvider` (so `~/.devdigest/secrets.json` is never read), `MockGitHubClient` and
  * a `MockLLMProvider` for the `openrouter` key — no key, no network.
- * Spec: `server/specs/L03-intent-layer.md`; plan: `specs/L03-intent-layer-plan.md` (phases 5 and 10).
+ * Spec: `server/specs/L03-intent-layer.md`; plan: `specs/plans/L03-intent-layer.md` (phases 5 and 10).
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { and, eq } from 'drizzle-orm';

@@ -2,7 +2,7 @@
  * `IntentService` (`modules/intent/service.ts`) with fake ports: an in-memory `IntentStore`
  * written here, `MockLLMProvider` answering by schema name, `MockGitHubClient` and a
  * counting tokenizer. Hermetic: no database, no network, no key.
- * Spec: `server/specs/L03-intent-layer.md`; plan: `specs/L03-intent-layer-plan.md` (phases 5 and 10).
+ * Spec: `server/specs/L03-intent-layer.md`; plan: `specs/plans/L03-intent-layer.md` (phases 5 and 10).
  */
 import { describe, it, expect, vi } from 'vitest';
 import type {

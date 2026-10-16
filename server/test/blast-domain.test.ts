@@ -3,7 +3,7 @@
  * answer into the `BlastRadiusResponse`, `buildSummary` writes its sentence and `resolveDegraded` picks
  * the degraded mark. Hermetic: pure functions, no app, container or double.
  * Spec: `server/specs/L04-blast-radius.md` ("Building the response"); degraded order: `specs/L04-blast-radius.md`
- * ("Degraded is a mark, not an error", Q5); plan: `specs/L04-blast-radius-plan.md` (phase 3).
+ * ("Degraded is a mark, not an error", Q5); plan: `specs/plans/L04-blast-radius.md` (phase 3).
  */
 import { describe, it, expect } from 'vitest';
 import {

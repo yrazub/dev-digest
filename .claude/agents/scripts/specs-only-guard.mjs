@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // PreToolUse guard for the `spec-creator` agent (wired in .claude/agents/spec-creator.md).
-// Allows Write/Edit only on Markdown files under the spec folders; blocks everything else
+// Allows Write/Edit only on Markdown files under the spec folders, never under specs/plans/
+// (plans belong to the implementation-planner); blocks everything else
 // with exit code 2, which Claude Code reports back to the agent as the reason.
 // Fails closed: input it cannot parse is blocked too.
 import { realpathSync, existsSync } from 'node:fs';
@@ -47,5 +48,6 @@ const rel = relative(root, target).split(sep).join('/');
 if (rel.startsWith('../') || isAbsolute(rel)) block(`${filePath} is outside the repository.`);
 if (!rel.endsWith('.md')) block(`${rel} is not a Markdown file.`);
 if (!SPEC_DIRS.some((d) => rel.startsWith(`${d}/`))) block(`${rel} is not in a spec folder.`);
+if (rel.startsWith('specs/plans/')) block(`${rel} is a plan; plans are saved by the main session.`);
 
 process.exit(0);

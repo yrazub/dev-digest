@@ -163,5 +163,5 @@ function identity a component depends on; the original code is in commit `54e2b1
 - **2026-09-30** — L02 Skills UI done (skills, agents Skills tab, trace); L02 tests moved to `userEvent`.
 - **2026-10-01** — L02 Conventions page, candidate cards and the Create-skill-from-conventions modal.
 - **2026-10-05** — L03 Intent card, `usePrIntent` / `useRegenerateIntent`, the out-of-scope badge and the trace count; a stale `.next/types` blocked the first baseline.
-- **2026-10-07** — L03 Smart Diff: findings inside `diff-viewer` behind an optional prop, the grouped Files changed tab, the run-settled refresh hook; review fix for the double body. Plan: `specs/L03-smart-diff-plan.md` (revision 2).
+- **2026-10-07** — L03 Smart Diff: findings inside `diff-viewer` behind an optional prop, the grouped Files changed tab, the run-settled refresh hook; review fix for the double body. Plan: `specs/plans/L03-smart-diff.md` (revision 2).
 - **2026-10-11** — L04 Blast radius block on the PR Overview tab: tree and graph views, the degraded note with Resync (`useResyncWait`), `useBlastRadius`; entries above.
