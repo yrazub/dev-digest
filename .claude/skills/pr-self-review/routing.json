@@ -154,6 +154,10 @@
       "review": false,
       "why": "Writes INSIGHTS.md entries; has no review rules."
     },
+    "execute-plan": {
+      "review": false,
+      "why": "Orchestrates the agents over an approved plan; has no review rules."
+    },
     "pr-self-review": {
       "review": false,
       "why": "This skill."

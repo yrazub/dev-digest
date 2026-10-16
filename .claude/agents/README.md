@@ -103,6 +103,16 @@ session carries each step:
    [`specs/README.md`](../../specs/README.md). `implementation-planner` has no `Write` tool — if the main
    session does not save the plan, it exists only in the conversation.
 
+Steps 6–11, in either mode, are run by the [`execute-plan`](../skills/execute-plan/SKILL.md) skill:
+`/execute-plan specs/plans/<feature>.md`. It keeps the progress in
+`.devdigest/sdd/<feature>/state.json` (git-ignored) — phase statuses, the closing result lines,
+the declared deviations, the insight candidates, the final checks — and prints the next step, so
+a new chat resumes where the last one stopped; it asks for a new chat every three committed
+phases, because the orchestrating chat re-reads its whole context on every turn. `implementer`
+and `test-writer` read their phase through
+[`scripts/plan-phase.mjs`](scripts/plan-phase.mjs) rather than the whole plan. The steps below
+are what the skill does.
+
 **Single-agent mode** — the main session executes the plan itself: for each phase it builds the
 file table and the `**Tests (test-writer):**` lines, runs `Verify (phase)`, and commits the phase
 green. The plan's rules still bind it (skills per file row, protected paths, expected-to-change
@@ -125,12 +135,14 @@ spans packages; `architecture-reviewer` is optional. Then continue at step 9 bel
       `implementer` for the same phase, then `test-writer` runs again. Read "Existing tests
       edited" every time it is not empty: each row must quote a plan or spec item.
    5. Commit the closed phase, code and tests together.
-7. After the last phase, run `plan-verifier` with the plan path (and the base ref when the
-   branch is not cut from `origin/main`) and `architecture-reviewer` with the changed-file list,
-   a patch file and the plan path. Both are read-only and independent, so they can run in
-   parallel. The patch is made by the main session, outside the repository tree:
-   `git diff "$(git merge-base origin/main HEAD)" > <scratch>/change.patch`; untracked new files
-   are not in it and are named in the file list as new.
+7. After the last phase, run `plan-verifier` with the plan path, the deviations the
+   implementer declared (it rates a declared deviation `satisfied`, an undeclared one `partial`)
+   and the base ref when the branch is not cut from `origin/main`, and `architecture-reviewer`
+   with the changed-file list, a patch file and the plan path. Both are read-only and
+   independent, so they can run in parallel. The patch is made by the main session, somewhere
+   git does not track: `git diff "$(git merge-base origin/main HEAD)" >
+   .devdigest/sdd/<feature>/change.patch`; untracked new files are not in it and are named in the
+   file list as new.
 8. Read both reports. A `FAIL` or `INCOMPLETE` verdict, or a CRITICAL or WARNING finding, goes
    to the user. A code gap goes back to `implementer`; a missing test, or an existing test edited
    without a plan or spec item, goes to `test-writer`. After any fix, run step 7 again — a check
@@ -203,8 +215,8 @@ on demand with the `Skill` tool; `implementation-planner`, `architecture-reviewe
 | spec-creator | the pass (`discovery` or `write`), the request, paths to the saved task text and design files, the base commit; for `write`, also the Discovery report and the user's answers | root and module `CLAUDE.md` and `README.md`, `specs/` and the module `specs/` indexes, overlapping specs, the code and contracts the feature touches, `TESTING.md`, the `INSIGHTS.md` files | `discovery`: a **Discovery report** — Understanding · Questions · Design gaps · Module interaction · UX proposals · Untrusted inputs · Proposed files · Not read; nothing written. `write`: specs in the working tree, uncommitted, plus a **Spec report** — Files written · Acceptance criteria · Discovery outcomes · Open questions left · For the main session |
 | researcher | one concrete question, anchored to a package, feature, library or version | module `CLAUDE.md` and `README.md`, code, tests, git history; or official docs, changelogs, source repositories | a **research report** as its final message: Answer · Findings with evidence · References or Sources · Not found · Not checked |
 | implementation-planner | the pass (`review` or `plan`) and an approved spec path, or a bug or technical-change description; for `plan`, also the Requirements review, the user's answers and the execution mode | module `CLAUDE.md` files, the spec and its module specs, `TESTING.md`, every relevant `INSIGHTS.md`, [`routing.json`](../skills/pr-self-review/routing.json), the matching `SKILL.md` files, the code it names | `review`: a **Requirements review** — Findings · Clarifications needed · Recommendations (each marked whether it changes the spec) · Execution mode · Ready to plan. `plan`: an **Implementation Plan** — Context read · Constraints · Phases (file table with skills and blocking rules, the test work order, `Verify (code)` and `Verify (phase)`, `Done when` citing an AC) · Out of scope · Risks · Open questions |
-| implementer | the path to an approved plan and the phase to build; from the second phase on, the statement that the previous phase closed green | the plan, the `CLAUDE.md` of each touched package, the skills each phase names | changed code in the working tree, uncommitted, no tests, plus an **Implementation report**: Phases · Baseline · Verification · Existing tests failing · Deviations · Not done / blocked · Insight candidates · For reviewers |
-| test-writer | after a phase: the plan path, the phase and the implementer's "Existing tests failing" table; standalone: the behaviour to cover and where it lives; for a bug: the description and the expected behaviour; for a gap: the `plan-verifier` item IDs with their quoted requirements | the plan phase, the spec, `TESTING.md`, the module `CLAUDE.md` and `INSIGHTS.md`, the source under test, the nearest sibling test, the skills [`routing.json`](../skills/pr-self-review/routing.json) matches to the test files | test files in the working tree, uncommitted, plus a **Test report**: Tests written · Existing tests edited · Existing tests deleted · Suspected regressions · Suspected product bugs · Left failing, pre-existing · Verification · Needs a production change · Not covered · Insight candidates |
+| implementer | the path to an approved plan and the phase to build; from the second phase on, the statement that the previous phase closed green | its phase of the plan (sliced by [`scripts/plan-phase.mjs`](scripts/plan-phase.mjs)), the `CLAUDE.md` of each touched package, the skills each phase names | changed code in the working tree, uncommitted, no tests, plus an **Implementation report**: Phases · Baseline · Verification · Existing tests failing · Deviations · Not done / blocked · Insight candidates · For reviewers |
+| test-writer | after a phase: the plan path, the phase and the implementer's "Existing tests failing" table; standalone: the behaviour to cover and where it lives; for a bug: the description and the expected behaviour; for a gap: the `plan-verifier` item IDs with their quoted requirements | the plan phase (the same slice), the spec, `TESTING.md`, the module `CLAUDE.md` and `INSIGHTS.md`, the source under test, the nearest sibling test, the skills [`routing.json`](../skills/pr-self-review/routing.json) matches to the test files | test files in the working tree, uncommitted, plus a **Test report**: Tests written · Existing tests edited · Existing tests deleted · Suspected regressions · Suspected product bugs · Left failing, pre-existing · Verification · Needs a production change · Not covered · Insight candidates |
 | architecture-reviewer | the mode (`change` or `audit`); for `change`, the changed-file list with new files marked and a patch file when there is one; for `audit`, a directory or module; optionally the plan path and the `pnpm arch:check` result line | root and module `CLAUDE.md`, `routing.json` and the architecture `SKILL.md` files it matches, the dependency-cruiser config and baseline, the architecture documents, the root and module `INSIGHTS.md`, the files in scope and their importers | an **Architecture review** as its final message: Findings · Pre-existing · Checked · Left to the machine check · Not checked |
 | plan-verifier | the plan path, and the base ref when the branch is not cut from `origin/main` | the plan, the spec and its module specs, the root and package `CLAUDE.md`, the diff against the base, the code and tests; it re-runs the `Verify` commands | a **Verification report** as its final message: Plan items · Existing tests changed · Requirement items · Commands re-run · Scope · Gaps · Not verified, with a `PASS`, `FAIL` or `INCOMPLETE` verdict |
 | doc-writer | the material (a plan path, a spec path or other text), the changed-file list, and whether the feature was verified | the material, the root `CLAUDE.md`, the `CLAUDE.md`, `README.md` and `docs/README.md` of each touched package, the code, the target document, the `mermaid-diagram` skill | Markdown documents in the working tree, uncommitted, plus a **Documentation report**: Documents written · Diagrams · Index rows added · Not documented · Unverified · For the main session |
