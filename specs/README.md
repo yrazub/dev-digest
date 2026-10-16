@@ -36,6 +36,7 @@ it keep their earlier shape.
 | [`plans/L04-devdigest-mcp.md`](plans/L04-devdigest-mcp.md) | approved |
 | [`L04-blast-radius.md`](L04-blast-radius.md) | implemented |
 | [`plans/L04-blast-radius.md`](plans/L04-blast-radius.md) | done |
+| [`L05-project-context.md`](L05-project-context.md) | approved |
 
 The lesson roadmap (L01–L08) is in the root [`README.md`](../README.md).
 When you add a spec, add a row above.
