@@ -81,6 +81,16 @@ be obvious to anyone reading the code, it does not belong here.
   Script the check by spawning `command` + `args` read out of `.mcp.json` itself, so it exercises
   exactly what the client will run rather than a hand-retyped command line.
   **Evidence 2026-09-26:** `.mcp.json:4-11` — the `command` + `args` to spawn.
+- **2026-10-16** — run `spec-creator`'s `write` pass by *resuming* the discovery subagent with
+  `SendMessage` (its agent id), not by spawning a fresh one. The resumed agent still holds its
+  own Discovery report and everything it read, so the message carries only the answers and the
+  pass name; a second `SendMessage` amended the draft for its open questions in about a minute.
+  On L05 Project Context the discovery report ran to 14 questions, 21 design gaps and 7 UX
+  proposals — pasting that back into a cold spawn, as "Feature workflow" step 0.4 reads, would
+  have duplicated it in the main session and re-read the code. A fresh spawn is still needed
+  when the discovery agent is gone (new session).
+  **Evidence 2026-10-16:** `.claude/agents/README.md:86` — step 0.4, "the Discovery report and
+  the answers".
 
 ## Tool & Library Notes
 
@@ -202,6 +212,15 @@ be obvious to anyone reading the code, it does not belong here.
 - **2026-10-11** — with Tool Search on, a request to list open pull requests went to `gh pr list` first (`command not found: gh`, exit 127) and only then to the GitHub MCP tool `list_pull_requests`: a deferred tool is cheaper in context and less visible to the model. Naming the server in the request avoids the detour. Nothing in the repository shows this; it was observed in a session.
 - **2026-10-16** — Claude Code subagents never get `AskUserQuestion` (removed even when listed in `tools`), so a subagent cannot ask the user mid-run — that is why `spec-creator` and `implementation-planner` work in two passes (`.claude/agents/spec-creator.md`, the pass table). Subagents *can* spawn subagents, up to three layers by default (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`); ours have no `Agent` tool by project choice, not by a platform limit. Frontmatter `hooks` (the `spec-creator` guard) are skipped until the folder is trusted. Source: code.claude.com/docs/en/sub-agents, read through a WebFetch summary.
 - **2026-10-16** — where the tokens of the agent chain go, measured from the local transcripts (`~/.claude/projects/<project>/<session>/subagents/*.jsonl` + `.meta.json`, `message.usage`) of the L03 Intent Layer and Smart Diff runs: the **orchestrating main session** read 318M and 268M cache tokens (600 turns, context up to 848k), against 34M for all 12 `implementer` runs of Intent Layer. Per run, `architecture-reviewer` averaged 11.6M cumulative input (91 turns), `plan-verifier` 8.7M, `test-writer` 2.3M, `implementer` 2.1M. Inside `implementer`, test output is small (≈6 KB per run, every command piped through `tail`); its cost is turns × context, and the context is the plan read whole (`.claude/agents/implementer.md:24` "The plan, in full." — `specs/plans/L03-intent-layer.md` is 877 lines / 165 KB and was read twice because one `Read` truncated), `cat`/`grep` exploration (~20k tokens per run) and skill bodies (`next-best-practices` and `fastify-best-practices` ≈13k tokens each). Cut the orchestrator's context and the plan size before trimming test commands.
+- **2026-10-16** — Claude in Chrome (`mcp__claude-in-chrome__*`, the user's own Chrome with its
+  logins) asks for approval on every new tool, which the user found spammy. One server-level rule
+  — `"mcp__claude-in-chrome"` with no tool suffix in `permissions.allow` — covers all of its tools.
+  It lives in `.claude/settings.local.json`, which the user's global git ignore excludes, so it is
+  per-machine. With it, `navigate` + `get_page_text` read an edu.goit.global task page; the first
+  `get_page_text` straight after `navigate` returned `No text content found. Page may contain only
+  images, videos, or canvas-based content.` because the page had not rendered yet — a retry after a
+  screenshot returned the text. **See also:** the `chrome-devtools` `--autoConnect` entries above.
+  **Evidence 2026-10-16:** `.claude/settings.local.json:5` (local-only, not in git).
 
 ## Decisions
 
@@ -460,3 +479,5 @@ the editor tool.
 - **2026-10-16** — audited the SDD agent chain (spec-creator → implementation-planner → implementer / test-writer → plan-verifier, architecture-reviewer) for workflow and token cost; cost measurements under Tool & Library Notes. No agent file changed.
 - **2026-10-16** — later the same session: built plan slicing (`plan-phase.mjs`) and the `execute-plan` skill with its state file; decision recorded above. Neither has run on a real feature yet.
 - **2026-10-16** — `implementer` reads the spec, `implementation-planner` has an `amend` pass, and the `spec-creator` write guard was observed blocking in a live subagent run; decision and evidence recorded above.
+- **2026-10-16** — first real `spec-creator` run: L05 Project Context, discovery → write → amend,
+  approved as `specs/L05-project-context.md` + server, client, reviewer-core module specs; tips above.
