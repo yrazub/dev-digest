@@ -21,7 +21,12 @@ yours, and the `Verify` line is your code check.
 
 ## Step 1 — read before writing
 
-1. The plan, in full.
+1. Your phase of the plan. Run `node .claude/agents/scripts/plan-phase.mjs <plan> <phase>` and
+   read the file it prints: the plan with every shared section (header, Context read,
+   Constraints, Out of scope, Risks, Open questions) and only your phase. The other phases are
+   not yours to build, and a large plan read whole stays in your context for every turn. Open
+   the full plan only when the slice points to something that is not in it, and then read just
+   that part.
 2. The root `CLAUDE.md`, then the `CLAUDE.md` of every package the plan touches. They hold the
    commands, the naming rules and the list of files that must not be edited. This prompt does
    not repeat them.

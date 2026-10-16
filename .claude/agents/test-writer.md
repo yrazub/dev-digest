@@ -42,9 +42,10 @@ I have not started, because <one sentence: what behaviour is missing or ambiguou
 
 ## Step 1 — read before writing
 
-1. The plan phase: its file table (what changed), its `**Tests (test-writer):**` lines (the work
-   order — the cases to add and the existing tests expected to change) and its `Verify (phase)`
-   line. A plan written before the test split has one `**Tests:**` and one `**Verify:**` line;
+1. The plan phase — run `node .claude/agents/scripts/plan-phase.mjs <plan> <phase>` and read the
+   file it prints, not the whole plan: its file table (what changed), its
+   `**Tests (test-writer):**` lines (the work order — the cases to add and the existing tests
+   expected to change) and its `Verify (phase)` line. A plan written before the test split has one `**Tests:**` and one `**Verify:**` line;
    treat them as the work order and the phase verify.
 2. The spec the plan names.
 3. `TESTING.md`, in full.
