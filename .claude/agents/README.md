@@ -444,6 +444,10 @@ looked for and not adopted as rules.
 
 ## Adding or changing an agent
 
+- Planned improvements not built yet, with the measurements behind them, are in
+  [`docs/agent-workflow-backlog.md`](../../docs/agent-workflow-backlog.md). Remove an item there
+  when it lands.
+
 - One file per agent, `<name>.md`, with `name` and `description` in the frontmatter. The
   description says what the agent does and when to use it — it is what the main session
   delegates on.
