@@ -84,10 +84,16 @@ Follow `NEXT` in this order; record each with `$S final <plan> <step> <status> [
    declared deviations from `$S show <plan> --notes`. Give `architecture-reviewer` mode `change`,
    the changed-file list (`git diff --name-status <base>...HEAD`) and a patch written to
    `.devdigest/sdd/<feature>/change.patch` (`git diff <merge-base> > …`). PASS / no CRITICAL or
-   WARNING → `pass`. Otherwise `fail`, take the gaps to the user, and get them into the plan as a
-   new phase through the `implementation-planner`; `start --accept-plan-change` then adds it and
-   resets every final check. In single-agent mode both checks are optional: ask, and record
-   `skipped` when the user declines.
+   WARNING → `pass`. Otherwise `fail`, and the fix round below. In single-agent mode both checks
+   are optional: ask, and record `skipped` when the user declines.
+
+   **Fix round.** Run `implementation-planner` with pass `amend`, the plan path and the gaps (the
+   Gaps section of the Verification report, the CRITICAL and WARNING findings of the review, each
+   with its ID). Show the user its Plan amendment; its "For the user" items — spec gaps go to
+   `spec-creator` — are settled first. On approval, apply each Replacement as one exact-match
+   edit, insert the New phase after the last phase and before `## Out of scope`, commit the plan,
+   and run `$S start <plan> --accept-plan-change`: the new phase comes up as the next step and
+   every final check starts again.
 2. **`docs`** — `doc-writer` with the plan path and the changed-file list; apply its "For the main
    session" items. `skipped` when nothing documented changed.
 3. **`e2e`** — `cd e2e && npm run e2e:hermetic`. It needs Docker and no dev server sharing

@@ -205,7 +205,7 @@ export function nextAction(state) {
   const f = state.final;
   const failed = FINAL_STEPS.filter((s) => f[s].status === 'fail');
   if (failed.length) {
-    return `Final step ${failed.join(', ')} failed. Take the report to the user; fixes go into the plan as a new phase (implementation-planner), then state.mjs start ${plan} --accept-plan-change.`;
+    return `Final step ${failed.join(', ')} failed. Take the report to the user; fixes go into the plan as a new phase (implementation-planner, pass amend), then state.mjs start ${plan} --accept-plan-change.`;
   }
   const checks = ['verify', 'arch'].filter((s) => f[s].status === 'pending');
   if (checks.length) {

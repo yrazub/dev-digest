@@ -11,7 +11,7 @@ the agent files and are not repeated here.
 |---|---|---|---|
 | [spec-creator](spec-creator.md) | Turns a request, a course task and its designs into an umbrella spec and module specs with EARS acceptance criteria, in two passes: discovery, then write | yes, spec Markdown only | `opus`, effort `high` |
 | [researcher](researcher.md) | Answers a question with evidence, from the repository or from external sources | no | `sonnet` |
-| [implementation-planner](implementation-planner.md) | Reviews an approved spec's requirements, then turns it (or a bug) into an Implementation Plan, in two passes: review, then plan; asks for the execution mode; writes no specs | no | `opus`, effort `high` |
+| [implementation-planner](implementation-planner.md) | Reviews an approved spec's requirements, then turns it (or a bug) into an Implementation Plan, in passes: review, then plan; asks for the execution mode; amend turns found gaps into a fix phase; writes no specs | no | `opus`, effort `high` |
 | [implementer](implementer.md) | Builds the code of an approved plan, phase by phase, and proves it passes the existing checks; writes no tests | yes | `sonnet`, effort `high` |
 | [test-writer](test-writer.md) | Writes every test: adds the tests a phase needs and repairs the existing tests it broke | yes, tests only | `sonnet`, effort `high` |
 | [architecture-reviewer](architecture-reviewer.md) | Checks a change or a module against the architectural boundaries and returns findings with evidence | no | `opus`, effort `high` |
@@ -144,9 +144,12 @@ spans packages; `architecture-reviewer` is optional. Then continue at step 9 bel
    .devdigest/sdd/<feature>/change.patch`; untracked new files are not in it and are named in the
    file list as new.
 8. Read both reports. A `FAIL` or `INCOMPLETE` verdict, or a CRITICAL or WARNING finding, goes
-   to the user. A code gap goes back to `implementer`; a missing test, or an existing test edited
-   without a plan or spec item, goes to `test-writer`. After any fix, run step 7 again — a check
-   made before the fix says nothing about the code after it.
+   to the user. The gaps go to `implementation-planner` with pass `amend`, which returns exact
+   replacements for wrong plan text and one new fix phase — code gaps as file rows, missing tests
+   or tests edited without a plan or spec item as test-writer lines, spec gaps back to
+   `spec-creator`. On the user's approval the main session applies it to the saved plan and runs
+   the new phase like any other (step 6). Then run step 7 again — a check made before the fix
+   says nothing about the code after it.
 9. Run `doc-writer` with the plan path and the changed-file list when the feature changed
    something the documentation describes. Apply the "For the main session" items of its report
    yourself.
@@ -197,7 +200,9 @@ What enforces what:
   file under `specs/`, `server/specs/`, `client/specs/`, `reviewer-core/specs/` or `mcp/specs/`,
   and anything under `specs/plans/`, is blocked (exit 2), symlinks and `..` resolved, unparseable input blocked too. `e2e/specs/` is
   left out because it belongs to `test-writer`. Which spec files inside those folders it may
-  touch, and that it never sets `approved`, are prompt-level.
+  touch, and that it never sets `approved`, are prompt-level. Observed in a live subagent run on
+  2026-10-16: writes to `client/src/` and `specs/plans/` were blocked with the guard's message, a
+  write to `specs/` went through.
 - **The push gate still applies.** The `PreToolUse` hook in
   [`.claude/settings.json`](../settings.json) denies `git push` and `gh pr create` without a
   passing `pr-self-review` verdict, whichever agent runs the command.
@@ -214,8 +219,8 @@ on demand with the `Skill` tool; `implementation-planner`, `architecture-reviewe
 |---|---|---|---|
 | spec-creator | the pass (`discovery` or `write`), the request, paths to the saved task text and design files, the base commit; for `write`, also the Discovery report and the user's answers | root and module `CLAUDE.md` and `README.md`, `specs/` and the module `specs/` indexes, overlapping specs, the code and contracts the feature touches, `TESTING.md`, the `INSIGHTS.md` files | `discovery`: a **Discovery report** — Understanding · Questions · Design gaps · Module interaction · UX proposals · Untrusted inputs · Proposed files · Not read; nothing written. `write`: specs in the working tree, uncommitted, plus a **Spec report** — Files written · Acceptance criteria · Discovery outcomes · Open questions left · For the main session |
 | researcher | one concrete question, anchored to a package, feature, library or version | module `CLAUDE.md` and `README.md`, code, tests, git history; or official docs, changelogs, source repositories | a **research report** as its final message: Answer · Findings with evidence · References or Sources · Not found · Not checked |
-| implementation-planner | the pass (`review` or `plan`) and an approved spec path, or a bug or technical-change description; for `plan`, also the Requirements review, the user's answers and the execution mode | module `CLAUDE.md` files, the spec and its module specs, `TESTING.md`, every relevant `INSIGHTS.md`, [`routing.json`](../skills/pr-self-review/routing.json), the matching `SKILL.md` files, the code it names | `review`: a **Requirements review** — Findings · Clarifications needed · Recommendations (each marked whether it changes the spec) · Execution mode · Ready to plan. `plan`: an **Implementation Plan** — Context read · Constraints · Phases (file table with skills and blocking rules, the test work order, `Verify (code)` and `Verify (phase)`, `Done when` citing an AC) · Out of scope · Risks · Open questions |
-| implementer | the path to an approved plan and the phase to build; from the second phase on, the statement that the previous phase closed green | its phase of the plan (sliced by [`scripts/plan-phase.mjs`](scripts/plan-phase.mjs)), the `CLAUDE.md` of each touched package, the skills each phase names | changed code in the working tree, uncommitted, no tests, plus an **Implementation report**: Phases · Baseline · Verification · Existing tests failing · Deviations · Not done / blocked · Insight candidates · For reviewers |
+| implementation-planner | the pass (`review`, `plan` or `amend`) and an approved spec path, or a bug or technical-change description; for `plan`, also the Requirements review, the user's answers and the execution mode; for `amend`, the saved plan path and the gaps with their IDs and evidence | module `CLAUDE.md` files, the spec and its module specs, `TESTING.md`, every relevant `INSIGHTS.md`, [`routing.json`](../skills/pr-self-review/routing.json), the matching `SKILL.md` files, the code it names | `review`: a **Requirements review** — Findings · Clarifications needed · Recommendations (each marked whether it changes the spec) · Execution mode · Ready to plan. `plan`: an **Implementation Plan** — Context read · Constraints · Phases (file table with skills and blocking rules, the test work order, `Verify (code)` and `Verify (phase)`, `Done when` citing an AC) · Out of scope · Risks · Open questions. `amend`: a **Plan amendment** — Gap triage · Replacements · New phase · For the user |
+| implementer | the path to an approved plan and the phase to build; from the second phase on, the statement that the previous phase closed green | its phase of the plan (sliced by [`scripts/plan-phase.mjs`](scripts/plan-phase.mjs)), the module spec of each package the phase touches and the umbrella criteria its `Done when` cites, the `CLAUDE.md` of each touched package, the skills each phase names | changed code in the working tree, uncommitted, no tests, plus an **Implementation report**: Phases · Baseline · Verification · Existing tests failing · Deviations · Not done / blocked · Insight candidates · For reviewers |
 | test-writer | after a phase: the plan path, the phase and the implementer's "Existing tests failing" table; standalone: the behaviour to cover and where it lives; for a bug: the description and the expected behaviour; for a gap: the `plan-verifier` item IDs with their quoted requirements | the plan phase (the same slice), the spec, `TESTING.md`, the module `CLAUDE.md` and `INSIGHTS.md`, the source under test, the nearest sibling test, the skills [`routing.json`](../skills/pr-self-review/routing.json) matches to the test files | test files in the working tree, uncommitted, plus a **Test report**: Tests written · Existing tests edited · Existing tests deleted · Suspected regressions · Suspected product bugs · Left failing, pre-existing · Verification · Needs a production change · Not covered · Insight candidates |
 | architecture-reviewer | the mode (`change` or `audit`); for `change`, the changed-file list with new files marked and a patch file when there is one; for `audit`, a directory or module; optionally the plan path and the `pnpm arch:check` result line | root and module `CLAUDE.md`, `routing.json` and the architecture `SKILL.md` files it matches, the dependency-cruiser config and baseline, the architecture documents, the root and module `INSIGHTS.md`, the files in scope and their importers | an **Architecture review** as its final message: Findings · Pre-existing · Checked · Left to the machine check · Not checked |
 | plan-verifier | the plan path, and the base ref when the branch is not cut from `origin/main` | the plan, the spec and its module specs, the root and package `CLAUDE.md`, the diff against the base, the code and tests; it re-runs the `Verify` commands | a **Verification report** as its final message: Plan items · Existing tests changed · Requirement items · Commands re-run · Scope · Gaps · Not verified, with a `PASS`, `FAIL` or `INCOMPLETE` verdict |
@@ -239,10 +244,13 @@ What the main session does with each result:
   `test-writer`; a `partial` or `blocked` status goes to the user.
 - **Test report** — close the phase on `green`, or send the findings back to `implementer`; read
   "Existing tests edited" every time, since each row must quote a plan or spec item.
-- **Verification report** — a `FAIL` or `INCOMPLETE` verdict goes to the user; code gaps go to
-  `implementer`, test gaps to `test-writer`; check again after any fix.
-- **Architecture review** — CRITICAL and WARNING findings go to the user. It is advice, not the
-  `/pr-self-review` verdict.
+- **Verification report** — a `FAIL` or `INCOMPLETE` verdict goes to the user; its gaps go to
+  `implementation-planner` pass `amend`, and the fix phase runs like any other; check again after
+  it.
+- **Architecture review** — CRITICAL and WARNING findings go to the user, and the ones to fix go
+  through the same `amend` pass. It is advice, not the `/pr-self-review` verdict.
+- **Plan amendment** — show it to the user; settle "For the user" first; on approval apply the
+  replacements, insert the new phase before `## Out of scope`, and run it.
 - **Documentation report** — apply its "For the main session" items yourself.
 - Commit the closed phase, record the "Insight candidates" through the `engineering-insights`
   skill, then run `/pr-self-review` before any push.
@@ -431,6 +439,8 @@ looked for and not adopted as rules.
 | Two passes — `review` checks the requirements against the code and returns findings, clarifications, recommendations and the execution-mode question; `plan` writes the plan | user decision 2026-10-15; a subagent cannot ask the user ([Sub-agents][sub]) |
 | A recommendation that changes the spec goes back through `spec-creator` and a fresh approval before the plan is written | user decision 2026-10-15 |
 | Execution mode: multi-agent (the chain above) or single-agent (the main session builds code and tests, `plan-verifier` optional) — chosen by the user per plan | user decision 2026-10-15 |
+| `amend` pass: gaps from `plan-verifier`, `architecture-reviewer` or a live run become exact replacements plus one new fix phase; spec gaps go back to `spec-creator` | project — the L03 Intent Layer revision 3 practice (root `INSIGHTS.md`, Decisions, 2026-10-05); user decision 2026-10-16 |
+| `implementer` reads the module specs of the packages its phase touches and the umbrella criteria its `Done when` cites; a spec / plan mismatch is Blocked | user decision 2026-10-16 — the plan does not restate the spec, so the implementer otherwise never saw the exact requirement text |
 
 ## Adding or changing an agent
 

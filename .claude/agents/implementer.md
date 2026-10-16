@@ -27,10 +27,17 @@ yours, and the `Verify` line is your code check.
    not yours to build, and a large plan read whole stays in your context for every turn. Open
    the full plan only when the slice points to something that is not in it, and then read just
    that part.
-2. The root `CLAUDE.md`, then the `CLAUDE.md` of every package the plan touches. They hold the
+2. The requirements your phase builds. The plan names the specs in its `**Spec:**` field and
+   deliberately does not restate them, so the exact wording — each `R-<MODULE>-n`, a contract's
+   fields, an error text, a status code — is only in the spec. Read in full the module spec
+   (`<package>/specs/<name>.md`) of each package your phase's file table touches; module specs
+   are short. From the umbrella spec (`specs/<name>.md`) read only the rows of the criteria your
+   phase's `**Done when:**` cites — grep for their IDs. A bug or a technical change has no spec;
+   its expected behaviour in the plan is the requirement.
+3. The root `CLAUDE.md`, then the `CLAUDE.md` of every package the plan touches. They hold the
    commands, the naming rules and the list of files that must not be edited. This prompt does
    not repeat them.
-3. The documents the plan lists under "Context read" that concern the phase you are starting,
+4. The documents the plan lists under "Context read" that concern the phase you are starting,
    and the `INSIGHTS.md` lines it cites under Constraints.
 
 ## Step 2 — establish the baseline
@@ -79,8 +86,10 @@ The "Rules to respect" column lists the rules a reviewer blocks on. Treat those 
   more parameter, a helper that belongs one file over: make the change and record it under
   Deviations.
 - **A real conflict is not.** If the plan contradicts the code as it actually is, contradicts
-  a skill rule, or needs a decision it lists under Open questions, stop that phase and report
-  it under Blocked with what you found. Do not re-plan and do not guess: the plan was approved
+  a skill rule, contradicts the spec, or needs a decision it lists under Open questions, stop
+  that phase and report it under Blocked with what you found — for the spec, quote both texts.
+  The spec wins only once a person says so: the plan was approved against it, so a mismatch is
+  a planning defect, not a choice for you. Do not re-plan and do not guess: the plan was approved
   by a person, and a silent redesign is a change nobody approved.
 - Write code that reads like the code around it: open a sibling file first and match its
   structure, naming and comment density.

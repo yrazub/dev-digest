@@ -78,7 +78,7 @@ test('final checks cannot start before the last phase; a failure routes to a pla
   cli('start', PLAN);
   assert.throws(() => cli('final', PLAN, 'verify', 'pass'), /Phases 1, 2, 3 are not committed/);
   for (const n of ['1', '2', '3']) cli('phase', PLAN, n, 'committed', '--commit', `c${n}`);
-  assert.match(next(cli('final', PLAN, 'verify', 'fail')), /verify failed\. .*new phase \(implementation-planner\).*--accept-plan-change/);
+  assert.match(next(cli('final', PLAN, 'verify', 'fail')), /verify failed\. .*new phase \(implementation-planner, pass amend\).*--accept-plan-change/);
 });
 
 test('a changed plan is refused until accepted; a new phase resets the final checks', () => {
