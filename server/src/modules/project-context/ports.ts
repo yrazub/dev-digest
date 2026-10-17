@@ -57,6 +57,16 @@ export interface ProjectContextStore {
   replaceAgentPaths(agentId: string, paths: readonly string[]): Promise<void>;
   replaceSkillPaths(skillId: string, paths: readonly string[]): Promise<void>;
   usedBy(workspaceId: string, path: string): Promise<UsedByCounts>;
+  /**
+   * What a review run attaches: the agent's paths in order, then each enabled skill
+   * linked to the agent in `agent_skills.order` with its paths in order (R-SRV-22).
+   */
+  runAttachments(agentId: string): Promise<RunAttachments>;
+}
+
+export interface RunAttachments {
+  agentPaths: string[];
+  skills: { name: string; paths: string[] }[];
 }
 
 /** Runs `work` in one transaction; the store it receives writes through that transaction. */

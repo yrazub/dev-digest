@@ -31,6 +31,9 @@ type IntentPreWork = { record: PrIntentRecord | null; toolCall: ToolCall };
 
 type IntentEnsureResult = Awaited<ReturnType<Container['intent']['ensure']>>;
 
+/** What `container.projectContext.forRun` hands the run (L05). */
+type ProjectContextRun = Awaited<ReturnType<Container['projectContext']['forRun']>>;
+
 function formatCost(costUsd: number | null): string {
   return costUsd === null ? 'cost n/a' : `$${costUsd.toFixed(4)}`;
 }
@@ -217,6 +220,11 @@ export class ReviewRunExecutor {
         runLog.info(`Skill: ${s.name} v${s.version} · ~${tokenizer.count(block)} tok`);
       });
 
+      // L05 — the agent's and its enabled skills' project documents. Built whatever the
+      // repo-intel toggle says (R-SRV-28). It never fails a run (NFR-6): on a throw the
+      // run goes on without documents. `info`, never `step` — a throwing `step` toasts.
+      const projectContext = await this.resolveProjectContext(agent.id, repo, runLog);
+
       // L03 — the derived intent as one prompt block. The filter runs only for a
       // confident, non-suspicious intent; otherwise the block still tags findings.
       const intentRecord = intentPre.record;
@@ -251,6 +259,8 @@ export class ReviewRunExecutor {
         ...(pull.body ? { prDescription: pull.body } : {}),
         // L02 — omitted when empty so the slot drops out of the prompt.
         ...(skillBlocks.length > 0 ? { skills: skillBlocks } : {}),
+        // L05 — omitted when no document is inserted, so the slot drops out of the prompt.
+        ...(projectContext.specs.length > 0 ? { specs: projectContext.specs } : {}),
         // L03 — omitted without a record, so the slot, the tagging and the filter all drop out.
         ...(intentBlock ? { intent: intentBlock, scopeFilter } : {}),
         task,
@@ -334,6 +344,12 @@ export class ReviewRunExecutor {
           skills_loaded: promptSkills.length
             ? promptSkills.map((s) => ({ name: s.name, version: s.version }))
             : null,
+          // L05 — the section's own weight and the review calls it was sent with; the
+          // documents inserted (with their text) and those left out, null when empty.
+          specs_tokens: outcome.assembly.specs != null ? tokenizer.count(outcome.assembly.specs) : null,
+          specs_calls: outcome.assembly.specs != null ? outcome.chunks.length : null,
+          specs_loaded: projectContext.loaded.length ? projectContext.loaded : null,
+          specs_skipped: projectContext.skipped.length ? projectContext.skipped : null,
         },
         tool_calls: [
           // L03 — the classifier call first (shared pre-work), then the review's own calls.
@@ -347,7 +363,7 @@ export class ReviewRunExecutor {
         ],
         raw_output: outcome.raw,
         memory_pulled: [],
-        specs_read: [],
+        specs_read: projectContext.loaded.map((d) => d.path),
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
@@ -384,6 +400,40 @@ export class ReviewRunExecutor {
     } finally {
       clearTimeout(deadlineTimer);
     }
+  }
+
+  /**
+   * L05 — the run's project-context documents, with one Live Log line per inserted or
+   * skipped document (or one "none attached" line). Never throws: a failure is logged as
+   * `info` and the run continues without documents (NFR-6).
+   */
+  private async resolveProjectContext(
+    agentId: string,
+    repo: typeof schema.repos.$inferSelect,
+    runLog: RunLogger,
+  ): Promise<ProjectContextRun> {
+    let result: ProjectContextRun;
+    try {
+      result = await this.container.projectContext.forRun({
+        agentId,
+        repo: { owner: repo.owner, name: repo.name, clonePath: repo.clonePath },
+      });
+    } catch (err) {
+      runLog.info(`Project context: unavailable (${(err as Error).message})`);
+      return { specs: [], loaded: [], skipped: [] };
+    }
+
+    if (result.loaded.length === 0 && result.skipped.length === 0) {
+      runLog.info('Project context: none attached');
+    }
+    for (const d of result.loaded) {
+      const origin = d.origin === 'skill' ? `skill ${d.skill_name}` : 'agent';
+      runLog.info(`Project context: ${d.path} · ~${d.tokens} tok (${origin})`);
+    }
+    for (const d of result.skipped) {
+      runLog.info(`Project context: skipped ${d.path} — ${d.reason}`);
+    }
+    return result;
   }
 
   /**

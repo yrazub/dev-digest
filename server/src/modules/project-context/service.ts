@@ -1,7 +1,9 @@
 import type {
   AgentContext,
+  ContextSkipReason,
   ProjectContextFile,
   ProjectContextList,
+  PromptAssembly,
   SkillContext,
   SpecFile,
 } from '@devdigest/shared';
@@ -14,7 +16,15 @@ import {
   MAX_CONTEXT_DOCS,
   MAX_CONTEXT_DOC_BYTES,
 } from './constants.js';
-import { isDocumentPath, kindOf, selectDocuments, type DocumentEntry } from './domain.js';
+import {
+  applyRunCap,
+  isDocumentPath,
+  kindOf,
+  mergeEffective,
+  selectDocuments,
+  type DocumentEntry,
+  type EffectivePath,
+} from './domain.js';
 import type {
   ContextRepo,
   ProjectContextStore,
@@ -32,6 +42,18 @@ export interface ProjectContextServiceDeps {
 
 /** Documents read at the same time while listing. */
 const READ_CONCURRENCY = 16;
+
+/** What a review run takes from project context (R-SRV-23). */
+export interface ProjectContextForRun {
+  /** The inserted documents in effective order; `text` is what the engine receives. */
+  specs: { path: string; text: string }[];
+  loaded: NonNullable<PromptAssembly['specs_loaded']>;
+  skipped: NonNullable<PromptAssembly['specs_skipped']>;
+}
+
+type RunRead =
+  | { kind: 'skip'; reason: ContextSkipReason }
+  | { kind: 'doc'; text: string; tokens: number };
 
 type DocState = Pick<SpecFile, 'status' | 'tokens'> & { content: string | null };
 
@@ -148,6 +170,72 @@ export class ProjectContextService {
       await store.replaceSkillPaths(skillId, paths);
       return { paths: await store.skillPaths(skillId) };
     });
+  }
+
+  /**
+   * R-SRV-22–R-SRV-27: the effective documents of an agent's run, read once each from
+   * the clone's working tree, with every problem recorded as a skip. Calls no LLM.
+   */
+  async forRun(input: {
+    agentId: string;
+    repo: { owner: string; name: string; clonePath: string | null };
+  }): Promise<ProjectContextForRun> {
+    const { agentPaths, skills } = await this.deps.store.runAttachments(input.agentId);
+    const effective = mergeEffective(agentPaths, skills);
+
+    const reads: RunRead[] = [];
+    let notCloned = input.repo.clonePath === null;
+    for (const entry of effective) {
+      if (notCloned) {
+        reads.push({ kind: 'skip', reason: 'not_cloned' });
+        continue;
+      }
+      const read = await this.deps.files.read(input.repo, entry.path, {
+        maxBytes: MAX_CONTEXT_DOC_BYTES,
+      });
+      if (read.kind === 'not_cloned') {
+        notCloned = true;
+        reads.push({ kind: 'skip', reason: 'not_cloned' });
+      } else if (read.kind === 'miss') {
+        reads.push({ kind: 'skip', reason: read.miss });
+      } else if (read.text.trim() === '') {
+        reads.push({ kind: 'skip', reason: 'empty' });
+      } else {
+        reads.push({ kind: 'doc', text: read.text, tokens: this.deps.tokenizer.count(read.text) });
+      }
+    }
+
+    const readable = effective.flatMap((entry, index) => {
+      const read = reads[index];
+      return read?.kind === 'doc' ? [{ index, tokens: read.tokens }] : [];
+    });
+    const { overCap } = applyRunCap(readable, CONTEXT_RUN_CAP_TOKENS);
+    const overCapIndexes = new Set(overCap.map((d) => d.index));
+
+    const out: ProjectContextForRun = { specs: [], loaded: [], skipped: [] };
+    effective.forEach((entry: EffectivePath, index) => {
+      const read = reads[index];
+      if (!read) return;
+      const skip = (reason: ContextSkipReason): void => {
+        out.skipped.push({
+          path: entry.path,
+          origin: entry.origin,
+          skill_name: entry.skill_name,
+          reason,
+        });
+      };
+      if (read.kind === 'skip') return skip(read.reason);
+      if (overCapIndexes.has(index)) return skip('over_cap');
+      out.specs.push({ path: entry.path, text: read.text });
+      out.loaded.push({
+        path: entry.path,
+        origin: entry.origin,
+        skill_name: entry.skill_name,
+        tokens: read.tokens,
+        text: read.text,
+      });
+    });
+    return out;
   }
 
   private async requireRepo(workspaceId: string, repoId: string): Promise<ContextRepo> {

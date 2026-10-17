@@ -1,10 +1,11 @@
-import { and, asc, eq, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type {
   ContextRepo,
   ProjectContextStore,
   ProjectContextUnitOfWork,
+  RunAttachments,
   UsedByCounts,
 } from './ports.js';
 
@@ -80,6 +81,38 @@ export class ProjectContextRepository implements ProjectContextStore {
     await this.db
       .insert(t.skillContextDocs)
       .values(paths.map((path, order) => ({ skillId, path, order })));
+  }
+
+  /** R-SRV-22: the agent's paths, then those of its enabled linked skills in link order. */
+  async runAttachments(agentId: string): Promise<RunAttachments> {
+    const agentPaths = await this.agentPaths(agentId);
+
+    const linked = await this.db
+      .select({ id: t.skills.id, name: t.skills.name })
+      .from(t.agentSkills)
+      .innerJoin(t.skills, eq(t.agentSkills.skillId, t.skills.id))
+      .where(and(eq(t.agentSkills.agentId, agentId), eq(t.skills.enabled, true)))
+      .orderBy(asc(t.agentSkills.order));
+    if (linked.length === 0) return { agentPaths, skills: [] };
+
+    const rows = await this.db
+      .select({ skillId: t.skillContextDocs.skillId, path: t.skillContextDocs.path })
+      .from(t.skillContextDocs)
+      .where(
+        inArray(
+          t.skillContextDocs.skillId,
+          linked.map((s) => s.id),
+        ),
+      )
+      .orderBy(asc(t.skillContextDocs.order));
+
+    return {
+      agentPaths,
+      skills: linked.map((s) => ({
+        name: s.name,
+        paths: rows.filter((r) => r.skillId === s.id).map((r) => r.path),
+      })),
+    };
   }
 
   /** R-SRV-15: agents directly, other agents through an enabled skill, skills. */
