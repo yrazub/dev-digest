@@ -238,4 +238,65 @@ describe("L05 Project context in the run trace", () => {
     expect(screen.queryByText(/tokens/)).not.toBeInTheDocument();
     expect(screen.queryByText("Skipped")).not.toBeInTheDocument();
   });
+
+  // Phase 13 — R-WEB-44 as amended, R-WEB-46, R-WEB-47, EC-43
+  it("lists the skipped documents on their own when every attached one was skipped and the repo is not cloned", async () => {
+    const user = userEvent.setup();
+    current = withSpecs(
+      {
+        specs: null,
+        specs_loaded: null,
+        specs_skipped: [
+          { path: AUTH, origin: "agent", skill_name: null, reason: "not_cloned" },
+          { path: RULES, origin: "agent", skill_name: null, reason: "not_cloned" },
+        ],
+      },
+      [],
+    );
+    renderDrawer();
+    const row = screen.getByText("Specs read").parentElement as HTMLElement;
+    expect(within(row).getByText("none")).toBeInTheDocument();
+
+    await user.click(screen.getByText("Prompt assembly"));
+    expect(screen.queryByText("Project context — attached specs (untrusted)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Skipped")).not.toBeInTheDocument();
+    expect(screen.getByText("Project context — skipped documents")).toBeInTheDocument();
+    expect(screen.getByText(`${AUTH} — repository is not cloned`)).toBeInTheDocument();
+    expect(screen.getByText(`${RULES} — repository is not cloned`)).toBeInTheDocument();
+  });
+
+  it("lists a skipped document on its own when the section exists but nothing was read", async () => {
+    const user = userEvent.setup();
+    current = withSpecs(
+      {
+        specs_tokens: 0,
+        specs_calls: 1,
+        specs_loaded: [],
+        specs_skipped: [{ path: "docs/huge.md", origin: "skill", skill_name: "edge-cases", reason: "over_cap" }],
+      },
+      [],
+    );
+    renderDrawer();
+    await user.click(screen.getByText("Prompt assembly"));
+    expect(screen.queryByText("Project context — attached specs (untrusted)")).not.toBeInTheDocument();
+    expect(screen.getByText("Project context — skipped documents")).toBeInTheDocument();
+    expect(screen.getByText("docs/huge.md — over the token cap")).toBeInTheDocument();
+  });
+
+  it("shows the skipped list once, under the block's own 'Skipped' title, when the block is shown", async () => {
+    const user = userEvent.setup();
+    current = withSpecs({
+      specs_tokens: 500,
+      specs_calls: 1,
+      specs_loaded: [{ path: AUTH, origin: "agent", skill_name: null, tokens: 500, text: "Body." }],
+      specs_skipped: [{ path: "docs/gone.md", origin: "agent", skill_name: null, reason: "not_found" }],
+    }, [AUTH]);
+    renderDrawer();
+    await user.click(screen.getByText("Prompt assembly"));
+    expect(screen.getByText("Project context — attached specs (untrusted)")).toBeInTheDocument();
+    expect(screen.queryByText("Project context — skipped documents")).not.toBeInTheDocument();
+    const title = screen.getByText("Skipped");
+    expect(within(title.parentElement as HTMLElement).getByText("docs/gone.md — file not found")).toBeInTheDocument();
+    expect(screen.getAllByText("docs/gone.md — file not found")).toHaveLength(1);
+  });
 });

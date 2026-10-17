@@ -15,12 +15,14 @@ import { ToolCallRow } from "../ToolCallRow";
 import { PromptBlock } from "../PromptBlock";
 import { FindingsSection } from "../FindingsSection";
 import { ProjectContextBlock } from "../ProjectContextBlock";
+import { SkippedContextDocs } from "../SkippedContextDocs";
 import { Row, Stat } from "../atoms";
 
 export function TraceBody({ trace, findings }: { trace: RunTrace; findings: FindingRecord[] }) {
   const t = useTranslations("runs");
   const stats = trace.stats;
   const specTokens = new Map((trace.prompt_assembly.specs_loaded ?? []).map((d) => [d.path, d.tokens]));
+  const showContextBlock = trace.prompt_assembly.specs != null && trace.specs_read.length > 0;
   return (
     <>
       <TraceSection icon="Settings" title={t("trace.configuration")}>
@@ -115,8 +117,13 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
         {trace.prompt_assembly.repo_map != null && (
           <PromptBlock label={t("trace.prompt.repoMap")} text={trace.prompt_assembly.repo_map} color={PROMPT_COLORS.repoMap} />
         )}
-        {trace.prompt_assembly.specs != null && trace.specs_read.length > 0 && (
+        {showContextBlock ? (
           <ProjectContextBlock assembly={trace.prompt_assembly} />
+        ) : (
+          <SkippedContextDocs
+            skipped={trace.prompt_assembly.specs_skipped ?? []}
+            title={t("trace.prompt.specsSkippedAlone")}
+          />
         )}
         {trace.prompt_assembly.callers != null && (
           <PromptBlock label={t("trace.prompt.callers")} text={trace.prompt_assembly.callers} color={PROMPT_COLORS.callers} />

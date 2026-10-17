@@ -7,8 +7,8 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import type { PromptAssembly } from "@devdigest/shared";
 import { PROMPT_COLORS } from "../../constants";
-import { s } from "../../styles";
 import { PromptBlock } from "../PromptBlock";
+import { SkippedContextDocs } from "../SkippedContextDocs";
 
 export function ProjectContextBlock({ assembly }: { assembly: PromptAssembly }) {
   const t = useTranslations("runs");
@@ -41,16 +41,7 @@ export function ProjectContextBlock({ assembly }: { assembly: PromptAssembly }) 
           meta={t("trace.prompt.tokens", { count: doc.tokens })}
         />
       ))}
-      {skipped.length > 0 && (
-        <div style={s.specsSkippedWrap}>
-          <span style={s.specsSkippedTitle}>{t("trace.prompt.specsSkipped")}</span>
-          {skipped.map((doc, i) => (
-            <span key={`${doc.origin}:${doc.skill_name ?? ""}:${doc.path}:${i}`} className="mono" style={s.specsSkippedRow}>
-              {doc.path} — {t(`trace.prompt.skipReason.${doc.reason}`)}
-            </span>
-          ))}
-        </div>
-      )}
+      <SkippedContextDocs skipped={skipped} title={t("trace.prompt.specsSkipped")} />
     </>
   );
 }

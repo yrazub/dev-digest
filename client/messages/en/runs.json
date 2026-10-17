@@ -53,6 +53,7 @@
       "specs": "Project context — attached specs (untrusted)",
       "specsPerCall": "≈ {tokens, number} tokens per call · sent in {calls} calls",
       "specsSkipped": "Skipped",
+      "specsSkippedAlone": "Project context — skipped documents",
       "skipReason": {
         "not_found": "file not found",
         "unreadable": "could not be read",
