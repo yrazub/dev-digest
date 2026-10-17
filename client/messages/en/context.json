@@ -17,5 +17,25 @@
     "loadError": "Couldn’t load documents",
     "fileLoadError": "Couldn’t load this document",
     "selectPrompt": "Select a document to preview it"
+  },
+  "attach": {
+    "total": "≈ {count, number} tokens",
+    "softCap": "over 4K soft cap",
+    "runCap": "A run inserts up to 16K tokens; it will skip: {paths}",
+    "notFound": "not found in {repo}",
+    "tooLarge": "too large",
+    "unreadable": "cannot be read",
+    "attach": "Attach",
+    "attached": "Attached",
+    "checkbox": "Attach {path}",
+    "preview": "Preview",
+    "filterPlaceholder": "Filter documents",
+    "orderHint": "Order matters — earlier documents appear earlier in the prompt. Drag to reorder.",
+    "dragDisabled": "Clear the filter to reorder.",
+    "dragHandle": "Drag {path} to reorder",
+    "noMatch": "No documents match ''{query}''",
+    "noRepo": "Add a repository",
+    "notCloned": "Repository not cloned yet",
+    "loadError": "Couldn’t load documents"
   }
 }
