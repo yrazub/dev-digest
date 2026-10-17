@@ -37,6 +37,18 @@ describe("SafeMarkdown", () => {
     }
   });
 
+  it("keeps the same link and code DOM nodes when re-rendered with the same text", () => {
+    const text = "See [docs](https://example.com/a) and `npm test` for details";
+    const { rerender } = render(<SafeMarkdown>{text}</SafeMarkdown>);
+    const link = screen.getByRole("link", { name: "docs" });
+    const code = screen.getByText("npm test");
+
+    rerender(<SafeMarkdown>{text}</SafeMarkdown>);
+
+    expect(screen.getByRole("link", { name: "docs" })).toBe(link);
+    expect(screen.getByText("npm test")).toBe(code);
+  });
+
   it("renders nothing for an empty or null body", () => {
     const { container, rerender } = render(<SafeMarkdown>{null}</SafeMarkdown>);
     expect(container).toBeEmptyDOMElement();

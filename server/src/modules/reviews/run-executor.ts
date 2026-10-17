@@ -409,7 +409,7 @@ export class ReviewRunExecutor {
    */
   private async resolveProjectContext(
     agentId: string,
-    repo: typeof schema.repos.$inferSelect,
+    repo: { owner: string; name: string; clonePath: string | null },
     runLog: RunLogger,
   ): Promise<ProjectContextRun> {
     let result: ProjectContextRun;

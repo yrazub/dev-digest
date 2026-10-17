@@ -35,6 +35,12 @@ const EnvSchema = z.object({
   // Project Context (L05): comma-separated folder names searched for markdown
   // documents. Unset or empty falls back to DEFAULT_PROJECT_CONTEXT_ROOTS.
   PROJECT_CONTEXT_ROOTS: z.string().optional(),
+  // Global API rate limit, requests per client per minute (not applied under
+  // NODE_ENV=test). `.env` files ship empty values, so '' → undefined → the default.
+  API_RATE_LIMIT_MAX: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.coerce.number().int().min(1).optional(),
+  ),
   API_PORT: z.coerce.number().int().default(3001),
   WEB_PORT: z.coerce.number().int().default(3000),
   DEVDIGEST_CLONE_DIR: z.string().optional(),
@@ -63,6 +69,9 @@ export function parseProjectContextRoots(raw: string | undefined): string[] {
   return roots.length > 0 ? roots : [...DEFAULT_PROJECT_CONTEXT_ROOTS];
 }
 
+/** Requests per client per minute when `API_RATE_LIMIT_MAX` is not set. */
+export const DEFAULT_API_RATE_LIMIT_MAX = 120;
+
 export type AppConfig = {
   databaseUrl: string;
   apiPort: number;
@@ -88,6 +97,8 @@ export type AppConfig = {
   openrouterIgnoredProviders: string[];
   /** Folder names searched for Project Context documents (`PROJECT_CONTEXT_ROOTS`). */
   projectContextRoots: string[];
+  /** Global API rate limit, requests per client per minute (`API_RATE_LIMIT_MAX`). */
+  rateLimitMax: number;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -111,5 +122,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .map((p) => p.trim())
       .filter(Boolean),
     projectContextRoots: parseProjectContextRoots(parsed.PROJECT_CONTEXT_ROOTS),
+    rateLimitMax: parsed.API_RATE_LIMIT_MAX ?? DEFAULT_API_RATE_LIMIT_MAX,
   };
 }
