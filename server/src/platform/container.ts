@@ -33,6 +33,7 @@ import { MAX_CALLERS_PER_SYMBOL } from '../modules/repo-intel/constants.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
 import { type HttpFetcher, NodeHttpFetcher } from '../adapters/http-fetch/index.js';
+import { type CloneFiles, FsCloneFiles } from '../adapters/clone-files/index.js';
 
 /**
  * DI container. One per app instance. Holds config, db, the JobRunner,
@@ -57,6 +58,8 @@ export interface ContainerOverrides {
   tokenizer?: Tokenizer;
   /** Public-URL text fetcher (skill import from URL). */
   httpFetch?: HttpFetcher;
+  /** Clone file list/read port (Project Context). */
+  cloneFiles?: CloneFiles;
 }
 
 export class Container {
@@ -83,6 +86,7 @@ export class Container {
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
   private _httpFetch?: HttpFetcher;
+  private _cloneFiles?: CloneFiles;
   private _priceBook?: PriceBook;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
@@ -162,6 +166,13 @@ export class Container {
     if (this.overrides.httpFetch) return this.overrides.httpFetch;
     this._httpFetch ??= new NodeHttpFetcher();
     return this._httpFetch;
+  }
+
+  /** Lists and reads the markdown files of a repository's clone (Project Context). */
+  get cloneFiles(): CloneFiles {
+    if (this.overrides.cloneFiles) return this.overrides.cloneFiles;
+    this._cloneFiles ??= new FsCloneFiles(this.config.cloneDir);
+    return this._cloneFiles;
   }
 
   /**

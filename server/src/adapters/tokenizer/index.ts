@@ -7,6 +7,8 @@
  * Default impl: js-tiktoken `cl100k_base` (pure-JS, no natives). The encoder is
  * lazy-initialised (loading the BPE ranks is the heavy part) and any failure
  * falls back to the `ceil(chars / 4)` heuristic — the renderer must never throw.
+ * A load failure switches to the heuristic for good; a failure on one text affects that text only.
+ * Special-token markers in the text (`<|endoftext|>`) are counted as plain text.
  *
  * Scope: in-process. Used by the repo-map renderer (repo-intel) and by the
  * review run to report the skills block's weight in the trace (L02).
@@ -31,10 +33,17 @@ export class TiktokenTokenizer implements Tokenizer {
     if (this.broken) return approxTokens(text);
     try {
       this.enc ??= getEncoding('cl100k_base');
-      return this.enc.encode(text).length;
     } catch {
       // BPE load failed once — don't retry per call; stick to the heuristic.
       this.broken = true;
+      return approxTokens(text);
+    }
+    try {
+      // `[]`, `[]`: no special token is allowed or rejected, so a marker such as
+      // `<|endoftext|>` in untrusted text is counted as ordinary characters.
+      return this.enc.encode(text, [], []).length;
+    } catch {
+      // One text failed to encode — only that text falls back; the encoder stays loaded.
       return approxTokens(text);
     }
   }
