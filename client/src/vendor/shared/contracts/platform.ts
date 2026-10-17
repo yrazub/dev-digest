@@ -255,13 +255,79 @@ export const PrCommentInput = z.object({
 export type PrCommentInput = z.infer<typeof PrCommentInput>;
 
 // ---- Project Context ----
+/** A relative markdown path inside a repository. */
+export const ContextDocPath = z
+  .string()
+  .min(1)
+  .max(512)
+  .refine((p) => !p.startsWith('/'), 'relative path')
+  // rejects '', '.' and '..' segments: a leading './', a '//', a trailing '/', 'a/./b', 'a/../b'
+  .refine(
+    (p) => p.split('/').every((s) => s !== '' && s !== '.' && s !== '..'),
+    'no empty, . or .. segment',
+  )
+  .refine((p) => !/[\u0000-\u001f\u007f"<>\\]/.test(p), 'forbidden character')
+  .refine((p) => p.toLowerCase().endsWith('.md'), 'a .md file'); // any case, as discovery
+export type ContextDocPath = z.infer<typeof ContextDocPath>;
+
+export const ContextDocStatus = z.enum(['ok', 'too_large', 'unreadable']);
+export type ContextDocStatus = z.infer<typeof ContextDocStatus>;
+
 export const SpecFile = z.object({
   path: z.string(),
   content: z.string().nullish(),
   size: z.number().int().nullish(),
   updated_at: z.string().nullish(),
+  /** Name of the nearest search-root folder. */
+  kind: z.string(),
+  /** Null unless status is 'ok'. */
+  tokens: z.number().int().nonnegative().nullable(),
+  status: ContextDocStatus,
 });
 export type SpecFile = z.infer<typeof SpecFile>;
+
+/** GET /repos/:id/context — `ref` (branch + SHA) is deferred with AC-31 / R-SRV-16. */
+export const ProjectContextList = z.object({
+  state: z.enum(['ready', 'not_cloned']),
+  /** The configured search roots, in order. */
+  roots: z.array(z.string()),
+  documents: z.array(SpecFile),
+  /** Sum over status 'ok'. */
+  total_tokens: z.number().int().nonnegative(),
+  capped: z.boolean(),
+  cap: z.number().int().positive(),
+  soft_cap_tokens: z.number().int().positive(),
+  run_cap_tokens: z.number().int().positive(),
+});
+export type ProjectContextList = z.infer<typeof ProjectContextList>;
+
+/** GET /repos/:id/context/file?path= */
+export const ProjectContextFile = SpecFile.extend({
+  /** Null unless status is 'ok'. */
+  content: z.string().nullable(),
+  used_by: z.object({
+    agents_direct: z.number().int().nonnegative(),
+    agents_via_skill: z.number().int().nonnegative(),
+    skills: z.number().int().nonnegative(),
+  }),
+});
+export type ProjectContextFile = z.infer<typeof ProjectContextFile>;
+
+/** Body of PUT /agents/:id/context and PUT /skills/:id/context */
+export const ContextPathsInput = z.object({
+  paths: z
+    .array(ContextDocPath)
+    .max(200)
+    .refine((ps) => new Set(ps).size === ps.length, 'duplicate path'),
+});
+export type ContextPathsInput = z.infer<typeof ContextPathsInput>;
+
+export const SkillContext = z.object({ paths: z.array(z.string()) });
+export type SkillContext = z.infer<typeof SkillContext>;
+
+/** `inherited` is deferred with AC-59 / R-SRV-21. */
+export const AgentContext = z.object({ paths: z.array(z.string()) });
+export type AgentContext = z.infer<typeof AgentContext>;
 
 export const IndexStatus = z.object({
   status: z.enum(['idle', 'cloning', 'parsing', 'embedding', 'done', 'error']),
