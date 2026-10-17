@@ -37,6 +37,12 @@ used from L06. A slot the caller leaves out is omitted, so `assemblePrompt`
 simply leaves that section out; the order of the sections is in
 [`docs/prompt-slots.md`](docs/prompt-slots.md).
 
+`specs` is the repository's own documents, passed as `{ path, text }` objects. The engine
+renders them under `## Project context` as untrusted data after a trusted note, one fenced block per
+document, and adds no LLM call: a map-reduce run repeats the section in each per-file call, and the
+number of calls does not change. The server reads and caps the documents; the engine does no
+I/O ([`docs/prompt-slots.md`](docs/prompt-slots.md) → "The project-context slot").
+
 ## Scope filter
 
 When the caller passes an `intent` block, the model is asked to **tag** each
@@ -67,7 +73,9 @@ Exported from `src/index.ts`: `assemblePrompt` / `wrapUntrusted` (prompt),
 `groundFindings` / `groundingSummary` (grounding), `applyScopeFilter` /
 `isSeriousOutOfScope` (scope filter), `toJsonSchema` / `extractJson` /
 `parseWithRepair` / `OutputTruncatedError` (structured output), plus
-`reviewPullRequest` and `reduceReviews`. Contracts (`Review`, `Finding`,
+`reviewPullRequest` and `reduceReviews`, and the project-context pieces `PROJECT_CONTEXT_NOTE` (the
+trusted note that opens the section) and the `ProjectContextDoc` type (`{ path, text }`, the shape of
+`ReviewInput.specs`). Contracts (`Review`, `Finding`,
 `Verdict`, …) come from `@devdigest/shared`.
 
 ## Testing

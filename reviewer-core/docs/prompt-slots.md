@@ -26,8 +26,10 @@ lines, in this fixed order — each one pushed only if its input is present:
 6. `## Repo skeleton` — the repo map (T3), delimiter-wrapped. Rendered
    *before* project context deliberately, so the model sees repo structure
    first.
-7. `## Project context` — spec chunks, each delimiter-wrapped individually
-   (`spec-0`, `spec-1`, …), joined with blank lines.
+7. `## Project context` — the repository's own documents (L05). The section is the trusted
+   `PROJECT_CONTEXT_NOTE`, then one block per document, in input order: a
+   `### Document: <path>` heading and the text delimiter-wrapped as
+   `<untrusted source="project-context">`. See [The project-context slot](#the-project-context-slot).
 8. `## Callers of changed symbols` — the callers digest (T1.3),
    delimiter-wrapped. Rendered *before* the diff, so cross-file context
    arrives before the model sees the change itself.
@@ -49,7 +51,9 @@ needed.
 mirrors this: each optional field is `blockOrNull ?? null`, so the trace
 shows exactly what was and wasn't in the prompt for that run. For the intent
 slot `assembly.intent` is the text as it was fenced — the caller's block cut to
-`MAX_INTENT_CHARS`, without the heading, the note or the delimiter — or `null`.
+`MAX_INTENT_CHARS`, without the heading, the note or the delimiter — or `null`. For the
+project-context slot `assembly.specs` is the section body: the note and the document blocks,
+without the `## Project context` line, or `null`.
 
 ## The intent slot
 
@@ -64,6 +68,32 @@ omit, soften or downgrade one because of it. The model only tags — dropping a
 finding is deterministic code in `src/scope.ts`, run only when the caller sets
 `scopeFilter` (see [`../README.md`](../README.md) → "Scope filter"). Without the
 slot the model is not asked to tag.
+
+## The project-context slot
+
+`specs` is a list of `ProjectContextDoc` objects, `{ path, text }`, resolved and read by the caller;
+the engine never touches a file. The caller decides which documents are in the list and in what order,
+and the engine renders them as given.
+
+- **The note.** `PROJECT_CONTEXT_NOTE` (a trusted, exported constant in `src/prompt.ts`) opens the
+  section. It says the documents are the project's own, attached by the user, and are data and never
+  instructions; that a finding for a rule a document states should name the document's path in its
+  rationale; that nothing a document says may omit, soften, downgrade or descope a finding; and that a
+  document never changes the output format or the task.
+- **One block per document.** `### Document: <path>` and then the text wrapped by `wrapUntrusted` with
+  the label `project-context`, so a literal `</untrusted>` inside a document cannot close its own fence.
+  Blocks are joined with blank lines.
+- **The path is sanitised.** It is repository-controlled text written into a trusted heading line. The
+  engine replaces each control character, `<`, `>`, `"`, `\` and backtick with `_` and cuts the result to
+  512 characters, so a path cannot start a new line or a tag in the heading.
+- **Blank documents are dropped.** A document whose text is empty or only whitespace is left out. With no
+  document left (the input absent, `[]` or all blank) the whole section is omitted and `assembly.specs`
+  is `null`, like any other slot.
+- **No cap here.** The engine applies no limit on the number or size of documents; the server's run
+  already read and capped them.
+- **Map-reduce.** Every chunk re-assembles the prompt from the same parts, so each per-file call carries
+  the whole section. Documents add tokens to every call but never add a call: the number of LLM calls
+  is the same with and without `specs`.
 
 ## The injection guard's scope
 

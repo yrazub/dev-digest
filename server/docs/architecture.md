@@ -15,7 +15,7 @@ the model is actually sent is in its "Review context" section; neither is repeat
 | Kind | Members | Notes |
 |---|---|---|
 | Built at construction | `config` `db` `secrets` `auth` `jobs` `runBus` | `runBus` is the process-wide singleton from `src/platform/sse.ts` |
-| Lazy getters | `git` `agentsRepo` `reviewRepo` `intent` `codeIndex` `repoIntel` `depgraph` `tokenizer` `priceBook` | created on first use, then reused |
+| Lazy getters | `git` `agentsRepo` `reviewRepo` `intent` `projectContext` `codeIndex` `repoIntel` `depgraph` `tokenizer` `httpFetch` `cloneFiles` `priceBook` | created on first use, then reused |
 | Plain getter | `repoIntelLimits` | returns `{ callersPerSymbol }`, the facade's `MAX_CALLERS_PER_SYMBOL`; nothing is created |
 | Async, need a secret | `github()` · `llm(provider)` · `embedder()` | cached after the first call; a missing key throws `ConfigError` **at resolve time**, which is why the server boots with no keys at all |
 
@@ -25,6 +25,12 @@ the model is actually sent is in its "Review context" section; neither is repeat
   dependencies — an `IntentRepository`, the lazy `github()` and `llm(provider)` resolvers, and
   `tokenizer` — rather than inside its module. The `reviews` run needs it too, and a module
   never imports another module, so the container is where the two meet.
+- `projectContext` is the `ProjectContextService` (`modules/project-context/service.ts`), built the
+  same way as `intent`: from a repository, a unit of work, the `cloneFiles` and `tokenizer` getters
+  and the configured search roots. The `reviews` run calls its `forRun`, and the module's own routes
+  call the rest, so the container is where the two meet. `cloneFiles` is the only file-system access
+  of the feature (`FsCloneFiles` over `config.cloneDir`); a test replaces it with `MockCloneFiles`
+  through `ContainerOverrides.cloneFiles`, and `projectContext` then reads through the mock.
 - `repoIntelLimits` exists so the `blast` module can state the facade's per-symbol caller cap in its
   response (`caller_limit`) without importing `modules/repo-intel/constants.ts`. The container is the
   composition root and already imports that module; the `blast` module reaches the number through
@@ -51,6 +57,8 @@ the model is actually sent is in its "Review context" section; neither is repeat
    - resolves its LLM via `container.llm(agent.provider)`;
    - if the agent's `repo_intel` toggle is on, adds repo-intel context (callers of the changed
      symbols, the repo map, the "top-ranked files" note);
+   - asks `container.projectContext.forRun` for the documents attached to the agent and to its
+     enabled skills (see [Project context in a review run](#project-context-in-a-review-run));
    - renders the intent record into the prompt block and decides whether the scope filter runs;
    - calls `reviewer-core`'s `reviewPullRequest` (prompt → LLM → grounding → scope filter → score);
    - persists the review and its findings (each with the reviewer's `scope` tag), marks the PR
@@ -127,6 +135,24 @@ sequenceDiagram
 - **No lock.** Two batches started at once for the same PR both derive the intent and upsert the
   same key; the last write wins.
 
+## Project context in a review run
+
+The attached documents are resolved **per agent**, inside `runOneAgent`, after the agent's skills
+and before the engine call. The step is `ReviewRunExecutor.resolveProjectContext`, a thin wrapper
+around `container.projectContext.forRun`; the picking, reading and capping are in the service
+([`../src/modules/project-context/README.md`](../src/modules/project-context/README.md)), and the path of
+a document across the packages is drawn in [`../../docs/project-context.md`](../../docs/project-context.md).
+
+- **Independent of repo-intel.** It runs whether the agent's `repo_intel` toggle is on or off.
+- **No model call.** The engine makes the same number of review calls with and without documents.
+- **Never fatal.** A document that cannot be used is a skip with a reason. If `forRun` throws, the
+  run logs `Project context: unavailable (<message>)` and goes on with no documents. Every line is
+  `runLog.info`, never `runLog.step`, for the reason given in "Intent in a review run".
+- **In the trace.** `specs_read` lists the inserted paths. `prompt_assembly` gets `specs_loaded`
+  (each document's path, origin, tokens and the text the engine received), `specs_skipped`,
+  `specs_tokens` and `specs_calls`. A trace therefore holds a copy of the inserted document text.
+  A run that fails writes the trace from the log buffer, with an empty `specs_read`.
+
 ## Live events: the run bus
 
 `RunBus` (`src/platform/sse.ts`) is **in memory, in one process**:
@@ -184,6 +210,7 @@ Consequences worth knowing when changing the engine:
 |---|---|
 | `reviews` | `agent_runs` · `run_traces` · `reviews` · `findings` · `pull_requests` (review freshness only) |
 | `intent` | `pr_intent` (reads `pull_requests` · `repos` · `pr_files` and the `feature_models` key of `settings`) |
+| `project-context` | `agent_context_docs` · `skill_context_docs` (paths and order only; reads `repos` · `agents` · `skills` · `agent_skills`, and the clone's files through the `cloneFiles` adapter) |
 | `smart-diff` | nothing — read-only (reads `pull_requests` · `pr_files` · `reviews` · `findings`; no GitHub, no model call) |
 | `blast` | nothing — read-only (reads `pull_requests` · `pr_files` itself, and the index tables through one `getBlastRadius` and one `getIndexState` call on the `repo-intel` facade; no GitHub, no model call) |
 | `pulls` | `pull_requests` · `pr_files` · `pr_commits` (GitHub import and backfill) |

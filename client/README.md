@@ -27,15 +27,17 @@ flowchart TD
   ONB["/onboarding<br/>add repo"] -->|"POST /repos"| API[("Fastify API")]
   PULLS --> PR["/pulls/:number<br/>review detail<br/>(overview · diff · findings)"]
 
-  AGENTS["/agents"] --> AGENT["/agents/:id<br/>editor (config · skills)"]
-  SKILLS["/skills"] --> SKILL["/skills/:id<br/>config · preview · versions"]
+  AGENTS["/agents"] --> AGENT["/agents/:id<br/>editor (config · skills · context)"]
+  SKILLS["/skills"] --> SKILL["/skills/:id<br/>config · context · preview · versions"]
   CONV["/repos/:repoId/conventions<br/>scan · candidates · create skill"]
+  CTX["/repos/:repoId/context<br/>Project Context (view only)"]
   SETTINGS["/settings/:section<br/>API keys · models"]
 
   PULLS -->|"GET /repos/:id/pulls · /repos/:id/index-state"| API
   PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments · /pulls/:id/intent · /pulls/:id/smart-diff · /pulls/:id/blast<br/>POST /pulls/:id/review · /pulls/:id/intent · /repos/:id/resync · /findings/:id/(accept|dismiss)"| API
-  AGENTS -->|"/agents · /agents/:id · /agents/:id/skills"| API
-  SKILLS -->|"/skills · /skills/:id/versions · /skills/import/(file|url)"| API
+  AGENTS -->|"/agents · /agents/:id · /agents/:id/skills · /agents/:id/context"| API
+  SKILLS -->|"/skills · /skills/:id/versions · /skills/:id/context · /skills/import/(file|url)"| API
+  CTX -->|"GET /repos/:id/context · /repos/:id/context/file?path=<br/>POST /repos/:id/resync"| API
   CONV -->|"/repos/:id/conventions · /extract · /skill-draft · /skill<br/>PATCH /conventions/:id"| API
   SETTINGS -->|"/settings · /providers"| API
 ```
@@ -97,6 +99,46 @@ The **Files changed** tab (`?tab=diff`, `DiffTab`) is the Smart Diff view (L03):
   a muted *No review has run yet* line.
 - **Fresh after a run.** The marks refresh when a run ends, on any tab, and after Accept, Dismiss
   and deleting a review or a run ([`docs/data-flow.md`](docs/data-flow.md)).
+
+**Project Context (L05)** lets a review use the repository's own markdown documents. The server
+finds them in the repository's clone; the UI has three places for them
+([`../docs/project-context.md`](../docs/project-context.md) follows a document across the packages):
+
+- **The Project Context page** (`/repos/:repoId/context`, the **Project Context** item of the sidebar's
+  Workspace section, `ProjectContextView`) is view only: no control creates, uploads, edits or
+  deletes a document. The left column lists the documents with their path, a kind badge and
+  `≈ N tokens`, above a filter (a case-insensitive path substring) and a footer with the file and
+  token totals of the whole list, which the filter does not change. The right column previews the
+  selected document through `SafeMarkdown`, with its "Used by N agents (V via skill) · M skills" line
+  (the parenthesis only when V is above 0). The selection is `?path=` in the URL. **Refresh** reads the
+  list again. A list cut by the server shows "Showing the first N documents". Other states: a loading
+  skeleton; a load failure with *Retry*; *Repository not cloned yet*; and, when no document is found,
+  *No markdown under specs/, docs/ or insights/ in <repository>* (the folders are the server's
+  configured search roots) with a **Resync** button. Resync only starts `POST /repos/:id/resync`; it does
+  not wait, and the list is read again with Refresh.
+- **The Context tab** of an agent (`?tab=context`, heading "Project context") and of a skill (`?tab=context`,
+  heading "Project context to use") is one shared component, `ContextAttachList`
+  (`src/components/context-attach-list`), fed by each owner's own hooks. It lists every document of the
+  active repository: the attached ones first in the order the user saved, then the rest by path. An
+  attached path that the clone no longer has stays in its place, marked *not found in <repository>*, and
+  can be detached. A checkbox attaches (the document goes to the end of the list) or detaches; a drag
+  handle, or the keyboard, reorders the attached rows, and reordering is off while the filter is in use.
+  A document that is too large or cannot be read cannot be newly attached. The total of the attached
+  tokens turns critical with an *over 4K soft cap* badge above the server's soft cap, and above the run cap
+  a note names the attached documents a run would skip. **Preview** opens a drawer with the content, the
+  "Used by" line and an Attach / Attached toggle; **Esc** closes it. Every change saves at once (see
+  [`docs/data-flow.md`](docs/data-flow.md)). With no repository the tab links to onboarding.
+- **The run trace drawer** shows what a run inserted. *Specs read* lists the inserted paths with
+  `≈ N tok`. Under *Prompt assembly*, the **Project context** block holds the whole section as sent
+  and one block per inserted document with its full text; the skipped documents are listed under it
+  as *path — reason*. The block is shown only when the run sent a section and inserted a document.
+  When every attached document was skipped (for example the repository has no clone), no block is
+  shown and the skipped list stands alone, titled *Project context — skipped documents*. A trace
+  recorded before the feature shows none of this. All of it is plain text.
+
+Document text is untrusted, so previews use `SafeMarkdown` (`src/components/safe-markdown`) rather
+than the vendored `Markdown`: raw HTML is shown as text and only `http:` and `https:` links are
+clickable, opening in a new tab with `rel="noopener noreferrer"`.
 
 Cross-cutting chrome lives in `src/components/app-shell` (nav, breadcrumbs,
 `g`-then-key shortcuts). Pages are thin; feature logic sits in colocated

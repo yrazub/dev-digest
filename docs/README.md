@@ -10,6 +10,7 @@ Not for: volatile data, task-level detail (that is `specs/`), or debugging lore
 | Document | What it covers |
 |---|---|
 | [`agent-prompts/`](agent-prompts/README.md) | The reviewer system prompts and how to choose a model |
+| [`project-context.md`](project-context.md) | How a repository document travels from the clone to the prompt and the run trace across `server`, `reviewer-core` and `client`: the decisions, their trade-offs and the trust boundary |
 | [`agent-workflow-backlog.md`](agent-workflow-backlog.md) | Planned improvements to the spec-driven agent chain in `.claude/agents/`, with the token measurements behind them |
 
 When you add a document here, add a row above and a `Before answering` row in the root

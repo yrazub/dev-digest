@@ -17,6 +17,7 @@
 | a PR's derived intent — the classifier call, its sources, confidence, cache key or failures | `src/modules/intent/README.md` |
 | the PR blast map (`GET /pulls/:id/blast`), its degraded mark, or the `blast` module | `README.md` — API map, then `src/modules/repo-intel/README.md` |
 | a changed file's role, or the Smart Diff grouping (`GET /pulls/:id/smart-diff`) | `src/modules/_shared/file-role/README.md`, then `README.md` — API map |
+| project context — attachments, the clone-file walk, a run's documents or skip reasons | `src/modules/project-context/README.md` |
 | any test | `../TESTING.md` |
 | a failure that smells familiar | `INSIGHTS.md` — and **append** to it through the `engineering-insights` skill |
 
@@ -36,7 +37,7 @@ Split the suite: `pnpm exec vitest run --exclude '**/*.it.test.ts'` (hermetic) /
 | | |
 |---|---|
 | `src/modules/<name>/` | feature plugins — routes, service, tests. Registered statically in `src/modules/index.ts` |
-| `src/adapters/` | ports to the outside world: llm · github · git · astgrep · codeindex · depgraph · embedder · tokenizer · secrets · auth |
+| `src/adapters/` | ports to the outside world: llm · github · git · astgrep · codeindex · depgraph · embedder · tokenizer · clone-files · secrets · auth |
 | `src/platform/` | cross-cutting: `container.ts` (DI) `config.ts` `errors.ts` `sse.ts` `model-router.ts` `run-logger.ts` |
 | `src/db/` | `schema/` (one file per domain) · `migrations/` · `seed.ts` |
 | `src/vendor/shared` | `@devdigest/shared` — the Zod contracts, source of truth for every package |
@@ -51,7 +52,8 @@ Split the suite: `pnpm exec vitest run --exclude '**/*.it.test.ts'` (hermetic) /
 - Everything external goes through an adapter behind the DI container. Tests swap in
   `src/adapters/mocks.ts` — never reach for the network in a test.
 - `*.it.test.ts` is DB-backed. Any other test file must be hermetic and key-free.
-- Rate limiting is global 120/min (off under `NODE_ENV=test`), tighter on expensive
+- Rate limiting is global, 120/min by default (`API_RATE_LIMIT_MAX` overrides it; off
+  under `NODE_ENV=test`), tighter on expensive
   routes like `POST /pulls/:id/review`; SSE and `/health*` are exempt.
 
 ## Naming

@@ -40,11 +40,14 @@ flowchart LR
   INDEX -->|"repo map = review context"| ENGINE
 
   INTENT["intent classifier<br/>title · description · linked issue/spec · hunk headers<br/>→ the PR's intent"]
-  ENGINE["reviewer-core/<br/>diff + repo map + intent → prompt → LLM<br/>→ structured findings → grounding gate → scope filter"]
+  PCTX["project-context<br/>markdown documents attached to the agent and its skills<br/>read from the clone's working tree"]
+  ENGINE["reviewer-core/<br/>diff + repo map + intent + project documents → prompt → LLM<br/>→ structured findings → grounding gate → scope filter"]
   LLM["LLM<br/>OpenAI · Anthropic · OpenRouter"]
   API -->|"run review"| INTENT
   INTENT -->|"cheap model call"| LLM
   INTENT -->|"intent block"| ENGINE
+  CLONE -->|"markdown under the search roots"| PCTX
+  PCTX -->|"documents, no model call"| ENGINE
   API -->|"run review"| ENGINE
   ENGINE --> LLM
 
@@ -64,7 +67,8 @@ The review flow end to end: **add a repo** → server clones it and `repo-intel`
 indexes it (the **Indexed** badge) → **import PRs** from GitHub → open a PR and
 **Review** → the server first has a cheap classifier model derive the PR's
 **intent** (shown in the Intent card), then `reviewer-core` assembles a prompt
-from the diff, the repo map and that intent, calls the LLM, validates every
+from the diff, the repo map, that intent and the project documents attached to the agent (the
+repository's own markdown, read from its clone and fenced as untrusted data), calls the LLM, validates every
 finding against the diff (the **grounding gate** drops hallucinated line
 references), drops non-serious findings the reviewer tagged out of the PR's
 scope, and persists structured findings with a severity and score. All local; the only outbound calls are to GitHub (PR data)
@@ -73,6 +77,9 @@ and the LLM (via OpenRouter).
 `devdigest-mcp` sits beside that flow, not inside it: an MCP client (Claude Code, MCP Inspector)
 starts it as a child process and it reaches DevDigest only over HTTP, against the running API.
 The review itself still executes in the API (see [MCP server](#mcp-server)).
+
+How a project document gets from the clone into the prompt and the run trace is in
+[`docs/project-context.md`](docs/project-context.md).
 
 Each package has its own README with deeper diagrams:
 [`client`](client/README.md) (UI route map) ·

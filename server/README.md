@@ -41,7 +41,7 @@ flowchart LR
   VAL --> MOD["feature module plugin<br/>modules/&lt;name&gt;/routes.ts"]
   MOD --> SVC["service<br/>(e.g. ReviewService)"]
   SVC --> DI{"DI container<br/>platform/container.ts"}
-  DI --> ADP["adapters (ports)<br/>llm · github · git · astgrep · tokenizer · secrets"]
+  DI --> ADP["adapters (ports)<br/>llm · github · git · astgrep · tokenizer · clone-files · secrets"]
   ADP -->|"prod"| EXT["LLM (OpenAI/Anthropic) · GitHub · git · pgvector"]
   ADP -->|"tests"| MOCK["src/adapters/mocks.ts<br/>MockLLMProvider · MockGitClient · …"]
   SVC --> DB[("Drizzle → Postgres")]
@@ -55,8 +55,9 @@ flowchart LR
 - **Validation is schema-first.** Each route declares zod `params`/`body` schemas
   (`fastify-type-provider-zod`); invalid input is rejected with a `422` **before**
   the handler runs — handlers no longer hand-roll `Schema.parse(req.body)`.
-- **Rate limiting:** a global 120/min limit (disabled under `NODE_ENV=test`), with
-  tighter per-route caps on expensive endpoints (e.g. `POST /pulls/:id/review`);
+- **Rate limiting:** a global limit of 120 requests per client per minute, set by
+  `API_RATE_LIMIT_MAX` (see [Environment](#environment)) and disabled under `NODE_ENV=test`,
+  with tighter per-route caps on expensive endpoints (e.g. `POST /pulls/:id/review`);
   SSE and `/health*` are exempt.
 - Modules are registered statically in `src/modules/index.ts` (one import + one
   `app.register` each); the engine reaps orphaned `running` runs on boot.
@@ -82,6 +83,7 @@ flowchart TB
     agents["agents<br/>/agents · /agents/:id · /agents/:id/skills (link + order)"]
     skills["skills<br/>/skills · /skills/:id · /skills/:id/versions · /versions/:v/restore<br/>/skills/import/(file|url)"]
     conventions["conventions<br/>/repos/:id/conventions · /extract · /skill-draft · /skill<br/>/conventions/:id (accept · reject · edit)"]
+    projectContext["project-context<br/>/repos/:id/context · /repos/:id/context/file<br/>/agents/:id/context · /skills/:id/context (GET · PUT)"]
   end
   subgraph Intel["Repo intelligence"]
     repoIntel["repo-intel<br/>/repos/:id/index-state · /resync"]
@@ -154,6 +156,21 @@ Each request writes one `info` line, `blast: served from the repo-intel index`, 
 answers a complete map there with no clone on disk; the rows are listed in
 [`../e2e/specs/seed-fixtures.md`](../e2e/specs/seed-fixtures.md).
 
+**Project Context routes** ([`src/modules/project-context/routes.ts`](src/modules/project-context/routes.ts); the
+module is explained in [`src/modules/project-context/README.md`](src/modules/project-context/README.md)). The
+list and preview routes read the repository's clone on disk on every request and cache nothing; the
+attachment routes read and write only the paths and their order. The workspace scopes every route.
+
+| Route | Behaviour |
+|---|---|
+| `GET /repos/:id/context` | Answers a `ProjectContextList`. `documents` are the markdown files under a search root (`PROJECT_CONTEXT_ROOTS`), sorted by path, each with `path`, `kind`, `size`, `tokens` and `status` (`ok`, `too_large` or `unreadable`; `tokens` is `null` unless `ok`) and no content. `total_tokens` sums the `ok` documents. `capped` is true when the list was cut to `cap`. `soft_cap_tokens` and `run_cap_tokens` are the two token caps the UI warns about. `state` is `not_cloned`, with no documents, when the repository has no `clone_path` or its clone directory is missing. `404` for an unknown repository or one of another workspace; `422` for an id that is not a uuid |
+| `GET /repos/:id/context/file?path=` | Answers a `ProjectContextFile`: the list fields of one document plus `content` (`null` unless `ok`) and `used_by` (`agents_direct`, `agents_via_skill`, `skills`). `path` is a plain string, so every bad path is a `404` and not a `422`: an unknown repository, an invalid path, a repository that is not cloned, or a path the list would not show (outside every root, in an excluded folder, a symbolic link) |
+| `GET /agents/:id/context` · `GET /skills/:id/context` | Answer `{ paths }`, the attached paths in stored order. `404` for an unknown owner or one of another workspace |
+| `PUT /agents/:id/context` · `PUT /skills/:id/context` | Replace the owner's whole list with `{ paths }`; the array order is stored. A path must be a relative `.md` path with no empty, `.` or `..` segment and none of the characters `"` `<` `>` `\` or a control character, and must sit under a search root; at most 200 paths, no duplicate. Anything else is `422`, and nothing is stored then. The path does not have to exist in the clone. The write does not bump the agent's or the skill's version. Answers the stored `{ paths }` |
+
+A review run reads the same attachments through `container.projectContext.forRun` and inserts the
+documents into the `## Project context` prompt slot; see "Review context" below.
+
 ## Environment
 
 `server/.env` (copied from `.env.example`):
@@ -167,6 +184,8 @@ answers a complete map there with no clone on disk; the rows are listed in
 | `EMBEDDINGS_ENABLED` | `false` | memory/RAG embeddings (OpenAI); off → **zero** OpenAI calls |
 | `REPO_INTEL_ENABLED` | `true` | repo skeleton + callers in the prompt; `false` → ripgrep-only |
 | `DEVDIGEST_CLONE_DIR` | `./clones` | imported-repo checkouts (git-ignored) |
+| `PROJECT_CONTEXT_ROOTS` | `specs,docs,insights` | folder names searched for Project Context documents, comma-separated. Entries are trimmed; an empty entry or one containing `/` is dropped; if nothing is left the default applies |
+| `API_RATE_LIMIT_MAX` | `120` | global rate limit, requests per client per minute; a positive integer. Empty counts as unset; any other value makes the server fail at boot. Not applied under `NODE_ENV=test`. `scripts/e2e.sh` and `e2e-web.yml` set it to `10000` so the browser flows are not answered with `429` |
 | `LOG_LEVEL` | `info` (`silent` in test) | pino level |
 | `NODE_ENV` | `development` | `test` → silent logs + global rate-limit disabled |
 
@@ -198,6 +217,14 @@ What the reviewer actually sends to the model is assembled in
   demo / test / not for production / do not flag" never descope the review — real
   defects are reported at full severity regardless. We deliberately do **not**
   keyword-scan untrusted text (a denylist only catches one phrasing).
+- **Project context is the user's choice, not a search.** For each agent the run asks
+  `container.projectContext.forRun` for the markdown documents attached to the agent and to its
+  enabled skills, read from the clone's working tree (not the PR's head). They fill the
+  `## Project context` slot as untrusted, fenced data, whatever the agent's `repo_intel` toggle says,
+  and cost no extra model call. A document the run cannot use is skipped with a reason, and a
+  failure inside project context never fails the run. The Live Log has one line per document and the
+  trace records what was inserted, with each document's text, and what was skipped. The rules are in
+  [`src/modules/project-context/README.md`](src/modules/project-context/README.md).
 - **Grounding is mandatory.** Every finding must cite a line that exists in the
   diff or it is dropped (`groundFindings`), and the score is recomputed from the
   surviving findings — the model's self-reported score is ignored.

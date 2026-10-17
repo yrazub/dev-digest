@@ -57,6 +57,12 @@ Anything that should survive a reload or a shared link lives in the URL, set wit
   default and has no parameter: choosing it deletes `blast`, and any other value reads as the Tree.
   `BlastRadiusCard` reads it with `useSearchParams()` and writes it with `router.replace`, keeping every
   other parameter; a reload keeps the view.
+- The Project Context page's selected document: `?path=<repository-relative path>`.
+  `ProjectContextView` reads it with `useSearchParams()` and writes it with `router.replace`; a path in
+  the URL on load is the selection.
+- The editor tab of an agent or a skill: `?tab=config | skills | context` (agents) and
+  `?tab=config | context | preview | versions` (skills). `toAgentTab` and `toSkillTab` coerce an unknown
+  value to `config`, so a new tab needs an entry in the tab list and in that coercion.
 - The Run Trace drawer: `?trace=<runId>`.
 - PR list filters and sort: `?status=…&sort=…`.
 
@@ -69,7 +75,14 @@ detail page always depends on the list query.
 Pages stay thin; feature logic lives in `_components/<Name>/` next to the route that uses it (the
 folder layout is in [`../CLAUDE.md`](../CLAUDE.md) → Naming). Components shared across routes live
 in `src/components/` (`app-shell`, `diff-viewer`, `page-shell`, `mermaid-diagram`,
-`repo-not-found`).
+`repo-not-found`, `safe-markdown`, `context-attach-list`).
+
+`context-attach-list` is used by two routes, the agent editor and the skill editor, and knows neither:
+it takes the owner's paths and a save function as props, and each route's `ContextTab` supplies its own
+hooks. `safe-markdown` renders repository markdown, which is untrusted. Use it, not the vendored
+`Markdown`, for any text that comes from a repository: it has no raw-HTML support, so raw HTML shows as
+text, and it renders only `http:` and `https:` links as anchors (new tab, `rel="noopener noreferrer"`),
+where the vendored component also keeps `mailto:` and relative links.
 
 Shared components never import from `src/app/`. `diff-viewer` shows findings without knowing
 where the finding card lives: the Files changed route passes a `DiffFindingApi`

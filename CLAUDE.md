@@ -13,6 +13,7 @@ The table below is a routing map, not a substitute for reading the file.
 |---|---|
 | anything under `client/` `server/` `reviewer-core/` `e2e/` `mcp/` | that module's `CLAUDE.md`, then its `README.md` |
 | the end-to-end review flow, or "how does X reach Y" | `README.md` — architecture diagram |
+| how a repository document reaches the prompt and the run trace (Project Context) | `docs/project-context.md` |
 | any test, or deciding where a test belongs | `TESTING.md` |
 | a reviewer system prompt, or choosing a model | `docs/agent-prompts/README.md` |
 | a course-lesson feature (L01–L08) | `specs/` — see its README for the index |

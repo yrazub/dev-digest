@@ -20,7 +20,7 @@ Drizzle over Postgres with pgvector. One file per domain in
 | `repo-intel.ts` | `repo_index_state` | starter — the **Indexed** badge |
 | `skills.ts` | `skills` | L02 |
 | `knowledge.ts` | `conventions` | L02 — conventions extractor |
-| `context.ts` | `onboarding` | L05 — project context folder |
+| `context.ts` | `agent_context_docs` `skill_context_docs` · `onboarding` | L05 — project context: the `project-context` module fills the two attachment tables; `onboarding` is still empty |
 | `eval.ts` | `eval_cases` `eval_runs` `conformance_checks` `composed_reviews` | L06 · L07 |
 | `ci.ts` | `ci_installations` `ci_runs` | L06 — export to CI |
 | `ops.ts` | `installed_plugins` `digests` | L08 |
@@ -38,6 +38,36 @@ stores `risk_areas`, `confidence`, `sources`, the two flags `missing_context` an
 the database does not enforce, so the repository parses them on every read; a row that fails the
 parse reads as "not derived" and the next derivation replaces it. `findings.scope` is a nullable
 text column (`in_scope` / `out_of_scope`) that persists the reviewer's tag.
+
+### `agent_context_docs` and `skill_context_docs` (L05)
+
+The attachments of the Project Context feature: which repository documents an agent, or a skill,
+carries into a review run. Each row is one path, `agent_id` (or `skill_id`) plus `path` as the
+primary key, and an `order` that is the path's position in the list the user saved. Both foreign
+keys cascade, so deleting an agent or a skill deletes its attachments. Only the `project-context`
+module writes them, and it replaces an owner's whole list in one transaction.
+
+```mermaid
+erDiagram
+  agents ||--o{ agent_context_docs : "attaches"
+  skills ||--o{ skill_context_docs : "attaches"
+  agents }o--o{ skills : "agent_skills"
+  agent_context_docs {
+    uuid agent_id PK "FK agents.id, on delete cascade"
+    text path PK "repository-relative .md path"
+    integer order
+  }
+  skill_context_docs {
+    uuid skill_id PK "FK skills.id, on delete cascade"
+    text path PK "repository-relative .md path"
+    integer order
+  }
+```
+
+Neither table stores document text, a repository id or a version: the path is read from the
+repository's clone whenever it is needed, and the same path applies to every repository that has
+such a file. The text of a document a run inserted is kept in that run's `run_traces` document
+(`prompt_assembly.specs_loaded`), not here.
 
 Shared column helpers (timestamps and the like) live in `_shared.ts` — use them instead
 of redeclaring `created_at` by hand.

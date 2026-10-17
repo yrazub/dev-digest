@@ -90,7 +90,10 @@ Env knobs:
   `E2E_STEP_TIMEOUT` (ms, default 60000), `E2E_FIND_WAIT` (ms, default 10000).
 - Hermetic stack (`scripts/e2e.sh`): `E2E_PG_PORT` (5433), `E2E_API_PORT` (3101),
   `E2E_WEB_PORT` (3100), `E2E_PG_CONTAINER` (`devdigest-e2e-postgres`),
-  `E2E_PG_IMAGE` (`pgvector/pgvector:pg16`).
+  `E2E_PG_IMAGE` (`pgvector/pgvector:pg16`), `E2E_API_RATE_LIMIT_MAX` (10000). The last one becomes the
+  API's `API_RATE_LIMIT_MAX` for this stack only: the flows send close to the API's default limit of 120
+  requests per minute from one address, and a `429` shows up as a `wait --text` timeout on a page that
+  never rendered. The `e2e-web.yml` job sets the same value.
 
 On a failed step the runner prints what `agent-browser` reported and writes
 `<flow>-fail.png` and `<flow>-fail.txt` (the page URL and its accessibility snapshot)
@@ -113,3 +116,4 @@ to `e2e/test-results/` (git-ignored; uploaded as a CI artifact by
 | `10-pr-intent` | PR #482 → the Intent card renders from the seeded `pr_intent` row on Overview and again on Agent runs (no model call) |
 | `11-pr-smart-diff` | PR #482 → Files changed tab grouped by role: the five group hints, the seeded finding and its `blocker` tag under `src/config.ts`, the Boilerplate group opening onto `package-lock.json`, then Original order (`?order=original`, shows `README.md`) and back to Smart order (no model call, nothing pressed that changes data). The section label is uppercased by CSS, so that one step uses `wait --fn` on the lowercased page text |
 | `12-pr-blast-radius` | PR #482 → Overview tab → the Blast radius block from the seeded repo-intel index: the four stats, `rateLimit` and its caller `src/api/public/index.ts:23` as a new-tab GitHub link at the seeded SHA, an endpoint chip, a cron chip and the "2 more changed symbols have no callers." line, then the Graph view through `?blast=graph` (the SVG named "Blast radius graph"), kept by a reload, and back to the Tree (the only click after the PR row is the Tree / Graph switch; no model call). The label and the stats use `wait --fn` on the page text (lowercased / whitespace collapsed) |
+| `13-project-context` | sidebar → Project Context on the seeded repo, which has no clone: the page shows "Repository not cloned yet"; then the seeded Security Reviewer's Context tab through `?tab=context`, with the same state, kept by a reload (read-only, no model call) |
