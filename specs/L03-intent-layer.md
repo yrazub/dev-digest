@@ -11,12 +11,12 @@ problem is kept as one signal.
 
 This spec states the feature and the rules that span packages. The implementable detail is in
 the module specs (see Ownership). The approved plan is
-[`L03-intent-layer-plan.md`](L03-intent-layer-plan.md).
+[`specs/plans/L03-intent-layer.md`](plans/L03-intent-layer.md).
 
 ## Sources
 
 - Lesson L03 requirements R1–R9 (below). Numbers `R1`…`R9` refer to them.
-- Plan [`L03-intent-layer-plan.md`](L03-intent-layer-plan.md), Design section; open questions
+- Plan [`specs/plans/L03-intent-layer.md`](plans/L03-intent-layer.md), Design section; open questions
   1–13 settled by the user as recommended.
 
 ## Requirements

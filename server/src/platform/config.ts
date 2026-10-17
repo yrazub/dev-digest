@@ -32,6 +32,15 @@ const EnvSchema = z.object({
   // 2026-10-02 it twice generated 17k–39k tokens for one DeepSeek review
   // (normally ~3k) without finishing. Set it empty to allow all.
   OPENROUTER_IGNORED_PROVIDERS: z.string().optional(),
+  // Project Context (L05): comma-separated folder names searched for markdown
+  // documents. Unset or empty falls back to DEFAULT_PROJECT_CONTEXT_ROOTS.
+  PROJECT_CONTEXT_ROOTS: z.string().optional(),
+  // Global API rate limit, requests per client per minute (not applied under
+  // NODE_ENV=test). `.env` files ship empty values, so '' → undefined → the default.
+  API_RATE_LIMIT_MAX: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.coerce.number().int().min(1).optional(),
+  ),
   API_PORT: z.coerce.number().int().default(3001),
   WEB_PORT: z.coerce.number().int().default(3000),
   DEVDIGEST_CLONE_DIR: z.string().optional(),
@@ -43,6 +52,25 @@ const EnvSchema = z.object({
     z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
   ),
 });
+
+/** Folder names searched for Project Context documents when none are configured. */
+export const DEFAULT_PROJECT_CONTEXT_ROOTS = ['specs', 'docs', 'insights'];
+
+/**
+ * Parses `PROJECT_CONTEXT_ROOTS`: trims each entry, drops empty ones and ones
+ * containing `/` (a root is a folder name, not a path), and falls back to the
+ * defaults when nothing is left.
+ */
+export function parseProjectContextRoots(raw: string | undefined): string[] {
+  const roots = (raw ?? '')
+    .split(',')
+    .map((r) => r.trim())
+    .filter((r) => r !== '' && !r.includes('/'));
+  return roots.length > 0 ? roots : [...DEFAULT_PROJECT_CONTEXT_ROOTS];
+}
+
+/** Requests per client per minute when `API_RATE_LIMIT_MAX` is not set. */
+export const DEFAULT_API_RATE_LIMIT_MAX = 120;
 
 export type AppConfig = {
   databaseUrl: string;
@@ -67,6 +95,10 @@ export type AppConfig = {
   repoIntelEnabled: boolean;
   /** OpenRouter upstream providers never routed to (`provider.ignore`). */
   openrouterIgnoredProviders: string[];
+  /** Folder names searched for Project Context documents (`PROJECT_CONTEXT_ROOTS`). */
+  projectContextRoots: string[];
+  /** Global API rate limit, requests per client per minute (`API_RATE_LIMIT_MAX`). */
+  rateLimitMax: number;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -89,5 +121,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .split(',')
       .map((p) => p.trim())
       .filter(Boolean),
+    projectContextRoots: parseProjectContextRoots(parsed.PROJECT_CONTEXT_ROOTS),
+    rateLimitMax: parsed.API_RATE_LIMIT_MAX ?? DEFAULT_API_RATE_LIMIT_MAX,
   };
 }

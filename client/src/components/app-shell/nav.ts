@@ -22,7 +22,10 @@ export interface AppNavGroup {
 export const APP_NAV: AppNavGroup[] = [
   {
     sectionKey: "workspace",
-    items: [{ key: "pulls", icon: "GitPullRequest", href: "/repos/:repoId/pulls", gKey: "p" }],
+    items: [
+      { key: "pulls", icon: "GitPullRequest", href: "/repos/:repoId/pulls", gKey: "p" },
+      { key: "context", icon: "Folder", href: "/repos/:repoId/context" },
+    ],
   },
   {
     sectionKey: "skillsLab",

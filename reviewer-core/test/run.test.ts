@@ -514,3 +514,154 @@ describe('reviewPullRequest — intent slot and scope filter', () => {
     });
   });
 });
+
+/**
+ * L05 — the `specs` slot at the engine level. `specs` is `{ path, text }` documents; the engine
+ * renders them, makes no extra LLM call for them, and still grounds every finding.
+ */
+describe('reviewPullRequest — project context (specs)', () => {
+  const SPECS = [
+    { path: 'specs/architecture.md', text: '# Architecture\nModules do not import each other.' },
+    { path: 'docs/security.md', text: '# Security\nNo secrets in code.' },
+  ];
+  const file = (name: string) =>
+    `diff --git a/src/${name}.ts b/src/${name}.ts\n--- a/src/${name}.ts\n+++ b/src/${name}.ts\n@@ -1,1 +1,2 @@\n a\n+b`;
+  const THREE_FILES = ['a', 'b', 'c'].map(file).join('\n');
+  const CLEAN = { verdict: 'approve', summary: 'ok', score: 100, findings: [] };
+
+  const userMessages = (llm: MockLLMProvider): string[] =>
+    llm.calls
+      .filter((c) => c.method === 'completeStructured')
+      .map((c) => (c.req as { messages: { content: string }[] }).messages[1]!.content);
+
+  it('single-pass: specs reach the prompt unchanged and are recorded in the trace assembly', async () => {
+    const llm = new MockLLMProvider('openai', { structured: CLEAN });
+    const outcome = await reviewPullRequest({
+      systemPrompt: 's',
+      model: 'm',
+      diff: await new MockGitClient().diff(),
+      llm,
+      specs: SPECS,
+    });
+    const [user] = userMessages(llm);
+    expect(user).toContain('## Project context');
+    for (const d of SPECS) {
+      expect(user).toContain(
+        `### Document: ${d.path}\n<untrusted source="project-context">\n${d.text}\n</untrusted>`,
+      );
+    }
+    expect(user!.indexOf(SPECS[0]!.path)).toBeLessThan(user!.indexOf(SPECS[1]!.path));
+    expect(outcome.assembly.specs).not.toBeNull();
+    expect(user).toContain(`## Project context\n${outcome.assembly.specs}`);
+  });
+
+  it('without specs no project-context section is sent and assembly.specs is null', async () => {
+    const llm = new MockLLMProvider('openai', { structured: CLEAN });
+    const outcome = await reviewPullRequest({
+      systemPrompt: 's',
+      model: 'm',
+      diff: await new MockGitClient().diff(),
+      llm,
+    });
+    expect(userMessages(llm)[0]).not.toContain('## Project context');
+    expect(outcome.assembly.specs).toBeNull();
+  });
+
+  it('single-pass: the number of LLM calls is the same with and without specs', async () => {
+    const callsFor = async (specs?: typeof SPECS) => {
+      const llm = new MockLLMProvider('openai', { structured: CLEAN });
+      await reviewPullRequest({
+        systemPrompt: 's',
+        model: 'm',
+        diff: await new MockGitClient().diff(),
+        llm,
+        strategy: 'single-pass',
+        specs,
+      });
+      return llm.calls.length;
+    };
+    const without = await callsFor();
+    expect(without).toBe(1);
+    expect(await callsFor(SPECS)).toBe(without);
+  });
+
+  it('map-reduce: same call count with and without specs, and every call holds the section', async () => {
+    const run = async (specs?: typeof SPECS) => {
+      const llm = new MockLLMProvider('openai', { structured: CLEAN });
+      const outcome = await reviewPullRequest({
+        systemPrompt: 's',
+        model: 'm',
+        diff: await new MockGitClient({ diff: THREE_FILES }).diff(),
+        llm,
+        strategy: 'map-reduce',
+        specs,
+      });
+      expect(outcome.mode).toBe('map-reduce');
+      return { llm, outcome };
+    };
+    const without = await run();
+    const withSpecs = await run(SPECS);
+    expect(without.llm.calls).toHaveLength(3);
+    expect(withSpecs.llm.calls).toHaveLength(without.llm.calls.length);
+
+    const users = userMessages(withSpecs.llm);
+    expect(users).toHaveLength(3);
+    for (const user of users) {
+      for (const d of SPECS) {
+        expect(user).toContain(
+          `### Document: ${d.path}\n<untrusted source="project-context">\n${d.text}\n</untrusted>`,
+        );
+      }
+    }
+    // each call still carries only its own file's diff
+    expect(users[0]).toContain('src/a.ts');
+    expect(users[0]).not.toContain('src/b.ts');
+    expect(withSpecs.outcome.assembly.specs).not.toBeNull();
+  });
+
+  it('a finding that names a document but cites no diff line is still dropped by grounding', async () => {
+    const llm = new MockLLMProvider('openai', {
+      structured: {
+        verdict: 'request_changes',
+        summary: 's',
+        score: 50,
+        findings: [
+          {
+            id: 'doc-ghost',
+            severity: 'CRITICAL',
+            category: 'bug',
+            title: 'violates docs/security.md',
+            file: 'src/config.ts',
+            start_line: 999,
+            end_line: 999,
+            rationale: 'docs/security.md says no secrets in code',
+            confidence: 0.9,
+            kind: 'finding',
+          },
+          {
+            id: 'doc-real',
+            severity: 'CRITICAL',
+            category: 'security',
+            title: 'violates docs/security.md',
+            file: 'src/config.ts',
+            start_line: 11,
+            end_line: 11,
+            rationale: 'docs/security.md says no secrets in code',
+            confidence: 0.9,
+            kind: 'finding',
+          },
+        ],
+      },
+    });
+    const outcome = await reviewPullRequest({
+      systemPrompt: 's',
+      model: 'm',
+      diff: await new MockGitClient().diff(),
+      llm,
+      specs: SPECS,
+    });
+    expect(outcome.grounding).toBe('1/2 passed');
+    expect(outcome.dropped.map((d) => d.finding.id)).toEqual(['doc-ghost']);
+    expect(outcome.review.findings.map((f) => f.id)).toEqual(['doc-real']);
+  });
+});

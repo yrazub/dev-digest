@@ -33,6 +33,15 @@ import {
   ConventionCandidate,
   ConventionUpdate,
   ConventionSkillCreate,
+  ContextDocPath,
+  ContextDocStatus,
+  ContextPathsInput,
+  ContextSkipReason,
+  SpecFile,
+  ProjectContextList,
+  ProjectContextFile,
+  SkillContext,
+  AgentContext,
 } from '@devdigest/shared';
 
 /**
@@ -668,5 +677,231 @@ describe('L04 blast radius contracts', () => {
   it('accepts zero totals (an empty map)', () => {
     const empty = { symbols: 0, callers: 0, endpoints: 0, crons: 0, symbols_without_callers: 0 };
     expect(BlastRadiusResponse.parse({ ...body, totals: empty }).totals).toEqual(empty);
+  });
+});
+
+describe('L05 project context contracts', () => {
+  describe('ContextDocPath', () => {
+    it.each(['docs/README.MD', 'specs/a.md', 'insights/deep/nested/note.md', 'docs/a.b.Md'])(
+      'accepts %s (.md in any case)',
+      (path) => {
+        expect(ContextDocPath.safeParse(path).success).toBe(true);
+      },
+    );
+
+    it.each([
+      ['an absolute path', '/abs.md'],
+      ['a parent segment', '../x.md'],
+      ['a parent segment in the middle', 'specs/../x.md'],
+      ['a leading ./', './specs/a.md'],
+      ['a . segment in the middle', 'specs/./a.md'],
+      ['an empty segment', 'specs//a.md'],
+      ['a trailing slash', 'specs/a.md/'],
+      ['an empty string', ''],
+      ['a bare .md-less name', 'specs/a'],
+      ['another extension', 'specs/a.txt'],
+      ['a newline', 'specs/a\n.md'],
+      ['a double quote', 'specs/a".md'],
+      ['a <', 'specs/a<b.md'],
+      ['a >', 'specs/a>b.md'],
+      ['a backslash', 'specs\\a.md'],
+      ['a NUL', 'specs/a\u0000.md'],
+      ['a DEL', 'specs/a\u007f.md'],
+    ])('rejects %s', (_name, path) => {
+      expect(ContextDocPath.safeParse(path).success).toBe(false);
+    });
+
+    it('accepts 512 characters and rejects 513', () => {
+      const withLength = (n: number) => `docs/${'a'.repeat(n - 'docs/.md'.length)}.md`;
+      expect(withLength(512)).toHaveLength(512);
+      expect(ContextDocPath.safeParse(withLength(512)).success).toBe(true);
+      expect(withLength(513)).toHaveLength(513);
+      expect(ContextDocPath.safeParse(withLength(513)).success).toBe(false);
+    });
+  });
+
+  describe('ContextPathsInput', () => {
+    const paths = (n: number) => Array.from({ length: n }, (_, i) => `docs/doc-${i}.md`);
+
+    it('accepts an empty list, a normal list and exactly 200 paths', () => {
+      expect(ContextPathsInput.parse({ paths: [] }).paths).toEqual([]);
+      expect(ContextPathsInput.parse({ paths: ['specs/a.md', 'docs/b.md'] }).paths).toEqual([
+        'specs/a.md',
+        'docs/b.md',
+      ]);
+      expect(ContextPathsInput.safeParse({ paths: paths(200) }).success).toBe(true);
+    });
+
+    it('rejects 201 paths', () => {
+      expect(ContextPathsInput.safeParse({ paths: paths(201) }).success).toBe(false);
+    });
+
+    it('rejects a duplicate path', () => {
+      expect(ContextPathsInput.safeParse({ paths: ['specs/a.md', 'specs/a.md'] }).success).toBe(false);
+    });
+
+    it('rejects a list holding an invalid path', () => {
+      expect(ContextPathsInput.safeParse({ paths: ['specs/a.md', '../x.md'] }).success).toBe(false);
+    });
+  });
+
+  describe('document shapes', () => {
+    const doc = {
+      path: 'specs/a.md',
+      size: 120,
+      updated_at: '2026-10-16T10:00:00.000Z',
+      kind: 'specs',
+      tokens: 30,
+      status: 'ok',
+    };
+
+    it('ContextDocStatus has the three values', () => {
+      expect(ContextDocStatus.options).toEqual(['ok', 'too_large', 'unreadable']);
+    });
+
+    it('SpecFile requires kind, tokens and status; tokens may be null, content may be absent', () => {
+      expect(SpecFile.parse(doc).kind).toBe('specs');
+      expect(SpecFile.parse({ ...doc, tokens: null, status: 'too_large' }).tokens).toBeNull();
+      for (const key of ['kind', 'tokens', 'status']) {
+        const { [key]: _dropped, ...rest } = doc as Record<string, unknown>;
+        expect(SpecFile.safeParse(rest).success).toBe(false);
+      }
+      expect(SpecFile.safeParse({ ...doc, status: 'missing' }).success).toBe(false);
+      expect(SpecFile.safeParse({ ...doc, tokens: -1 }).success).toBe(false);
+    });
+
+    const list = {
+      state: 'ready',
+      roots: ['specs', 'docs', 'insights'],
+      documents: [doc, { ...doc, path: 'docs/big.md', tokens: null, status: 'too_large' }],
+      total_tokens: 30,
+      capped: false,
+      cap: 1000,
+      soft_cap_tokens: 4000,
+      run_cap_tokens: 16000,
+    };
+
+    it('ProjectContextList parses a sample, accepts not_cloned, and carries no ref', () => {
+      const parsed = ProjectContextList.parse({ ...list, ref: { branch: 'main', sha: 'abc' } });
+      expect(parsed.documents).toHaveLength(2);
+      expect(parsed.total_tokens).toBe(30);
+      expect(parsed).not.toHaveProperty('ref');
+      expect(ProjectContextList.shape).not.toHaveProperty('ref');
+      expect(
+        ProjectContextList.parse({ ...list, state: 'not_cloned', documents: [], total_tokens: 0 }).state,
+      ).toBe('not_cloned');
+    });
+
+    it('ProjectContextList rejects an unknown state and a non-positive cap', () => {
+      expect(ProjectContextList.safeParse({ ...list, state: 'cloning' }).success).toBe(false);
+      expect(ProjectContextList.safeParse({ ...list, cap: 0 }).success).toBe(false);
+      expect(ProjectContextList.safeParse({ ...list, total_tokens: -1 }).success).toBe(false);
+    });
+
+    const file = {
+      ...doc,
+      content: '# Title\n',
+      used_by: { agents_direct: 1, agents_via_skill: 2, skills: 3 },
+    };
+
+    it('ProjectContextFile parses a sample, keeps content null, and carries no ref', () => {
+      const parsed = ProjectContextFile.parse({ ...file, ref: { branch: 'main' } });
+      expect(parsed.content).toBe('# Title\n');
+      expect(parsed.used_by).toEqual({ agents_direct: 1, agents_via_skill: 2, skills: 3 });
+      expect(parsed).not.toHaveProperty('ref');
+      expect(ProjectContextFile.shape).not.toHaveProperty('ref');
+      expect(ProjectContextFile.parse({ ...file, content: null, status: 'too_large', tokens: null }).content).toBeNull();
+    });
+
+    it('ProjectContextFile requires content (nullable) and used_by', () => {
+      const { content: _c, ...noContent } = file;
+      const { used_by: _u, ...noUsedBy } = file;
+      expect(ProjectContextFile.safeParse(noContent).success).toBe(false);
+      expect(ProjectContextFile.safeParse(noUsedBy).success).toBe(false);
+    });
+
+    it('SkillContext and AgentContext hold paths only; AgentContext has no inherited', () => {
+      expect(SkillContext.parse({ paths: ['specs/a.md'] })).toEqual({ paths: ['specs/a.md'] });
+      const agent = AgentContext.parse({ paths: ['specs/a.md'], inherited: [{ path: 'docs/x.md' }] });
+      expect(agent).toEqual({ paths: ['specs/a.md'] });
+      expect(AgentContext.shape).not.toHaveProperty('inherited');
+      expect(AgentContext.safeParse({}).success).toBe(false);
+    });
+  });
+
+  describe('PromptAssembly project-context fields', () => {
+    const base = { system: 's', user: 'u' };
+    const loaded = { path: 'specs/a.md', origin: 'skill', skill_name: 'api-rules', tokens: 12, text: '# A' };
+    const skipped = { path: 'docs/b.md', origin: 'agent', skill_name: null, reason: 'over_cap' };
+
+    it('a trace written before L05 (none of the four fields) still parses', () => {
+      const parsed = PromptAssembly.parse(base);
+      expect(parsed.specs_tokens).toBeUndefined();
+      expect(parsed.specs_calls).toBeUndefined();
+      expect(parsed.specs_loaded).toBeUndefined();
+      expect(parsed.specs_skipped).toBeUndefined();
+    });
+
+    it('parses with the four fields set, and with them null', () => {
+      const parsed = PromptAssembly.parse({
+        ...base,
+        specs_tokens: 12,
+        specs_calls: 2,
+        specs_loaded: [loaded],
+        specs_skipped: [skipped],
+      });
+      expect(parsed.specs_tokens).toBe(12);
+      expect(parsed.specs_calls).toBe(2);
+      expect(parsed.specs_loaded).toEqual([loaded]);
+      expect(parsed.specs_skipped).toEqual([skipped]);
+
+      const nulls = PromptAssembly.parse({
+        ...base,
+        specs_tokens: null,
+        specs_calls: null,
+        specs_loaded: null,
+        specs_skipped: null,
+      });
+      expect(nulls.specs_loaded).toBeNull();
+      expect(nulls.specs_skipped).toBeNull();
+    });
+
+    it('RunTrace still parses the new fields inside prompt_assembly', () => {
+      const trace = RunTrace.parse({
+        config: { agent: 'A', version: 'v1', model: 'm', pr: 1, source: 'local' },
+        stats: { duration_ms: 1, tokens_in: 1, tokens_out: 1, cost_usd: null, findings: 0, grounding: '0/0 passed' },
+        prompt_assembly: { ...base, specs_loaded: [loaded] },
+        tool_calls: [],
+        raw_output: '{}',
+        memory_pulled: [],
+        specs_read: ['specs/a.md'],
+        log: [],
+      });
+      expect(trace.prompt_assembly.specs_loaded?.[0]?.skill_name).toBe('api-rules');
+      expect(trace.specs_read).toEqual(['specs/a.md']);
+    });
+
+    it('ContextSkipReason has the seven reasons', () => {
+      expect(ContextSkipReason.options).toEqual([
+        'not_found',
+        'unreadable',
+        'too_large',
+        'empty',
+        'outside_clone',
+        'not_cloned',
+        'over_cap',
+      ]);
+    });
+
+    it('specs_skipped[].reason rejects an unknown reason', () => {
+      expect(
+        PromptAssembly.safeParse({ ...base, specs_skipped: [{ ...skipped, reason: 'timeout' }] }).success,
+      ).toBe(false);
+    });
+
+    it('specs_loaded[].origin rejects an unknown origin and a negative token count', () => {
+      expect(PromptAssembly.safeParse({ ...base, specs_loaded: [{ ...loaded, origin: 'repo' }] }).success).toBe(false);
+      expect(PromptAssembly.safeParse({ ...base, specs_loaded: [{ ...loaded, tokens: -1 }] }).success).toBe(false);
+    });
   });
 });

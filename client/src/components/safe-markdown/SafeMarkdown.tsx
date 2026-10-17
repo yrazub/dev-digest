@@ -1,0 +1,76 @@
+/* SafeMarkdown — renders untrusted repository markdown. No raw-HTML plugin (raw
+   HTML shows as text); only http(s) links are clickable, in a new tab; images are
+   never loaded — a remote image in a document would call out from the viewer's
+   browser, and a script URL renders as `src=""` — so only their alt text shows. The
+   vendored `Markdown` is not used: it keeps mailto:, relative and other links. */
+import React from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+/** An absolute http: or https: URL. A relative href makes `new URL` throw. */
+function isWebUrl(href: string | undefined): href is string {
+  if (!href) return false;
+  try {
+    const { protocol } = new URL(href);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/* Module-level, so the renderer types are the same on every render. An inline map
+   gives React new component types each time and remounts their DOM nodes. */
+const COMPONENTS: Components = {
+  h1: ({ children }) => (
+    <h1 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 14px", color: "var(--text-primary)" }}>{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 style={{ fontSize: 15, fontWeight: 600, margin: "18px 0 8px", color: "var(--text-primary)" }}>{children}</h2>
+  ),
+  p: ({ children }) => <p style={{ margin: "0 0 10px" }}>{children}</p>,
+  strong: ({ children }) => (
+    <strong style={{ fontWeight: 650, color: "var(--text-primary)" }}>{children}</strong>
+  ),
+  code: ({ children }) => (
+    <code
+      className="mono"
+      style={{
+        fontSize: "0.92em",
+        padding: "1px 6px",
+        borderRadius: 4,
+        background: "var(--bg-hover)",
+        color: "var(--accent-text)",
+      }}
+    >
+      {children}
+    </code>
+  ),
+  a: ({ children, href }) =>
+    isWebUrl(href) ? (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: "var(--accent-text)", textDecoration: "underline" }}
+      >
+        {children}
+      </a>
+    ) : (
+      <>{children}</>
+    ),
+  img: ({ alt }) => (alt ? <span style={{ color: "var(--text-muted)" }}>{alt}</span> : null),
+};
+
+/* Module-level for the same reason as COMPONENTS: one stable plugin list. */
+const REMARK_PLUGINS = [remarkGfm];
+
+export function SafeMarkdown({ children }: { children?: string | null }) {
+  if (!children) return null;
+  return (
+    <div className="dd-md" style={{ fontSize: "inherit", lineHeight: 1.55 }}>
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={COMPONENTS}>
+        {children}
+      </ReactMarkdown>
+    </div>
+  );
+}

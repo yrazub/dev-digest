@@ -6,7 +6,7 @@
  * also serves the seeded agents, `openai` serves the agent created here. Each mock answers
  * `completeStructured` by `schemaName` (`IntentClassification`, `Review`), so the two calls of a
  * run are told apart. No key, no network.
- * Spec: `server/specs/L03-intent-layer.md`; plan: `specs/L03-intent-layer-plan.md` (phase 6).
+ * Spec: `server/specs/L03-intent-layer.md`; plan: `specs/plans/L03-intent-layer.md` (phase 6).
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { eq } from 'drizzle-orm';

@@ -5,7 +5,7 @@
  * `~/.devdigest/secrets.json` is never read), a GitHub double that counts every method call and a
  * `MockLLMProvider`. The route reads Postgres only (B3), so after all requests neither may have
  * recorded a call. No test calls `GET /pulls/:id`: with the GitHub mock it would replace a PR's `pr_files`.
- * Spec: `server/specs/L03-smart-diff.md`; plan: `specs/L03-smart-diff-plan.md` (phase 2).
+ * Spec: `server/specs/L03-smart-diff.md`; plan: `specs/plans/L03-smart-diff.md` (phase 2).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';

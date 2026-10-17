@@ -37,15 +37,21 @@ warning:
 A PR branched from another feature branch should be reviewed against that branch (`--base`),
 or the diff will include the parent's commits.
 
-### 2. Review: run everything in parallel, in one message
+### 2. Review: in batches of at most 4
 
-- If `arch_check` is `true`: `node $S/arch-check.mjs`.
+- If `arch_check` is `true`: `node $S/arch-check.mjs`, alongside the first batch.
 - For **every** task: one `Agent` call with `subagent_type: general-purpose`, `model` = the
   task's `model`, and this prompt: ``Read `<prompt_path>` and follow it exactly.`` The prompt
   file is [references/reviewer-prompt.md](references/reviewer-prompt.md), filled in for that task.
+- **At most 4 reviewers at a time:** send one batch of up to 4 `Agent` calls in one message, wait
+  for all of them, then send the next. A big branch yields ~20 tasks; firing them all at once
+  exhausted both the account's usage limit and a 16 GB machine's memory in the L05 run (24
+  reviewers died with no result — `docs/retros/ledger.md`).
+- **Stop on a usage-limit error** (`You've hit your session limit`, HTTP 429): do not send another
+  batch. Tell the user when the limit resets, and on their go-ahead run only the tasks that have
+  no `findings/<task>.json` yet — finished tasks keep their results.
 
-Wait for all of them. Do not review the files yourself instead of a subagent: each reviewer
-must see only its own skill.
+Do not review the files yourself instead of a subagent: each reviewer must see only its own skill.
 
 ### 3. Finalize
 

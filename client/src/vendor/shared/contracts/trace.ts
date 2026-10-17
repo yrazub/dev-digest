@@ -36,6 +36,19 @@ export const ToolCall = z.object({
 });
 export type ToolCall = z.infer<typeof ToolCall>;
 
+export const ContextSkipReason = z.enum([
+  'not_found',
+  'unreadable',
+  'too_large',
+  'empty',
+  'outside_clone',
+  'not_cloned',
+  'over_cap',
+]);
+export type ContextSkipReason = z.infer<typeof ContextSkipReason>;
+
+const ContextOrigin = z.enum(['agent', 'skill']);
+
 export const PromptAssembly = z.object({
   system: z.string(),
   skills: z.string().nullish(),
@@ -54,6 +67,34 @@ export const PromptAssembly = z.object({
   skills_tokens: z.number().int().nullish(),
   /** Skills injected into this run, in prompt order. */
   skills_loaded: z.array(z.object({ name: z.string(), version: z.number().int() })).nullish(),
+  /** Tokens of the whole `specs` section; null when omitted. */
+  specs_tokens: z.number().int().nullish(),
+  /** LLM review calls the section was sent with. */
+  specs_calls: z.number().int().nullish(),
+  /** Project-context documents inserted into this run, with the text exactly as sent. */
+  specs_loaded: z
+    .array(
+      z.object({
+        path: z.string(),
+        origin: ContextOrigin,
+        /** Set when origin is 'skill'. */
+        skill_name: z.string().nullable(),
+        tokens: z.number().int().nonnegative(),
+        text: z.string(),
+      }),
+    )
+    .nullish(),
+  /** Project-context documents left out of this run, with the reason. */
+  specs_skipped: z
+    .array(
+      z.object({
+        path: z.string(),
+        origin: ContextOrigin,
+        skill_name: z.string().nullable(),
+        reason: ContextSkipReason,
+      }),
+    )
+    .nullish(),
 });
 export type PromptAssembly = z.infer<typeof PromptAssembly>;
 

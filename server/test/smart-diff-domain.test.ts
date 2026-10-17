@@ -2,7 +2,7 @@
  * L03 — smart-diff rules (`modules/smart-diff/domain.ts`): `countedFindings` picks the findings that
  * count (newest review of each agent, dismissed ones dropped) and `buildSmartDiff` lays a PR's files
  * out in five role groups. Hermetic: pure functions, no app, container or double.
- * Spec: `server/specs/L03-smart-diff.md` ("Building the response"); plan: `specs/L03-smart-diff-plan.md` (phase 2).
+ * Spec: `server/specs/L03-smart-diff.md` ("Building the response"); plan: `specs/plans/L03-smart-diff.md` (phase 2).
  */
 import { describe, it, expect } from 'vitest';
 import { SmartDiff } from '@devdigest/shared';

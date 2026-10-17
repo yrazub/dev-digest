@@ -704,7 +704,7 @@ New row:
 - `.claude/skills/**`: no new skill, no `routing.json` change, no change to `pr-self-review` or its reviewer prompt.
 - `.claude/agents/researcher.md`.
 - `TESTING.md`, the package `CLAUDE.md` files and anything under `docs/`. `client/CLAUDE.md:41-42` ("with a test in the same folder") and `reviewer-core/CLAUDE.md:58` ("every new behaviour needs a test") stay true; they say a test exists, not who writes it.
-- Rewriting existing plans (`specs/L02-skills-plan.md` is done and stays in its old shape); the agents handle the old shape as described in phase 1.
+- Rewriting existing plans (`specs/plans/L02-skills.md` is done and stays in its old shape); the agents handle the old shape as described in phase 1.
 - Application code and tests.
 - Writing to `INSIGHTS.md`. The implementer lists candidates; the main session records, through `engineering-insights`, a root Decisions entry covering: test ownership moved to `test-writer` and the decision rule for broken tests; the implementer's baseline; the tool sets of the four agents; `architecture-reviewer` as advisory against the `/pr-self-review` gate. The 2026-10-04 entry at `INSIGHTS.md:262-278` cites `implementer.md:33` and `planner.md:61`; both lines move, so it needs an `**Evidence**` line beneath it.
 - Running the new agents. The implementer has no `Agent` tool; smoke runs are a main-session step (Risks).

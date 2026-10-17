@@ -81,6 +81,31 @@ be obvious to anyone reading the code, it does not belong here.
   Script the check by spawning `command` + `args` read out of `.mcp.json` itself, so it exercises
   exactly what the client will run rather than a hand-retyped command line.
   **Evidence 2026-09-26:** `.mcp.json:4-11` — the `command` + `args` to spawn.
+- **2026-10-16** — run `spec-creator`'s `write` pass by *resuming* the discovery subagent with
+  `SendMessage` (its agent id), not by spawning a fresh one. The resumed agent still holds its
+  own Discovery report and everything it read, so the message carries only the answers and the
+  pass name; a second `SendMessage` amended the draft for its open questions in about a minute.
+  On L05 Project Context the discovery report ran to 14 questions, 21 design gaps and 7 UX
+  proposals — pasting that back into a cold spawn, as "Feature workflow" step 0.4 reads, would
+  have duplicated it in the main session and re-read the code. A fresh spawn is still needed
+  when the discovery agent is gone (new session).
+  **Evidence 2026-10-16:** `.claude/agents/README.md:86` — step 0.4, "the Discovery report and
+  the answers".
+  **2026-10-16:** the same holds for `implementation-planner`: on L05 the `plan` pass was a
+  `SendMessage` to the agent that ran `review`. The message carried only the outcomes and pointed
+  to the saved review (`.devdigest/sdd/<feature>/review.md`) instead of pasting it back.
+- **2026-10-16** — to change an approved spec that nothing has been built from yet (the review
+  pass found gaps), reopen it: set `Status: draft` in the umbrella and every module spec, and in
+  every index row (`specs/README.md` and each `<package>/specs/README.md`). Then run `spec-creator`
+  `write` with the changes. It edits in place, keeps the criterion IDs, defers items to a
+  "Deferred" table instead of deleting them, and leaves the status alone. Set `approved` again
+  after the user agrees. Asked to amend an `approved` spec directly, `spec-creator` stops and
+  writes nothing, because it may only add a `Superseded by` line to an approved spec
+  (`.claude/agents/spec-creator.md:316`). "Feature workflow" step 2 names only "a `write` pass on
+  the draft, or a new spec that supersedes an approved one" (`.claude/agents/README.md:94-95`), so
+  the reopen route is not written down there. Superseding needs new file names, because the
+  umbrella and module specs share one name.
+  **2026-10-17:** the reopen route is now step 2 of "Feature workflow" (`.claude/agents/README.md:96-98`).
 
 ## Tool & Library Notes
 
@@ -200,7 +225,24 @@ be obvious to anyone reading the code, it does not belong here.
 - **2026-10-10** — Docker Desktop's daemon can stop answering while its containers' ports stay open: `docker ps` and `docker info` return `request returned 500 Internal Server Error for API route and version …, check if the server supports the requested API version` or hang past 120 s, `:5432` is still held by `com.docker.backend`, and the API answers `/health` with `ok` but every database route with `500 internal_error … read ECONNRESET`. The server's integration files then skip without failing. `osascript -e 'quit app "Docker"'` did not stop `com.docker.backend` (same pid afterwards); it was not recovered in the session. Check `docker info` before trusting a green server run. Nothing in the repository governs the daemon. **See also:** `server/INSIGHTS.md` (the `dockerAvailable()` entry).
 - **2026-10-10** — `chrome-devtools` lost the user's Chrome in the middle of a call: `new_page` failed with `Target.createTarget timed out`, the next call still listed 71 pages, and after that Chrome was not running at all. Once Chrome was started again the MCP server kept answering `Could not find DevToolsActivePort` although the file existed and `:9222` was listening; reading the page over raw CDP from that file worked (the `--autoConnect` entry, `.mcp.json:8`). Chrome came back with one tab, so the user's earlier tabs had to be restored by hand.
 - **2026-10-11** — with Tool Search on, a request to list open pull requests went to `gh pr list` first (`command not found: gh`, exit 127) and only then to the GitHub MCP tool `list_pull_requests`: a deferred tool is cheaper in context and less visible to the model. Naming the server in the request avoids the detour. Nothing in the repository shows this; it was observed in a session.
-
+- **2026-10-16** — Claude Code subagents never get `AskUserQuestion` (removed even when listed in `tools`), so a subagent cannot ask the user mid-run — that is why `spec-creator` and `implementation-planner` work in two passes (`.claude/agents/spec-creator.md`, the pass table). Subagents *can* spawn subagents, up to three layers by default (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`); ours have no `Agent` tool by project choice, not by a platform limit. Frontmatter `hooks` (the `spec-creator` guard) are skipped until the folder is trusted. Source: code.claude.com/docs/en/sub-agents, read through a WebFetch summary.
+- **2026-10-16** — where the tokens of the agent chain go, measured from the local transcripts (`~/.claude/projects/<project>/<session>/subagents/*.jsonl` + `.meta.json`, `message.usage`) of the L03 Intent Layer and Smart Diff runs: the **orchestrating main session** read 318M and 268M cache tokens (600 turns, context up to 848k), against 34M for all 12 `implementer` runs of Intent Layer. Per run, `architecture-reviewer` averaged 11.6M cumulative input (91 turns), `plan-verifier` 8.7M, `test-writer` 2.3M, `implementer` 2.1M. Inside `implementer`, test output is small (≈6 KB per run, every command piped through `tail`); its cost is turns × context, and the context is the plan read whole (`.claude/agents/implementer.md:24` "The plan, in full." — `specs/plans/L03-intent-layer.md` is 877 lines / 165 KB and was read twice because one `Read` truncated), `cat`/`grep` exploration (~20k tokens per run) and skill bodies (`next-best-practices` and `fastify-best-practices` ≈13k tokens each). Cut the orchestrator's context and the plan size before trimming test commands.
+- **2026-10-16** — Claude in Chrome (`mcp__claude-in-chrome__*`, the user's own Chrome with its
+  logins) asks for approval on every new tool, which the user found spammy. One server-level rule
+  — `"mcp__claude-in-chrome"` with no tool suffix in `permissions.allow` — covers all of its tools.
+  It lives in `.claude/settings.local.json`, which the user's global git ignore excludes, so it is
+  per-machine. With it, `navigate` + `get_page_text` read an edu.goit.global task page; the first
+  `get_page_text` straight after `navigate` returned `No text content found. Page may contain only
+  images, videos, or canvas-based content.` because the page had not rendered yet — a retry after a
+  screenshot returned the text. **See also:** the `chrome-devtools` `--autoConnect` entries above.
+  **Evidence 2026-10-16:** `.claude/settings.local.json:5` (local-only, not in git).
+- **2026-10-16** — a subagent's final report that contains a literal tag-like string such as
+  `<total_tokens>` (here, a UI string template in a plan's file table) is flagged by the Claude
+  Code harness as a "harness-signal tag". Every such `<` is rewritten to `<\`, and a banner line
+  is prepended to the report. When a report is saved verbatim (an Implementation Plan to
+  `specs/plans/`), drop the banner and undo the escape (`sed 's/<\\total_tokens>/<total_tokens>/g'`),
+  then check that no `<\` is left. Evidence: `specs/plans/L05-project-context.md:217`, the
+  `ProjectContextView` row, footer `"<documents.length> files · <total_tokens> tokens total"`.
 
 ## Decisions
 
@@ -290,6 +332,7 @@ be obvious to anyone reading the code, it does not belong here.
   files to skills"; `.claude/agents/implementer.md:62` — "Load skills per phase".
   **Superseded 2026-10-04 in part:** "one implementer run builds the plan and writes its tests"
   no longer holds — see the next entry. The skills-through-the-plan rule and the tool sets stand.
+  **Superseded 2026-10-15 in part:** `planner` is now `implementation-planner` (`.claude/agents/implementation-planner.md`) and its output is an "Implementation Plan"; the skills-through-the-plan rule and the tool set stand — see the 2026-10-15 entry below.
 
 - **2026-10-04** — `test-writer` owns every test; `implementer` writes none and builds one phase
   per run. User decision, against the planner's recommendation to leave planned tests with the
@@ -309,7 +352,7 @@ be obvious to anyone reading the code, it does not belong here.
   test-first for planned features (phases would start red and the plan would have to pin every
   signature); `test-writer` forbidden to touch existing tests (nobody would own the tests a
   planned behaviour change breaks).
-  **See also:** `specs/agents-lab-plan.md` — the plan, with sources.
+  **See also:** `specs/plans/agents-lab.md` — the plan, with sources.
 
 - **2026-10-04** — `architecture-reviewer` (`tools: Read, Grep, Glob`) is advisory and gates
   nothing; `/pr-self-review` stays the only push gate and `pnpm arch:check` stays the owner of
@@ -321,10 +364,15 @@ be obvious to anyone reading the code, it does not belong here.
   Rejected: `Bash` for the reviewer (read-only would rest on prose).
   **Evidence 2026-10-04:** `.claude/agents/architecture-reviewer.md:4`, `.claude/agents/plan-verifier.md:4` — the `tools:` lines.
 
-- **2026-10-05** — review findings go back into the plan as an amendment, not as loose fix instructions: `planner` returns a numbered list of exact replacements for the existing plan text plus one new "review fixes" phase, the main session applies the list with a script (line-prefix asserts, bottom-up inserts) and `implementer` / `test-writer` / `plan-verifier` then work from the revised file. Used for `specs/L03-intent-layer-plan.md` revision 3 (45 replacements, phase 10). Rejected: asking `planner` to re-emit a 650-line plan, and telling `implementer` what to fix without changing the plan — `plan-verifier` would then report every fix as a deviation.
+- **2026-10-05** — review findings go back into the plan as an amendment, not as loose fix instructions: `planner` returns a numbered list of exact replacements for the existing plan text plus one new "review fixes" phase, the main session applies the list with a script (line-prefix asserts, bottom-up inserts) and `implementer` / `test-writer` / `plan-verifier` then work from the revised file. Used for `specs/plans/L03-intent-layer.md` revision 3 (45 replacements, phase 10). Rejected: asking `planner` to re-emit a 650-line plan, and telling `implementer` what to fix without changing the plan — `plan-verifier` would then report every fix as a deviation.
 - **2026-10-05** — when a feature is uncommitted on a branch that already carries unrelated commits, the reviewers get `git diff HEAD` and base ref `HEAD`; the `git merge-base origin/main HEAD` patch of `.claude/agents/README.md` step 5 would have added 18 unrelated files (3192 lines) to the change. And when `test-writer` is skipped for an iteration, every later `implementer` run is told the baseline in full (which tests are known red and why): it has no Test report to start from, and `plan-verifier` returns `FAIL` by construction until the tests exist.
 - **2026-10-10** — a phase whose integration test could not run was committed with that stated in the commit body, instead of being left uncommitted until green, because the next phase edits the same files and the two would otherwise merge into one commit. The phase stays open in the main session's tracking and the gap is recorded as an Open Question in the owning module. This departs from step 4.5 of the feature workflow ("Commit the closed phase", `.claude/agents/README.md:84`); rejected: stopping all work until the environment recovers.
-
+- **2026-10-15** — the `spec-creator` agent's write scope is enforced by a `PreToolUse` hook in its own frontmatter (`hooks:` → `matcher: "Write|Edit"`, `.claude/agents/spec-creator.md:8`), running `.claude/agents/scripts/specs-only-guard.mjs` (`SPEC_DIRS`, line 9): only `*.md` under `specs/`, `server/specs/`, `client/specs/`, `reviewer-core/specs/`, `mcp/specs/`; `..` and symlinks resolved, unparseable input blocked (exit 2). `e2e/specs/` is excluded because its flow JSON and index belong to `test-writer`. This departs from the 2026-10-04 choice of prompt-only protection for `implementer` because `spec-creator`'s allowed set is small and fixed, so a guard cannot get in the way of legitimate work. The agent runs in two passes — `discovery` writes nothing and returns Questions / Design gaps / UX proposals, `write` applies the user's answers — because a subagent cannot ask the user mid-run. Rejected: a skill in the main session (could ask directly, but no hard tool boundary); prompt-only scope. Unverified: the guard was tested by piping hook JSON into the script; that a frontmatter hook fires inside a live subagent run has not been observed yet.
+  **Evidence 2026-10-16:** the "Unverified" point is settled — in a live `spec-creator` subagent run, `Write` to `client/src/hook-test.md` returned `PreToolUse:Write hook error: [node "$CLAUDE_PROJECT_DIR"/.claude/agents/scripts/specs-only-guard.mjs]: specs-only-guard: client/src/hook-test.md is not in a spec folder. …`, `specs/plans/hook-test.md` was blocked with `… is a plan; plans are saved by the main session.`, and `specs/hook-test.md` was written (then deleted). The frontmatter hook fires inside subagents in this trusted folder (`.claude/agents/spec-creator.md:8`).
+- **2026-10-15** — `planner` was renamed `implementation-planner` and stripped of requirement work: it never writes, extends or rewords a requirement ("Requirements are not yours", `.claude/agents/implementation-planner.md:13`; review pass at `:130`), every `Done when` cites an `AC-n` / `R-XXX-n`, and a feature with no `approved` spec is sent back to `spec-creator` (bugs and small technical changes are still planned from their description). It runs in two passes — `review` (requirement findings, clarifications, recommendations marked "changes the spec", and the execution-mode question) and `plan` — and a recommendation that changes the spec goes through `spec-creator` and a fresh approval before the plan is written. The execution mode is chosen by the user per plan: **multi-agent** (implementer → test-writer per phase, then plan-verifier and architecture-reviewer) or **single-agent** (the main session builds code and tests from the same plan template, `plan-verifier` optional) — `.claude/agents/README.md`, "Feature workflow". Rejected: one implementer run doing code and tests in single-agent mode (would break the T1 split); recording spec-changing recommendations only in the plan's Assumptions (spec and code would drift). Old plan files under `specs/` keep the title "Development Plan" and the name `planner`; they were not rewritten.
+- **2026-10-16** — approved plans live in `specs/plans/<feature>.md`, under the same name as the umbrella spec they build, instead of `specs/<feature>-plan.md` next to the specs (`specs/README.md`, under "Naming"). The seven existing plans were moved with `git mv` and every reference updated, including the paths cited in existing `INSIGHTS.md` entries, edited in place at the user's request. The `spec-creator` guard now rejects anything under `specs/plans/` (`.claude/agents/scripts/specs-only-guard.mjs`, the `specs/plans/` check), so a plan is never written by the spec agent — before, only its prompt said so. Rejected the same day: moving every artifact into `specs/<feature>/` folders — tried, then dropped from history; the umbrella in `specs/` plus detail in `<package>/specs/` stays.
+- **2026-10-16** — plan execution is orchestrated by the `execute-plan` skill with a state file, and `implementer` / `test-writer` read a one-phase slice of the plan, because the cost measurements under Tool & Library Notes put the orchestrating chat (318M cache tokens) and the whole-plan read far above the test runs. `node .claude/agents/scripts/plan-phase.mjs <plan> <n>` keeps every `##` section and narrows `## Phases` to `### <n> · …` (`slicePhase`, `.claude/agents/scripts/lib/plan.mjs`) — no heuristic about which sections matter, so a legacy plan keeps its `## Design`. `state.mjs` (`.claude/skills/execute-plan/scripts/state.mjs`, `nextAction`) records phases, closing lines, declared deviations and insight candidates in `.devdigest/sdd/<feature>/state.json` (git-ignored) and prints a `CHECKPOINT` asking for a new chat after `per_chat` (default 3) committed phases. Side fix: `plan-verifier` now gets the implementer's declared deviations, which no step passed before. Rejected (user decision): committing the state next to the plan (a noise commit per phase); a forced new chat every 2 phases or never.
+- **2026-10-16** — `implementation-planner` gained an `amend` pass and `implementer` now reads the spec. `amend` takes a saved plan and the gaps (plan-verifier rows, architecture findings, live-run defects), triages each as code / test / plan defect / spec / not a gap, and returns exact-quote replacements plus one new fix phase in the normal template; spec gaps go back to `spec-creator` (`.claude/agents/implementation-planner.md`, "Amend pass"). It formalises the L03 revision-3 practice above and is what `execute-plan`'s fix round calls (`nextAction` in `.claude/skills/execute-plan/scripts/state.mjs`). The implementer reads the module spec of each package its phase touches and the umbrella rows its `Done when` cites, because the planner may not restate the spec and the implementer otherwise never saw the exact requirement text; a spec / plan mismatch is reported as Blocked (`.claude/agents/implementer.md`, Step 1 item 2 and "A real conflict is not"). Rejected: `plan-phase.mjs` appending the cited spec rows (breaks on older specs without `R-` IDs and misses contract sections, which are not table rows); a per-phase "Spec sections" list written by the planner.
 
 ## Recurring Errors & Fixes
 
@@ -395,6 +443,18 @@ the editor tool.
 **Fix / rule:** after changing an existing MCP entry, reconnect that server in `/mcp` or reload the window before reading `/context`; check the running process (for a Docker server, `docker inspect` its environment and start time) before concluding the change did not work. Do not rewrite the entry a second time to "fix" it.
 **Evidence:** nothing in the repository shows it — the entry is in the user-scope config. The project-scoped equivalent is the `devdigest-mcp` entry, `.mcp.json:14-17`, where an `env` edit needs the same reconnect.
 
+### plan-verifier flags a test-writer's `e2e/specs/README.md` row as a "Do not touch" breach
+**Date:** 2026-10-17
+**Cause:** the L05 plan's Constraints said "Do not touch … every `CLAUDE.md`, `README.md` and `docs/**` (doc-writer)", but the test-writer brief requires a new flow's row in the flow index.
+**Fix / rule:** a plan's "do not touch every README.md" constraint exempts `e2e/specs/README.md`, and an e2e phase names that row in its Tests line.
+**Evidence:** `.claude/agents/test-writer.md:73` ("add its row to `e2e/specs/README.md`"); `specs/plans/L05-project-context.md` Constraints, as amended.
+
+### A feature passes every check and still looks nothing like the design
+**Date:** 2026-10-17
+**Cause:** the L05 Project Context page shipped with no horizontal padding, a wrapping title and loose placeholder text, although plan-verifier, architecture-reviewer, 20 `/pr-self-review` reviewers and e2e all passed. The spec described the layout only structurally ("two columns, like N6"); the implementer built from that text, never from the bundled design; every check reads code, accessibility trees or text, none looks at pixels. The user found it from a screenshot.
+**Fix / rule:** a plan phase that builds a new screen carries a `Verify (manual, screenshots)` line naming the design screen and what to compare, run by the main session in one browser tab; give the implementer the decoded design values (padding, widths, panels), not just the screen name.
+**Evidence:** `specs/plans/L05-project-context.md:399` (the screenshot Verify added in the phase-14 fix); decoding the design: see the 2026-09-22 Tool & Library Notes entry on `__bundler/manifest`.
+
 
 ## Session Notes
 
@@ -439,10 +499,26 @@ the editor tool.
 - **2026-09-27** — pr-self-review now gates `git push` as well as `gh pr create`, and the hook is registered in `.claude/settings.json`. The command check is a tokenizer (entry under Decisions). Architecture refactor S1/C1 reviewed over `f108012..HEAD` and pushed. **See also:** `server/INSIGHTS.md`.
 - **2026-10-04** — added skill-level routing to `engineering-insights`: a `**Skill:**` line on root entries, read by `pr-self-review` reviewers through a grep step in their prompt and by a new row in the root `CLAUDE.md` gate. Tagged the existing `next-best-practices` entry. Decision recorded above.
 - **2026-10-04** — added the `planner` and `implementer` agents under `.claude/agents/` after a `researcher` pass over the Claude Code sub-agent and skill docs; recorded how they share skills under Decisions. Neither agent has been run on a real feature yet.
-- **2026-10-04** — added `test-writer`, `architecture-reviewer`, `plan-verifier` and `doc-writer` from `specs/agents-lab-plan.md` (planner → implementer → plan-verifier, the first real run of that chain) and moved test ownership to `test-writer`; decisions recorded above. A subagent type added mid-session is not available to the `Agent` tool until the session reloads it — `plan-verifier` was run by pointing a general-purpose agent at its file. Its verdict was FAIL on one item: the overlap paragraph in `architecture-reviewer.md` is longer than the "two or three sentences" the plan asked for.
+- **2026-10-04** — added `test-writer`, `architecture-reviewer`, `plan-verifier` and `doc-writer` from `specs/plans/agents-lab.md` (planner → implementer → plan-verifier, the first real run of that chain) and moved test ownership to `test-writer`; decisions recorded above. A subagent type added mid-session is not available to the `Agent` tool until the session reloads it — `plan-verifier` was run by pointing a general-purpose agent at its file. Its verdict was FAIL on one item: the overlap paragraph in `architecture-reviewer.md` is longer than the "two or three sentences" the plan asked for.
 
 - **2026-10-05** — L03 Intent Layer through the full agent chain: phases 1–8, first review, plan revision 3, phase 10, tests for every phase, second review. Module findings are in `server/`, `client/` and `reviewer-core/` `INSIGHTS.md`.
 - **2026-10-07** — L03 Smart Diff through the full agent chain: nine phases, plan-verifier FAIL on one gap (two diff bodies rendered together), fix round, hermetic e2e 11/11. Module findings are in `server/`, `client/` and `e2e/` `INSIGHTS.md`.
 - **2026-10-07** — HW3 delivery: demo PRs #13 and #15, PR #14 description with screenshots, the demo video recorded with `agent-browser` (script in `docs/hw3-video-script.md`); recorded the unquoted-heredoc slip above and the reviewer line-number question in `reviewer-core/INSIGHTS.md`.
 - **2026-10-10** — L04 part 1, `devdigest-mcp`, a fifth package: research, plan revisions 1–3 (the lab page read in the third), six phases, architecture review, docs. Module findings are in `mcp/` and `server/`; the Docker and Chrome failures and the commit-with-a-gap decision are above.
 - **2026-10-11** — L04 follow-up: `devdigest-mcp` connected in Claude Code and driven by hand; the lab's token audit done manually with a local GitHub MCP server (figures and the stale-session trap above). No code changed.
+- **2026-10-15** — added the `spec-creator` agent (spec-driven development, EARS acceptance criteria, discovery → write passes, hook-enforced `specs/` scope) after a Q&A with the user on its design; decision recorded above. Not run on a real feature yet.
+- **2026-10-15** — renamed `planner` to `implementation-planner`, removed its requirement work, added the review pass and the multi-agent / single-agent execution mode; decision recorded above. Not run on a real feature yet.
+- **2026-10-16** — renamed `specreator` to `spec-creator`; moved plans into `specs/plans/` and blocked that folder for `spec-creator`; decision recorded above.
+- **2026-10-16** — compared `spec-creator` with the course's reference agent: adopted a self-check, date-based Spec IDs, vague-to-EARS examples, the named reviewer-core invariants; tool note above.
+- **2026-10-16** — audited the SDD agent chain (spec-creator → implementation-planner → implementer / test-writer → plan-verifier, architecture-reviewer) for workflow and token cost; cost measurements under Tool & Library Notes. No agent file changed.
+- **2026-10-16** — later the same session: built plan slicing (`plan-phase.mjs`) and the `execute-plan` skill with its state file; decision recorded above. Neither has run on a real feature yet.
+- **2026-10-16** — `implementer` reads the spec, `implementation-planner` has an `amend` pass, and the `spec-creator` write guard was observed blocking in a live subagent run; decision and evidence recorded above.
+- **2026-10-16** — first real `spec-creator` run: L05 Project Context, discovery → write → amend,
+  approved as `specs/L05-project-context.md` + server, client, reviewer-core module specs; tips above.
+- **2026-10-16** — L05 Project Context planned: the `implementation-planner` review (19 findings), a
+  reopen-as-draft amendment through `spec-creator` (P3 deferred to fit the lab's scope), and the
+  plan saved as `specs/plans/L05-project-context.md` (11 phases, multi-agent); entries above.
+  **See also:** `server/INSIGHTS.md` (tokenizer).
+- **2026-10-17** — L05 Project Context executed: phases 7–11, a fix round (plan amended twice, R-WEB-44 reopened and re-approved), phases 12–13, docs, e2e 13/13. **See also:** `server/INSIGHTS.md`, `client/INSIGHTS.md`, `e2e/INSIGHTS.md`.
+- **2026-10-17** — L05 follow-up: design gaps found by the user after push → phase 14 (N6/N2b/N2c styling, style-collision warning), final checks re-run, e2e 13/13. Deferred: `SafeMarkdown` has no `img` rule (`![x](javascript:…)` renders `<img src="">`).
+- **2026-10-17** — the deferred `SafeMarkdown` image follow-up is closed: no `<img>` is rendered at all, only the alt text (a remote image would call out from the viewer's browser; `javascript:` gave `src=""`). See `client/src/components/safe-markdown/SafeMarkdown.tsx` (`img` renderer).

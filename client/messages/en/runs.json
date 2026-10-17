@@ -36,7 +36,8 @@
       "specsRead": "Specs read",
       "items": "{count, plural, one {# item} other {# items}}",
       "none": "none",
-      "skillsLoaded": "Skills loaded"
+      "skillsLoaded": "Skills loaded",
+      "specTokens": "≈ {count, number} tok"
     },
     "stat": {
       "duration": "DURATION",
@@ -49,7 +50,19 @@
       "skills": "Skills (dynamic)",
       "memory": "Memory (dynamic)",
       "repoMap": "Repo skeleton — repo-intel (dynamic)",
-      "specs": "Project context (dynamic)",
+      "specs": "Project context — attached specs (untrusted)",
+      "specsPerCall": "≈ {tokens, number} tokens per call · sent in {calls} calls",
+      "specsSkipped": "Skipped",
+      "specsSkippedAlone": "Project context — skipped documents",
+      "skipReason": {
+        "not_found": "file not found",
+        "unreadable": "could not be read",
+        "too_large": "file too large",
+        "empty": "file is empty",
+        "outside_clone": "outside the repository clone",
+        "not_cloned": "repository is not cloned",
+        "over_cap": "over the token cap"
+      },
       "callers": "Callers of changed symbols — repo-intel (dynamic)",
       "user": "User / diff (dynamic)",
       "copy": "Copy",

@@ -92,8 +92,12 @@
     "notFoundBody": "It may have been deleted.",
     "tabs": {
       "config": "Config",
+      "context": "Context",
       "preview": "Preview",
       "versions": "Versions"
+    },
+    "context": {
+      "heading": "Project context to use"
     }
   },
   "config": {

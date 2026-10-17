@@ -1,10 +1,11 @@
 import type { IconName } from "@devdigest/ui";
 
-export type SkillTab = "config" | "preview" | "versions";
+export type SkillTab = "config" | "context" | "preview" | "versions";
 
 /** Detail tabs (design: Skill Editor). Evals and Stats are later lessons. */
 export const TABS: readonly { key: SkillTab; icon: IconName }[] = [
   { key: "config", icon: "Settings" },
+  { key: "context", icon: "FileText" },
   { key: "preview", icon: "Eye" },
   { key: "versions", icon: "History" },
 ];

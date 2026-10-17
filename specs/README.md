@@ -7,25 +7,37 @@ that spans packages belongs here.
 
 Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 
+Approved Implementation Plans live in [`plans/`](plans/), under the same name as the spec they
+build (`plans/L04-blast-radius.md` builds `L04-blast-radius.md`). The main session saves them
+there after approval; `spec-creator` cannot write to that folder.
+
+New specs are written by the [`spec-creator`](../.claude/agents/spec-creator.md) agent: the umbrella
+follows the template in that file, with EARS acceptance criteria (`AC-N`), and carries a
+`Spec ID: SPEC-YYYY-MM-DD-<slug>` — the date it was written and the feature name, shared with
+its module specs. Specs written before
+it keep their earlier shape.
+
 | Spec | Status |
 |---|---|
 | [`L01-run-cost.md`](L01-run-cost.md) | draft |
 | [`L01-findings-counter.md`](L01-findings-counter.md) | draft |
 | [`L02-pr-self-review.md`](L02-pr-self-review.md) | implemented |
 | [`L02-skills.md`](L02-skills.md) | implemented |
-| [`L02-skills-plan.md`](L02-skills-plan.md) | done |
+| [`plans/L02-skills.md`](plans/L02-skills.md) | done |
 | [`L02-conventions.md`](L02-conventions.md) | implemented |
-| [`L02-conventions-plan.md`](L02-conventions-plan.md) | done |
+| [`plans/L02-conventions.md`](plans/L02-conventions.md) | done |
 | [`architecture-refactor.md`](architecture-refactor.md) | draft |
-| [`agents-lab-plan.md`](agents-lab-plan.md) | approved |
+| [`plans/agents-lab.md`](plans/agents-lab.md) | approved |
 | [`L03-intent-layer.md`](L03-intent-layer.md) | implemented |
-| [`L03-intent-layer-plan.md`](L03-intent-layer-plan.md) | done |
+| [`plans/L03-intent-layer.md`](plans/L03-intent-layer.md) | done |
 | [`L03-smart-diff.md`](L03-smart-diff.md) | implemented |
-| [`L03-smart-diff-plan.md`](L03-smart-diff-plan.md) | done |
+| [`plans/L03-smart-diff.md`](plans/L03-smart-diff.md) | done |
 | [`L04-devdigest-mcp.md`](L04-devdigest-mcp.md) | implemented |
-| [`L04-devdigest-mcp-plan.md`](L04-devdigest-mcp-plan.md) | approved |
+| [`plans/L04-devdigest-mcp.md`](plans/L04-devdigest-mcp.md) | approved |
 | [`L04-blast-radius.md`](L04-blast-radius.md) | implemented |
-| [`L04-blast-radius-plan.md`](L04-blast-radius-plan.md) | done |
+| [`plans/L04-blast-radius.md`](plans/L04-blast-radius.md) | done |
+| [`L05-project-context.md`](L05-project-context.md) | approved |
+| [`plans/L05-project-context.md`](plans/L05-project-context.md) | approved |
 
 The lesson roadmap (L01–L08) is in the root [`README.md`](../README.md).
 When you add a spec, add a row above.

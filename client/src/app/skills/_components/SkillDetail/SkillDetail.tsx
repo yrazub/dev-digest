@@ -1,5 +1,5 @@
 /* SkillDetail — the right-hand pane of /skills/:id: header (name, type,
-   version) and the Config · Preview · Versions tabs (design: Skill Editor).
+   version) and the Config · Context · Preview · Versions tabs (design: Skill Editor).
    Tab state lives in ?tab=. */
 "use client";
 
@@ -9,6 +9,7 @@ import type { Skill } from "@devdigest/shared";
 import { Badge, Tabs } from "@devdigest/ui";
 import { TYPE_COLOR } from "@/lib/skill-display";
 import { ConfigTab } from "./_components/ConfigTab";
+import { ContextTab } from "./_components/ContextTab";
 import { PreviewTab } from "./_components/PreviewTab";
 import { VersionsTab } from "./_components/VersionsTab";
 import { TABS, type SkillTab } from "./constants";
@@ -47,6 +48,7 @@ export function SkillDetail({
         <div hidden={tab !== "config"}>
           <ConfigTab key={`${skill.id}:${skill.version}`} skill={skill} onDelete={onDelete} />
         </div>
+        {tab === "context" && <ContextTab skillId={skill.id} />}
         {tab === "preview" && <PreviewTab skill={skill} />}
         {tab === "versions" && <VersionsTab skill={skill} />}
       </div>

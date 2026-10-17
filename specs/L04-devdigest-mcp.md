@@ -1,6 +1,6 @@
 # L04 — `devdigest-mcp`, a local MCP server
 
-**Status:** implemented · **Plan:** [`L04-devdigest-mcp-plan.md`](L04-devdigest-mcp-plan.md) (revision 3) · **Package spec:** [`../mcp/specs/L04-devdigest-mcp.md`](../mcp/specs/L04-devdigest-mcp.md)
+**Status:** implemented · **Plan:** [`specs/plans/L04-devdigest-mcp.md`](plans/L04-devdigest-mcp.md) (revision 3) · **Package spec:** [`../mcp/specs/L04-devdigest-mcp.md`](../mcp/specs/L04-devdigest-mcp.md)
 
 DevDigest gains one more entry point: a local MCP server, `devdigest-mcp`, that an MCP client
 (Claude Code in the terminal, MCP Inspector, any other client) starts as a child process and
@@ -18,7 +18,7 @@ honest stub that always answers with an error.
 
 This spec states the feature and the rules that span packages. The implementable detail is in
 [`mcp/specs/L04-devdigest-mcp.md`](../mcp/specs/L04-devdigest-mcp.md). The plan, saved as
-`L04-devdigest-mcp-plan.md`, holds the phases.
+`specs/plans/L04-devdigest-mcp.md`, holds the phases.
 
 ## Sources
 

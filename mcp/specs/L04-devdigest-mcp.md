@@ -1,6 +1,6 @@
 # L04 — `devdigest-mcp`: the package
 
-**Status:** implemented · **Cross-package spec:** [`../../specs/L04-devdigest-mcp.md`](../../specs/L04-devdigest-mcp.md) · **Plan:** [`../../specs/L04-devdigest-mcp-plan.md`](../../specs/L04-devdigest-mcp-plan.md) (revision 3)
+**Status:** implemented · **Cross-package spec:** [`../../specs/L04-devdigest-mcp.md`](../../specs/L04-devdigest-mcp.md) · **Plan:** [`specs/plans/L04-devdigest-mcp.md`](../../specs/plans/L04-devdigest-mcp.md) (revision 3)
 
 The implementable detail of `devdigest-mcp`: a local, stdio-only MCP server with exactly five
 tools, a thin wrapper over the Fastify API. The cross-package spec holds the requirements

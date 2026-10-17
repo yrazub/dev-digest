@@ -2,11 +2,11 @@
 
 **Status:** done 2026-10-01
 
-How [`L02-conventions.md`](L02-conventions.md) gets built. The *what* is in that spec and its
-module specs ([server](../server/specs/L02-conventions.md),
-[client](../client/specs/L02-conventions.md)). This file is the *order*: phases, the files
+How [`L02-conventions.md`](../L02-conventions.md) gets built. The *what* is in that spec and its
+module specs ([server](../../server/specs/L02-conventions.md),
+[client](../../client/specs/L02-conventions.md)). This file is the *order*: phases, the files
 each one touches, and how each one is verified. It builds on the Skills feature
-([`L02-skills-plan.md`](L02-skills-plan.md), done), because the extractor's output is an
+([`specs/plans/L02-skills.md`](L02-skills.md), done), because the extractor's output is an
 ordinary skill.
 
 All work goes on `feature/l02-conventions-extractor`, branched from `main` after the Skills PR (#6) merged. Each phase ends green (`typecheck`, `test`, and

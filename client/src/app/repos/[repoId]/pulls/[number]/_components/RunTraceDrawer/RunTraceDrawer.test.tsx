@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type { RunTrace } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/runs.json"; // apps/web/messages/en/runs.json
@@ -141,5 +142,161 @@ describe("A5 Run Trace drawer (smoke)", () => {
     const intent = screen.getByText("classify_intent");
     const review = screen.getByText("review_file");
     expect(intent.compareDocumentPosition(review) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("L05 Project context in the run trace", () => {
+  const AUTH = "docs/auth.md";
+  const RULES = "specs/rules.md";
+  const withSpecs = (assembly: Partial<RunTrace["prompt_assembly"]>, specsRead: string[] = [AUTH, RULES]): RunTrace => ({
+    ...TRACE,
+    specs_read: specsRead,
+    prompt_assembly: { ...TRACE.prompt_assembly, specs: "<project-context>as sent</project-context>", ...assembly },
+  });
+  const renderDrawer = () =>
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+
+  it("lists each inserted path with its tokens, shows the block meta, the sent text on expand and the skipped reasons", async () => {
+    const user = userEvent.setup();
+    current = withSpecs({
+      specs_tokens: 1700,
+      specs_calls: 1,
+      specs_loaded: [
+        { path: AUTH, origin: "agent", skill_name: null, tokens: 1200, text: "Every route needs a bearer token." },
+        { path: RULES, origin: "skill", skill_name: "edge-cases", tokens: 500, text: "Cover the empty list." },
+      ],
+      specs_skipped: [
+        { path: "docs/gone.md", origin: "agent", skill_name: null, reason: "not_found" },
+        { path: "docs/huge.md", origin: "skill", skill_name: "edge-cases", reason: "over_cap" },
+        { path: "../secret.md", origin: "agent", skill_name: null, reason: "outside_clone" },
+      ],
+    });
+    renderDrawer();
+
+    // Specs read row: both paths, each with the tokens of its specs_loaded entry
+    expect(screen.getByText("Specs read")).toBeInTheDocument();
+    expect(screen.getByText(`${AUTH} ≈ 1,200 tok`)).toBeInTheDocument();
+    expect(screen.getByText(`${RULES} ≈ 500 tok`)).toBeInTheDocument();
+
+    await user.click(screen.getByText("Prompt assembly"));
+
+    // the whole-section block carries the token meta of a single-call run
+    const blockLabel = screen.getByText("Project context — attached specs (untrusted)");
+    expect(blockLabel).toBeInTheDocument();
+    expect(screen.getByText("~1700 tokens")).toBeInTheDocument();
+    expect(screen.queryByText(/per call/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Project context (dynamic)")).not.toBeInTheDocument();
+
+    // a document row shows its meta, and its text only once expanded
+    expect(screen.getByText("~1200 tokens")).toBeInTheDocument();
+    expect(screen.getByText("~500 tokens")).toBeInTheDocument();
+    expect(screen.queryByText("Every route needs a bearer token.")).not.toBeInTheDocument();
+    await user.click(screen.getByText(AUTH));
+    expect(screen.getByText("Every route needs a bearer token.")).toBeInTheDocument();
+    expect(screen.queryByText("Cover the empty list.")).not.toBeInTheDocument();
+
+    // skipped entries: path and readable reason
+    expect(screen.getByText("Skipped")).toBeInTheDocument();
+    expect(screen.getByText("docs/gone.md — file not found")).toBeInTheDocument();
+    expect(screen.getByText("docs/huge.md — over the token cap")).toBeInTheDocument();
+    expect(screen.getByText("../secret.md — outside the repository clone")).toBeInTheDocument();
+  });
+
+  it("reads 'per call · sent in 3 calls' when the section was sent in three calls", async () => {
+    const user = userEvent.setup();
+    current = withSpecs({
+      specs_tokens: 900,
+      specs_calls: 3,
+      specs_loaded: [{ path: AUTH, origin: "agent", skill_name: null, tokens: 900, text: "Body." }],
+    }, [AUTH]);
+    renderDrawer();
+    await user.click(screen.getByText("Prompt assembly"));
+    expect(screen.getByText("≈ 900 tokens per call · sent in 3 calls")).toBeInTheDocument();
+    expect(screen.queryByText("~900 tokens per call")).not.toBeInTheDocument();
+  });
+
+  it("shows 'none' and no Project context block when specs_read is empty", async () => {
+    const user = userEvent.setup();
+    current = withSpecs({ specs_tokens: 10, specs_calls: 1, specs_loaded: [], specs_skipped: [] }, []);
+    renderDrawer();
+    const row = screen.getByText("Specs read").parentElement as HTMLElement;
+    expect(within(row).getByText("none")).toBeInTheDocument();
+    await user.click(screen.getByText("Prompt assembly"));
+    expect(screen.getByText("System")).toBeInTheDocument();
+    expect(screen.queryByText("Project context — attached specs (untrusted)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Skipped")).not.toBeInTheDocument();
+  });
+
+  it("renders a trace recorded before the new fields exist: path alone, a block without meta or extras", async () => {
+    const user = userEvent.setup();
+    current = withSpecs({}, [AUTH]); // no specs_tokens / specs_calls / specs_loaded / specs_skipped
+    renderDrawer();
+    expect(screen.getByText(AUTH)).toBeInTheDocument();
+    expect(screen.queryByText(/tok$/)).not.toBeInTheDocument();
+    await user.click(screen.getByText("Prompt assembly"));
+    expect(screen.getByText("Project context — attached specs (untrusted)")).toBeInTheDocument();
+    expect(screen.queryByText(/tokens/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Skipped")).not.toBeInTheDocument();
+  });
+
+  // Phase 13 — R-WEB-44 as amended, R-WEB-46, R-WEB-47, EC-43
+  it("lists the skipped documents on their own when every attached one was skipped and the repo is not cloned", async () => {
+    const user = userEvent.setup();
+    current = withSpecs(
+      {
+        specs: null,
+        specs_loaded: null,
+        specs_skipped: [
+          { path: AUTH, origin: "agent", skill_name: null, reason: "not_cloned" },
+          { path: RULES, origin: "agent", skill_name: null, reason: "not_cloned" },
+        ],
+      },
+      [],
+    );
+    renderDrawer();
+    const row = screen.getByText("Specs read").parentElement as HTMLElement;
+    expect(within(row).getByText("none")).toBeInTheDocument();
+
+    await user.click(screen.getByText("Prompt assembly"));
+    expect(screen.queryByText("Project context — attached specs (untrusted)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Skipped")).not.toBeInTheDocument();
+    expect(screen.getByText("Project context — skipped documents")).toBeInTheDocument();
+    expect(screen.getByText(`${AUTH} — repository is not cloned`)).toBeInTheDocument();
+    expect(screen.getByText(`${RULES} — repository is not cloned`)).toBeInTheDocument();
+  });
+
+  it("lists a skipped document on its own when the section exists but nothing was read", async () => {
+    const user = userEvent.setup();
+    current = withSpecs(
+      {
+        specs_tokens: 0,
+        specs_calls: 1,
+        specs_loaded: [],
+        specs_skipped: [{ path: "docs/huge.md", origin: "skill", skill_name: "edge-cases", reason: "over_cap" }],
+      },
+      [],
+    );
+    renderDrawer();
+    await user.click(screen.getByText("Prompt assembly"));
+    expect(screen.queryByText("Project context — attached specs (untrusted)")).not.toBeInTheDocument();
+    expect(screen.getByText("Project context — skipped documents")).toBeInTheDocument();
+    expect(screen.getByText("docs/huge.md — over the token cap")).toBeInTheDocument();
+  });
+
+  it("shows the skipped list once, under the block's own 'Skipped' title, when the block is shown", async () => {
+    const user = userEvent.setup();
+    current = withSpecs({
+      specs_tokens: 500,
+      specs_calls: 1,
+      specs_loaded: [{ path: AUTH, origin: "agent", skill_name: null, tokens: 500, text: "Body." }],
+      specs_skipped: [{ path: "docs/gone.md", origin: "agent", skill_name: null, reason: "not_found" }],
+    }, [AUTH]);
+    renderDrawer();
+    await user.click(screen.getByText("Prompt assembly"));
+    expect(screen.getByText("Project context — attached specs (untrusted)")).toBeInTheDocument();
+    expect(screen.queryByText("Project context — skipped documents")).not.toBeInTheDocument();
+    const title = screen.getByText("Skipped");
+    expect(within(title.parentElement as HTMLElement).getByText("docs/gone.md — file not found")).toBeInTheDocument();
+    expect(screen.getAllByText("docs/gone.md — file not found")).toHaveLength(1);
   });
 });

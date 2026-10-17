@@ -5,7 +5,7 @@
  * caller list, so one hot symbol could push every caller of its sibling out. The
  * cap is now applied per `viaSymbol`, keeping each symbol's highest-ranked callers.
  *
- * Fixture facts this test depends on (specs/L04-blast-radius-plan.md, phase 2):
+ * Fixture facts this test depends on (specs/plans/L04-blast-radius.md, phase 2):
  *  - a reference counts only when `decl_file` is the changed file and its `from_path`
  *    has a `file_rank` row (inner join in `RepoIntelRepository.getResolvedCallers`);
  *  - callers are de-duplicated by file + enclosing symbol + target, so the 25 + 5

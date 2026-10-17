@@ -36,6 +36,12 @@ import type {
 } from '@devdigest/shared';
 import { parseUnifiedDiff } from './git/diff-parser.js';
 import type { HttpFetcher } from './http-fetch/index.js';
+import type {
+  CloneFiles,
+  CloneFileMiss,
+  CloneListResult,
+  CloneReadResult,
+} from './clone-files/index.js';
 import { ExternalServiceError } from '../platform/errors.js';
 
 /**
@@ -377,5 +383,59 @@ export class MockHttpFetcher implements HttpFetcher {
     const page = this.pages[url];
     if (page === undefined) throw new ExternalServiceError(`No mock page for ${url}`);
     return page;
+  }
+}
+
+// ---------- Mock clone files ----------
+export interface MockCloneFileEntry {
+  text?: string;
+  /** Size in bytes; defaults to the byte length of `text`. */
+  size?: number;
+  /** A symbolic link: dropped by `list`. */
+  symlink?: boolean;
+  /** Answer `read` with this miss. */
+  miss?: CloneFileMiss;
+}
+
+export interface MockCloneFilesOptions {
+  /** false → both operations answer `not_cloned`. Default true. */
+  cloned?: boolean;
+  /** In-memory tree: relative `/`-separated path → text, or an entry. */
+  files?: Record<string, string | MockCloneFileEntry>;
+}
+
+export class MockCloneFiles implements CloneFiles {
+  /** Every path passed to `read`, in call order. */
+  public reads: string[] = [];
+
+  constructor(private opts: MockCloneFilesOptions = {}) {}
+
+  private entry(path: string): MockCloneFileEntry | undefined {
+    const raw = this.opts.files?.[path];
+    if (raw === undefined) return undefined;
+    return typeof raw === 'string' ? { text: raw } : raw;
+  }
+
+  async list(_repo: RepoRef, opts: { excludedDirs: readonly string[] }): Promise<CloneListResult> {
+    if (this.opts.cloned === false) return { kind: 'not_cloned' };
+    const entries = Object.keys(this.opts.files ?? {}).flatMap((path) => {
+      const e = this.entry(path)!;
+      if (e.symlink) return [];
+      const dirs = path.split('/').slice(0, -1);
+      if (dirs.some((d) => opts.excludedDirs.includes(d))) return [];
+      return [{ path, size: e.size ?? Buffer.byteLength(e.text ?? '', 'utf8') }];
+    });
+    return { kind: 'entries', entries };
+  }
+
+  async read(_repo: RepoRef, path: string, opts: { maxBytes: number }): Promise<CloneReadResult> {
+    this.reads.push(path);
+    if (this.opts.cloned === false) return { kind: 'not_cloned' };
+    const e = this.entry(path);
+    if (!e) return { kind: 'miss', miss: 'not_found' };
+    if (e.miss) return { kind: 'miss', miss: e.miss };
+    const size = e.size ?? Buffer.byteLength(e.text ?? '', 'utf8');
+    if (size > opts.maxBytes) return { kind: 'miss', miss: 'too_large' };
+    return { kind: 'text', text: e.text ?? '' };
   }
 }

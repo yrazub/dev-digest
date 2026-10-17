@@ -13,11 +13,12 @@ The table below is a routing map, not a substitute for reading the file.
 |---|---|
 | anything under `client/` `server/` `reviewer-core/` `e2e/` `mcp/` | that module's `CLAUDE.md`, then its `README.md` |
 | the end-to-end review flow, or "how does X reach Y" | `README.md` — architecture diagram |
+| how a repository document reaches the prompt and the run trace (Project Context) | `docs/project-context.md` |
 | any test, or deciding where a test belongs | `TESTING.md` |
 | a reviewer system prompt, or choosing a model | `docs/agent-prompts/README.md` |
 | a course-lesson feature (L01–L08) | `specs/` — see its README for the index |
 | a bug that smells like one we've seen | the module's `INSIGHTS.md`, then the root one |
-| planning, building, testing, verifying, reviewing or documenting a feature with the agents in `.claude/agents/`, or editing an agent | `.claude/agents/README.md` — "Feature workflow": the agents cannot see each other's output, so you save the plan to `specs/` and carry every handoff |
+| specifying, planning, building, testing, verifying, reviewing or documenting a feature with the agents in `.claude/agents/`, or editing an agent | `.claude/agents/README.md` — "Feature workflow": the agents cannot see each other's output, so you carry every handoff — spec answers, the saved plan, each report |
 | applying or editing a skill under `.claude/skills/` | root `INSIGHTS.md` — grep for ``**Skill:** `<name>` `` |
 
 Subdirectory auto-load is unreliable in the VS Code extension

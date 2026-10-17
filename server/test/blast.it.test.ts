@@ -9,7 +9,7 @@
  * would replace a PR's `pr_files`. `changed_symbols` is compared as a set: the facade reads symbols
  * without `ORDER BY`.
  * Spec: `server/specs/L04-blast-radius.md`; degraded order: `specs/L04-blast-radius.md` (Q5);
- * plan: `specs/L04-blast-radius-plan.md` (phases 3 and 4; phase 4 adds the seeded PR #482 describe).
+ * plan: `specs/plans/L04-blast-radius.md` (phases 3 and 4; phase 4 adds the seeded PR #482 describe).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';

@@ -23,6 +23,7 @@ API:
 | `10-pr-intent` | The Intent card reads `GET /pulls/:id/intent` and renders the seeded intent (an in-scope item, a risk area, the confidence label) on both the Overview and Agent runs tabs — client, API and the `pr_intent` row agreeing on the contract. The flow never presses **Derive intent** or **Re-run**, so the classifier is not called; the strings it waits for are in [`../specs/seed-fixtures.md`](../specs/seed-fixtures.md). |
 | `11-pr-smart-diff` | The Files changed tab reads `GET /pulls/:id/smart-diff` and the PR's reviews and draws them together: the five role groups (read through their hints), the seeded finding under its line in `src/config.ts` with the `blocker` tag, the collapsed Boilerplate group opening onto `package-lock.json`, and the round trip through `?order=original`, which lists `README.md` that the collapsed Docs group hid. Client, API and the nine seeded `pr_files` rows must agree on the grouping; the seeded files and patches it waits for are in [`../specs/seed-fixtures.md`](../specs/seed-fixtures.md). The flow never presses Accept, Dismiss or Run Review, so no model is called and the data other flows read does not change. The group counter, the dismissed-finding rules, the "no review yet" line and the refresh after a run are covered by component and hook tests (`DiffTab`, `InlineFinding`, `reviews`), not by this flow. |
 | `12-pr-blast-radius` | The Blast radius block on the Overview tab reads `GET /pulls/:id/blast` and draws the map that the route builds from the seeded repo-intel index, with no clone on disk: the four stats, the changed symbol `rateLimit` with its caller `src/api/public/index.ts:23` as a new-tab GitHub link pinned to the seeded SHA, an endpoint chip, a cron chip and the count of changed symbols without callers; then the Graph view through `?blast=graph`, kept by a reload, and back to the Tree. Client, API and the seeded `repo_index_state`, `symbols`, `references`, `file_rank` and `file_facts` rows must agree on the contract; the rows and the expected answer are in [`../specs/seed-fixtures.md`](../specs/seed-fixtures.md). The only click after the PR row is the Tree / Graph switch, which changes the URL and nothing stored, so no model is called. The degraded reasons, the Resync button and the empty and error states depend on index rows the seed does not hold; they are covered by the server integration tests and the component tests (`BlastRadiusCard`), not by this flow. |
+| `13-project-context` | The Project Context nav item, the `/repos/:repoId/context` route and the agent editor's Context tab (`?tab=context`) read `GET /repos/:id/context` and `GET /agents/:id/context` on the seeded repository, which has no `clone_path`, and agree on the not-cloned state; the tab survives a reload. Nothing is attached or saved and no run starts, so no model is called. Listing, previewing, attaching, reordering and the run trace need a clone on disk, which the seed does not have; they are covered by the server integration tests (`project-context`, `reviews-project-context`) and the component and hook tests (`ProjectContextView`, `ContextAttachList`, `context`, `RunTraceDrawer`), not by this flow. |
 
 The common thread: these are **integration seams** — places where a page's
 correctness depends on client, API, and DB agreeing on a shape — which is
@@ -67,11 +68,14 @@ API from source with `tsx` rather than `pnpm start` is required because the
 API imports `@devdigest/reviewer-core`'s TypeScript source directly through
 a tsconfig path alias; CI installs `reviewer-core`'s own dependencies
 (`npm ci`) as a separate step specifically so that import resolves at
-runtime. On failure, `e2e/test-results/**` (the per-flow failure
+runtime. The API step sets `API_RATE_LIMIT_MAX` to a high value: the flows send their requests from
+one address in under a minute, and the API's default global limit (120 per minute) would answer some of
+them with `429`. On failure, `e2e/test-results/**` (the per-flow failure
 screenshots) is uploaded as a build artifact.
 
 `scripts/e2e.sh` mirrors this stack locally but is **not** used by CI — CI
 provisions its own Postgres/API/web trio directly in the job and calls the
 runner (`cd e2e && npm test`) against it. The script exists purely for a
 developer who wants the same guarantees (fresh, single-repo DB) without
-touching their normal dev stack.
+touching their normal dev stack. It raises the API's rate limit the same way (`E2E_API_RATE_LIMIT_MAX`,
+default 10000).

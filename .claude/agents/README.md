@@ -9,8 +9,9 @@ the agent files and are not repeated here.
 
 | Agent | Responsibility | Writes files | Model |
 |---|---|---|---|
+| [spec-creator](spec-creator.md) | Turns a request, a course task and its designs into an umbrella spec and module specs with EARS acceptance criteria, in two passes: discovery, then write | yes, spec Markdown only | `opus`, effort `high` |
 | [researcher](researcher.md) | Answers a question with evidence, from the repository or from external sources | no | `sonnet` |
-| [planner](planner.md) | Turns a request or spec into a Development Plan | no | `opus`, effort `high` |
+| [implementation-planner](implementation-planner.md) | Reviews an approved spec's requirements, then turns it (or a bug) into an Implementation Plan, in passes: review, then plan; asks for the execution mode; amend turns found gaps into a fix phase; writes no specs | no | `opus`, effort `high` |
 | [implementer](implementer.md) | Builds the code of an approved plan, phase by phase, and proves it passes the existing checks; writes no tests | yes | `sonnet`, effort `high` |
 | [test-writer](test-writer.md) | Writes every test: adds the tests a phase needs and repairs the existing tests it broke | yes, tests only | `sonnet`, effort `high` |
 | [architecture-reviewer](architecture-reviewer.md) | Checks a change or a module against the architectural boundaries and returns findings with evidence | no | `opus`, effort `high` |
@@ -29,11 +30,24 @@ feature (root [`README.md`](../../README.md)).
 ## How they fit together
 
 ```
-request ──► planner ──► Development Plan (text)
+request + designs ──► spec-creator (discovery) ──► questions, gaps, proposals ──► user answers
+                             │
+                      spec-creator (write) ──► specs/<feature>.md + <package>/specs/<feature>.md
+                             │  user approves; the main session sets Status: approved
+                             ▼
+approved spec / bug ──► implementation-planner (review) ──► findings, questions, recommendations,
+                             │                                  execution mode ──► user answers
+                             │      a recommendation that changes the spec ──► back to spec-creator
+                             ▼
+                implementation-planner (plan) ──► Implementation Plan (text)
                              │  user approves; the main session saves it
                              ▼
-                  specs/<feature>-plan.md
+                  specs/plans/<feature>.md
                              │
+          single-agent: the main session builds code + tests per phase, runs the same
+          Verify lines, commits; plan-verifier optional ──► skip to doc-writer
+                             │
+          multi-agent:
      ┌── for each phase, in order ────────────────────────────────────────┐
      │  implementer ──► Implementation report  (baseline, code, no tests) │
      │       ▼                                                            │
@@ -62,13 +76,54 @@ fixes the code, `test-writer` confirms it is green.
 Nothing in this chain is automatic. The agents cannot see each other's output, so the main
 session carries each step:
 
-1. Run `planner` with the request or the spec path.
-2. Show the plan to the user in full and wait for approval. Resolve its "Open questions"
-   first; a changed plan goes back through `planner`, not through hand edits.
-3. Save the approved plan **verbatim** to `specs/<feature>-plan.md` and add a row to
-   [`specs/README.md`](../../specs/README.md). The planner has no `Write` tool — if the main
+0. For a new feature with no approved spec, write it first:
+   1. Save the course task page and the design prototypes to files the agent can `Read` (text and
+      screenshots in the scratchpad) — `spec-creator` has no web access and stops on a bare link.
+   2. Run `spec-creator` with pass `discovery`, the request, those paths, the base commit and
+      today's date.
+   3. Ask the user every Question, Design gap and UX proposal of the Discovery report, with its
+      recommended answer first.
+   4. Run `spec-creator` with pass `write`, the same paths, the Discovery report and the answers.
+   5. Show the Spec report and its "Open questions left" to the user. On approval, set
+      `Status: approved` in each spec file and index row yourself — the agent never does.
+1. Run `implementation-planner` with pass `review` and the spec path (or the bug or
+   technical-change description). It stops on a feature with no approved spec — run step 0 or
+   ask the user to approve the draft.
+2. Ask the user every Clarification and Recommendation of the Requirements review, with its
+   recommended answer first, and the **execution mode**: multi-agent or single-agent, with the
+   agent's recommendation first. A recommendation the user accepts that changes the spec goes to
+   `spec-creator` first (a `write` pass on the draft, or a new spec that supersedes an approved
+   one) and is approved again; only then go on. An approved spec that nothing has been built from
+   yet is reopened instead: set `Status: draft` in the umbrella, every module spec and every
+   index row, then run the `write` pass — `spec-creator` refuses to edit an approved spec.
+3. Run `implementation-planner` with pass `plan`, the spec path, the Requirements review, the
+   answers and the chosen mode.
+4. Show the plan to the user in full and wait for approval. Resolve its "Open questions"
+   first; a changed plan goes back through `implementation-planner`, not through hand edits.
+5. Save the approved plan **verbatim** to `specs/plans/<feature>.md` (the same name as the
+   umbrella spec) and add a row to
+   [`specs/README.md`](../../specs/README.md). `implementation-planner` has no `Write` tool — if the main
    session does not save the plan, it exists only in the conversation.
-4. For each phase of the plan, in order:
+
+Steps 6–11, in either mode, are run by the [`execute-plan`](../skills/execute-plan/SKILL.md) skill:
+`/execute-plan specs/plans/<feature>.md`. It keeps the progress in
+`.devdigest/sdd/<feature>/state.json` (git-ignored) — phase statuses, the closing result lines,
+the declared deviations, the insight candidates, the final checks — and prints the next step, so
+a new chat resumes where the last one stopped; it asks for a new chat every three committed
+phases, because the orchestrating chat re-reads its whole context on every turn. `implementer`
+and `test-writer` read their phase through
+[`scripts/plan-phase.mjs`](scripts/plan-phase.mjs) rather than the whole plan. The steps below
+are what the skill does.
+
+**Single-agent mode** — the main session executes the plan itself: for each phase it builds the
+file table and the `**Tests (test-writer):**` lines, runs `Verify (phase)`, and commits the phase
+green. The plan's rules still bind it (skills per file row, protected paths, expected-to-change
+tests only). `plan-verifier` after the last phase is optional and recommended when the change
+spans packages; `architecture-reviewer` is optional. Then continue at step 9 below.
+
+**Multi-agent mode** — steps 6–8:
+
+6. For each phase of the plan, in order:
    1. Run `implementer` with the plan path and the phase number. On the first phase it runs the
       baseline; from the second phase on, tell it that the previous phase closed green and paste
       the closing result lines, so it skips the baseline. A red baseline stops it: take that to
@@ -82,22 +137,28 @@ session carries each step:
       `implementer` for the same phase, then `test-writer` runs again. Read "Existing tests
       edited" every time it is not empty: each row must quote a plan or spec item.
    5. Commit the closed phase, code and tests together.
-5. After the last phase, run `plan-verifier` with the plan path (and the base ref when the
-   branch is not cut from `origin/main`) and `architecture-reviewer` with the changed-file list,
-   a patch file and the plan path. Both are read-only and independent, so they can run in
-   parallel. The patch is made by the main session, outside the repository tree:
-   `git diff "$(git merge-base origin/main HEAD)" > <scratch>/change.patch`; untracked new files
-   are not in it and are named in the file list as new.
-6. Read both reports. A `FAIL` or `INCOMPLETE` verdict, or a CRITICAL or WARNING finding, goes
-   to the user. A code gap goes back to `implementer`; a missing test, or an existing test edited
-   without a plan or spec item, goes to `test-writer`. After any fix, run step 5 again — a check
-   made before the fix says nothing about the code after it.
-7. Run `doc-writer` with the plan path and the changed-file list when the feature changed
+7. After the last phase, run `plan-verifier` with the plan path, the deviations the
+   implementer declared (it rates a declared deviation `satisfied`, an undeclared one `partial`)
+   and the base ref when the branch is not cut from `origin/main`, and `architecture-reviewer`
+   with the changed-file list, a patch file and the plan path. Both are read-only and
+   independent, so they can run in parallel. The patch is made by the main session, somewhere
+   git does not track: `git diff "$(git merge-base origin/main HEAD)" >
+   .devdigest/sdd/<feature>/change.patch`; untracked new files are not in it and are named in the
+   file list as new.
+8. Read both reports. A `FAIL` or `INCOMPLETE` verdict, or a CRITICAL or WARNING finding, goes
+   to the user. The gaps go to `implementation-planner` with pass `amend`, which returns exact
+   replacements for wrong plan text and one new fix phase — code gaps as file rows, missing tests
+   or tests edited without a plan or spec item as test-writer lines, spec gaps back to
+   `spec-creator`. On the user's approval the main session applies it to the saved plan and runs
+   the new phase like any other (step 6). Then run step 7 again — a check made before the fix
+   says nothing about the code after it.
+9. Run `doc-writer` with the plan path and the changed-file list when the feature changed
    something the documentation describes. Apply the "For the main session" items of its report
    yourself.
-8. Commit what is left, and record the "Insight candidates" of the implementer and the
-   test-writer through the `engineering-insights` skill.
-9. Run `/pr-self-review`. Push or open a PR only on a pass verdict. `architecture-reviewer` does
+10. Commit what is left, and record the "Insight candidates" of the implementer and the
+    test-writer (or, in single-agent mode, what the session found) through the
+    `engineering-insights` skill.
+11. Run `/pr-self-review`. Push or open a PR only on a pass verdict. `architecture-reviewer` does
    not replace this step and its report is not a verdict.
 
 Agents do not call each other. No agent has the `Agent` tool, so every handoff goes through the
@@ -109,8 +170,9 @@ must be in the task it is given or in the repository.
 
 | Agent | `tools` | Permission mode | Kept out on purpose |
 |---|---|---|---|
+| spec-creator | `Read, Grep, Glob, Write, Edit`, plus a `PreToolUse` hook | `acceptEdits` | `Bash`, `Skill`, `Agent`, web tools |
 | researcher | `Read, Grep, Glob, Bash, WebSearch, WebFetch` | inherited | `Write`, `Edit`, `Skill`, `Agent` |
-| planner | `Read, Grep, Glob` | inherited | `Write`, `Edit`, `Bash`, `Skill`, `Agent`, web tools |
+| implementation-planner | `Read, Grep, Glob` | inherited | `Write`, `Edit`, `Bash`, `Skill`, `Agent`, web tools |
 | implementer | `Read, Grep, Glob, Edit, Write, Bash, Skill` | `acceptEdits` | `Agent`, web tools |
 | test-writer | `Read, Grep, Glob, Edit, Write, Bash, Skill` | `acceptEdits` | `Agent`, web tools |
 | architecture-reviewer | `Read, Grep, Glob` | inherited | `Write`, `Edit`, `Bash`, `Skill`, `Agent`, web tools |
@@ -119,10 +181,10 @@ must be in the task it is given or in the repository.
 
 What enforces what:
 
-- **The `tools` list is the hard boundary.** `planner` cannot change a file because it has no
+- **The `tools` list is the hard boundary.** `implementation-planner` cannot change a file because it has no
   tool that could. `researcher` has `Bash`, so its read-only behaviour rests on its prompt
   (inspection commands only).
-- **`architecture-reviewer` is read-only by its tool list,** like `planner`. `plan-verifier` has
+- **`architecture-reviewer` is read-only by its tool list,** like `implementation-planner`. `plan-verifier` has
   `Bash` to re-run the `Verify` commands, so its read-only behaviour rests on its prompt, like
   `researcher`.
 - **`implementer`'s limits are prompt-level.** It is told not to commit, push, install
@@ -134,6 +196,15 @@ What enforces what:
   files, `test-writer` writes no production code, and `doc-writer` writes Markdown documentation
   only. What catches a breach is `plan-verifier`'s "Existing tests changed" and "Scope" sections
   and a look at `git status`.
+- **`spec-creator`'s write scope is enforced by a hook.** Its frontmatter registers a
+  `PreToolUse` hook on `Write|Edit` that runs
+  [`scripts/specs-only-guard.mjs`](scripts/specs-only-guard.mjs): any path that is not a `.md`
+  file under `specs/`, `server/specs/`, `client/specs/`, `reviewer-core/specs/` or `mcp/specs/`,
+  and anything under `specs/plans/`, is blocked (exit 2), symlinks and `..` resolved, unparseable input blocked too. `e2e/specs/` is
+  left out because it belongs to `test-writer`. Which spec files inside those folders it may
+  touch, and that it never sets `approved`, are prompt-level. Observed in a live subagent run on
+  2026-10-16: writes to `client/src/` and `specs/plans/` were blocked with the guard's message, a
+  write to `specs/` went through.
 - **The push gate still applies.** The `PreToolUse` hook in
   [`.claude/settings.json`](../settings.json) denies `git push` and `gh pr create` without a
   passing `pr-self-review` verdict, whichever agent runs the command.
@@ -141,44 +212,54 @@ What enforces what:
   that mode applies to the subagent instead.
 
 No agent preloads skills through the `skills:` field. `implementer` and `test-writer` load them
-on demand with the `Skill` tool; `planner`, `architecture-reviewer` and `doc-writer` read the
+on demand with the `Skill` tool; `implementation-planner`, `architecture-reviewer` and `doc-writer` read the
 `SKILL.md` files they need with `Read`; `plan-verifier` uses no skills.
 
 ## Inputs and outputs
 
 | Agent | Give it | It reads on its own | It returns |
 |---|---|---|---|
+| spec-creator | the pass (`discovery` or `write`), the request, paths to the saved task text and design files, the base commit; for `write`, also the Discovery report and the user's answers | root and module `CLAUDE.md` and `README.md`, `specs/` and the module `specs/` indexes, overlapping specs, the code and contracts the feature touches, `TESTING.md`, the `INSIGHTS.md` files | `discovery`: a **Discovery report** — Understanding · Questions · Design gaps · Module interaction · UX proposals · Untrusted inputs · Proposed files · Not read; nothing written. `write`: specs in the working tree, uncommitted, plus a **Spec report** — Files written · Acceptance criteria · Discovery outcomes · Open questions left · For the main session |
 | researcher | one concrete question, anchored to a package, feature, library or version | module `CLAUDE.md` and `README.md`, code, tests, git history; or official docs, changelogs, source repositories | a **research report** as its final message: Answer · Findings with evidence · References or Sources · Not found · Not checked |
-| planner | a feature request, a spec path or a bug description | module `CLAUDE.md` files, `specs/`, `TESTING.md`, every relevant `INSIGHTS.md`, [`routing.json`](../skills/pr-self-review/routing.json), the matching `SKILL.md` files, the code it names | a **Development Plan** as its final message: Context read · Constraints · Phases (file table with skills and blocking rules, the test work order, `Verify (code)` and `Verify (phase)`, `Done when`) · Out of scope · Risks · Open questions |
-| implementer | the path to an approved plan and the phase to build; from the second phase on, the statement that the previous phase closed green | the plan, the `CLAUDE.md` of each touched package, the skills each phase names | changed code in the working tree, uncommitted, no tests, plus an **Implementation report**: Phases · Baseline · Verification · Existing tests failing · Deviations · Not done / blocked · Insight candidates · For reviewers |
-| test-writer | after a phase: the plan path, the phase and the implementer's "Existing tests failing" table; standalone: the behaviour to cover and where it lives; for a bug: the description and the expected behaviour; for a gap: the `plan-verifier` item IDs with their quoted requirements | the plan phase, the spec, `TESTING.md`, the module `CLAUDE.md` and `INSIGHTS.md`, the source under test, the nearest sibling test, the skills [`routing.json`](../skills/pr-self-review/routing.json) matches to the test files | test files in the working tree, uncommitted, plus a **Test report**: Tests written · Existing tests edited · Existing tests deleted · Suspected regressions · Suspected product bugs · Left failing, pre-existing · Verification · Needs a production change · Not covered · Insight candidates |
+| implementation-planner | the pass (`review`, `plan` or `amend`) and an approved spec path, or a bug or technical-change description; for `plan`, also the Requirements review, the user's answers and the execution mode; for `amend`, the saved plan path and the gaps with their IDs and evidence | module `CLAUDE.md` files, the spec and its module specs, `TESTING.md`, every relevant `INSIGHTS.md`, [`routing.json`](../skills/pr-self-review/routing.json), the matching `SKILL.md` files, the code it names | `review`: a **Requirements review** — Findings · Clarifications needed · Recommendations (each marked whether it changes the spec) · Execution mode · Ready to plan. `plan`: an **Implementation Plan** — Context read · Constraints · Phases (file table with skills and blocking rules, the test work order, `Verify (code)` and `Verify (phase)`, `Done when` citing an AC) · Out of scope · Risks · Open questions. `amend`: a **Plan amendment** — Gap triage · Replacements · New phase · For the user |
+| implementer | the path to an approved plan and the phase to build; from the second phase on, the statement that the previous phase closed green | its phase of the plan (sliced by [`scripts/plan-phase.mjs`](scripts/plan-phase.mjs)), the module spec of each package the phase touches and the umbrella criteria its `Done when` cites, the `CLAUDE.md` of each touched package, the skills each phase names | changed code in the working tree, uncommitted, no tests, plus an **Implementation report**: Phases · Baseline · Verification · Existing tests failing · Deviations · Not done / blocked · Insight candidates · For reviewers |
+| test-writer | after a phase: the plan path, the phase and the implementer's "Existing tests failing" table; standalone: the behaviour to cover and where it lives; for a bug: the description and the expected behaviour; for a gap: the `plan-verifier` item IDs with their quoted requirements | the plan phase (the same slice), the spec, `TESTING.md`, the module `CLAUDE.md` and `INSIGHTS.md`, the source under test, the nearest sibling test, the skills [`routing.json`](../skills/pr-self-review/routing.json) matches to the test files | test files in the working tree, uncommitted, plus a **Test report**: Tests written · Existing tests edited · Existing tests deleted · Suspected regressions · Suspected product bugs · Left failing, pre-existing · Verification · Needs a production change · Not covered · Insight candidates |
 | architecture-reviewer | the mode (`change` or `audit`); for `change`, the changed-file list with new files marked and a patch file when there is one; for `audit`, a directory or module; optionally the plan path and the `pnpm arch:check` result line | root and module `CLAUDE.md`, `routing.json` and the architecture `SKILL.md` files it matches, the dependency-cruiser config and baseline, the architecture documents, the root and module `INSIGHTS.md`, the files in scope and their importers | an **Architecture review** as its final message: Findings · Pre-existing · Checked · Left to the machine check · Not checked |
 | plan-verifier | the plan path, and the base ref when the branch is not cut from `origin/main` | the plan, the spec and its module specs, the root and package `CLAUDE.md`, the diff against the base, the code and tests; it re-runs the `Verify` commands | a **Verification report** as its final message: Plan items · Existing tests changed · Requirement items · Commands re-run · Scope · Gaps · Not verified, with a `PASS`, `FAIL` or `INCOMPLETE` verdict |
 | doc-writer | the material (a plan path, a spec path or other text), the changed-file list, and whether the feature was verified | the material, the root `CLAUDE.md`, the `CLAUDE.md`, `README.md` and `docs/README.md` of each touched package, the code, the target document, the `mermaid-diagram` skill | Markdown documents in the working tree, uncommitted, plus a **Documentation report**: Documents written · Diagrams · Index rows added · Not documented · Unverified · For the main session |
 
-All seven reply with clarifying questions, or stop, rather than guess when the input is
+All eight reply with clarifying questions, or stop, rather than guess when the input is
 missing or ambiguous. The exact templates are in each agent file under "Output" (for
 `researcher`, under "Repository research" and "External research").
 
 What the main session does with each result:
 
-- **Plan** — show it to the user; once approved, save it to `specs/<feature>-plan.md` and add
+- **Discovery report** — ask the user its Questions, Design gaps and UX proposals, then run the
+  `write` pass with the answers.
+- **Spec report** — show it with its open questions; on approval set `Status: approved` in the
+  spec files and index rows.
+- **Requirements review** — ask the user its Clarifications, Recommendations and the execution
+  mode; spec-changing recommendations go to `spec-creator` first; then run the `plan` pass.
+- **Plan** — show it to the user; once approved, save it to `specs/plans/<feature>.md` and add
   a row to [`specs/README.md`](../../specs/README.md).
 - **Implementation report** — read it, then pass its "Existing tests failing" table to
   `test-writer`; a `partial` or `blocked` status goes to the user.
 - **Test report** — close the phase on `green`, or send the findings back to `implementer`; read
   "Existing tests edited" every time, since each row must quote a plan or spec item.
-- **Verification report** — a `FAIL` or `INCOMPLETE` verdict goes to the user; code gaps go to
-  `implementer`, test gaps to `test-writer`; check again after any fix.
-- **Architecture review** — CRITICAL and WARNING findings go to the user. It is advice, not the
-  `/pr-self-review` verdict.
+- **Verification report** — a `FAIL` or `INCOMPLETE` verdict goes to the user; its gaps go to
+  `implementation-planner` pass `amend`, and the fix phase runs like any other; check again after
+  it.
+- **Architecture review** — CRITICAL and WARNING findings go to the user, and the ones to fix go
+  through the same `amend` pass. It is advice, not the `/pr-self-review` verdict.
+- **Plan amendment** — show it to the user; settle "For the user" first; on approval apply the
+  replacements, insert the new phase before `## Out of scope`, and run it.
 - **Documentation report** — apply its "For the main session" items yourself.
 - Commit the closed phase, record the "Insight candidates" through the `engineering-insights`
   skill, then run `/pr-self-review` before any push.
 
 ## How the agents share skills
 
-The planner matches every file in the plan against the globs in
+The implementation-planner matches every file in the plan against the globs in
 [`routing.json`](../skills/pr-self-review/routing.json) — the same table the review step uses —
 and writes the matching skills, and the `critical_rules` IDs a reviewer blocks on, into each
 phase's file table. The implementer loads exactly those skills, phase by phase. So the plan,
@@ -194,7 +275,7 @@ Test files are not in the plan's file table. `test-writer` looks them up in the 
 A new skill therefore needs no change to any agent: add it to `routing.json` and they pick it
 up.
 
-## Sources for `planner` and `implementer`
+## Sources for `implementation-planner` (formerly `planner`) and `implementer`
 
 The rules of these two agents were derived from a `researcher` pass on 2026-10-04. The pages
 were read through `WebFetch`, which returns a summary rather than the raw page, so the wording
@@ -205,8 +286,8 @@ below is paraphrase; only the prompting page was checked against a raw copy.
 | An explicit `tools` allowlist — omitting the field inherits every tool | both | [Sub-agents][sub] |
 | No `skills:` preload — the field injects each skill's full body into every run and is not an allowlist; a subagent can still invoke skills through the `Skill` tool | both | [Sub-agents][sub], [Skills][skills] |
 | The plan is self-contained and passed as a file — a subagent starts with no history, and a reference on disk avoids retelling | both | [Sub-agents][sub], [Multi-agent research system][multi] |
-| Plan sections: files and interfaces, what is out of scope, a verification step at the end of each phase | planner | [Claude Code best practices][bp] |
-| No plan for a change that fits in one sentence | planner | [Claude Code best practices][bp] |
+| Plan sections: files and interfaces, what is out of scope, a verification step at the end of each phase | implementation-planner | [Claude Code best practices][bp] |
+| No plan for a change that fits in one sentence | implementation-planner | [Claude Code best practices][bp] |
 | Strict output template, because the next step consumes it | both | [Skill authoring best practices][skill-bp] |
 | Opus for planning, Sonnet for implementation; effort `high` where verification matters | both | [Model configuration][model] |
 | Report evidence — the real output of each command — rather than asserting success | implementer | [Claude Code best practices][bp] |
@@ -268,7 +349,7 @@ D `doc-writer`), so a later change can say which rule it touches.
 | **T9** Testcontainers: the dynamically mapped port, never a fixed one | test-writer | [Testcontainers for Node][testcontainers] |
 | **T10** Suite, suffix and doubles by layer; mock the outside world only | test-writer | project — `TESTING.md:14-21`, `:79-88`; `testing-by-layer.md:7-23` |
 | **T11** A skipped integration file is not a pass, for a baseline or a phase verify | implementer, test-writer, plan-verifier | project — `server/INSIGHTS.md:136-156` |
-| **T12** Testability seams are production code and are planned as implementer work | planner, implementer, test-writer | project — `adapter-implements-port`, `.claude/skills/onion-architecture/SKILL.md:105`; user decision |
+| **T12** Testability seams are production code and are planned as implementer work | implementation-planner, implementer, test-writer | project — `adapter-implements-port`, `.claude/skills/onion-architecture/SKILL.md:105`; user decision |
 | **T13** The implementer establishes a green baseline before it changes anything and does not start on a red one | implementer | user decision; no primary source in the research base |
 | **T14** The implementer classes each failing existing test (expected, unexpected, pre-existing, unclassified) against the baseline; the class is a hint for `test-writer`, not a justification | implementer, test-writer | inference |
 | **T15** A suspected product bug gets a failing test and a report, never a bent assertion; every test asserts an observable result; no whole-tree snapshots | test-writer | inference — nothing found in primary sources on tautological tests, snapshot abuse or tests that cannot fail |
@@ -339,7 +420,35 @@ looked for and not adopted as rules.
 [wtd]: https://www.writethedocs.org/guide/docs-as-code/
 [google-style]: https://developers.google.com/style/highlights
 
+## Sources for `spec-creator`
+
+| Rule in the agent | Source |
+|---|---|
+| Acceptance criteria in EARS — five patterns (ubiquitous, event-driven, state-driven, unwanted behaviour, optional feature), one condition separated from one response | Mavin, Wilkinson, Harwood, Novak, "Easy Approach to Requirements Syntax (EARS)", IEEE RE'09, 2009 |
+| The umbrella template (Problem and user · Goals / Non-goals · User stories · Acceptance criteria · Edge cases · Non-functional requirements · Inputs and provenance · Untrusted inputs · Open questions), `Spec ID` and `Supersedes` | course material, user decision 2026-10-15 |
+| Two passes, discovery before writing; design gaps, module interaction and UX proposals go to the user, never decided silently | user decision 2026-10-15; a subagent cannot ask the user, so the main session carries the questions ([Sub-agents][sub]) |
+| AC IDs, P1/P2/P3 priorities, a test hint per AC, an Ownership table | user decision 2026-10-15 |
+| Spec ID `SPEC-YYYY-MM-DD-<slug>` instead of a running counter (no collision between branches); a self-check before returning; vague-to-EARS examples; the `wrapUntrusted()` / `groundFindings()` invariants named; "use proactively" in the description | comparison with the course's reference spec-creator, user decision 2026-10-16. Not adopted from it: `AskUserQuestion` (removed from every subagent — [Sub-agents][sub]), `skills:` preload (C7), writes to `e2e/specs/` |
+| Umbrella in `specs/`, detail in the module `specs/`; designed from the current code, not the repository history; English | project — root `CLAUDE.md`, `specs/README.md` |
+| Write scope enforced by a frontmatter `PreToolUse` hook rather than the prompt alone | user decision 2026-10-15; hooks are deterministic, prompt rules advisory (C6) |
+
+## Sources for the `implementation-planner` changes of 2026-10-15
+
+| Rule in the agent | Source |
+|---|---|
+| Renamed from `planner`; writes, extends and edits no requirement — specs belong to `spec-creator` and the user; every `Done when` cites an AC | user decision 2026-10-15 |
+| A feature needs an approved spec; a bug or a small technical change is planned from its description | user decision 2026-10-15 |
+| Two passes — `review` checks the requirements against the code and returns findings, clarifications, recommendations and the execution-mode question; `plan` writes the plan | user decision 2026-10-15; a subagent cannot ask the user ([Sub-agents][sub]) |
+| A recommendation that changes the spec goes back through `spec-creator` and a fresh approval before the plan is written | user decision 2026-10-15 |
+| Execution mode: multi-agent (the chain above) or single-agent (the main session builds code and tests, `plan-verifier` optional) — chosen by the user per plan | user decision 2026-10-15 |
+| `amend` pass: gaps from `plan-verifier`, `architecture-reviewer` or a live run become exact replacements plus one new fix phase; spec gaps go back to `spec-creator` | project — the L03 Intent Layer revision 3 practice (root `INSIGHTS.md`, Decisions, 2026-10-05); user decision 2026-10-16 |
+| `implementer` reads the module specs of the packages its phase touches and the umbrella criteria its `Done when` cites; a spec / plan mismatch is Blocked | user decision 2026-10-16 — the plan does not restate the spec, so the implementer otherwise never saw the exact requirement text |
+
 ## Adding or changing an agent
+
+- Planned improvements not built yet, with the measurements behind them, are in
+  [`docs/agent-workflow-backlog.md`](../../docs/agent-workflow-backlog.md). Remove an item there
+  when it lands.
 
 - One file per agent, `<name>.md`, with `name` and `description` in the frontmatter. The
   description says what the agent does and when to use it — it is what the main session

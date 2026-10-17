@@ -13,8 +13,9 @@ workflow — and deliberately skips the rest. Concretely:
 
 - **Test behaviour at the seams**, not implementation details. Routes, adapters,
   contracts, the review pipeline, the rendered component.
-- **Mock the outside world.** LLMs, GitHub, and git are stubbed via
-  `server/src/adapters/mocks.ts` so unit tests are hermetic and key-free.
+- **Mock the outside world.** LLMs, GitHub, git, and the files of a repository's clone
+  (`MockCloneFiles`) are stubbed via `server/src/adapters/mocks.ts` so unit tests are hermetic and
+  key-free.
 - **One real integration per data-backed workflow**, against a real Postgres —
   not a mock DB — because the bugs there live in SQL, migrations, and wiring.
 - **A few end-to-end browser flows** over the *main* user journeys, on seeded
@@ -40,14 +41,17 @@ If a test wouldn't catch a class of regression we care about, we don't write it.
 surface (list, diff, findings, run controls) and the agent editor.
 
 **server-unit** — the DB-free majority: adapters, prompt assembly, grounding,
-repo-intel ranking & indexing, pricing, route smoke. The `typecheck` job also
+repo-intel ranking & indexing, pricing, route smoke, the clone-file adapter over a temporary
+directory, and the global rate limit (`app-rate-limit.test.ts` builds the app with
+`NODE_ENV=production`, because the rate-limit plugin is not registered under `test`). The `typecheck` job also
 runs on Windows, which doubles as the `@ast-grep/napi` prebuilt gate (install
 fails there if the win32 prebuilt is missing).
 
 **server-integration** — the `*.it.test.ts` files. Each starts a real Postgres
 (pgvector) via testcontainers, builds the Fastify app, migrates + seeds, and
 drives routes end-to-end: reviews + run lifecycle (incl. grounding), agents CRUD,
-repo-intel symbol clamping, pulls comments, settings models. They self-skip when
+repo-intel symbol clamping, pulls comments, settings models, the Project Context routes and a
+review run that inserts attached documents (clone files through `MockCloneFiles`). They self-skip when
 Docker is unavailable.
 
 `test/mcp-stdio.it.test.ts` is the one file here that drives another package. It listens on a

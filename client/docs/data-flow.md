@@ -37,6 +37,9 @@ A key is `[resource, id]`. The ones the PR screens depend on:
 | `["blast", prId, headSha]` | `useBlastRadius` | `GET /pulls/:id/blast` | not polled; waits until both `prId` and `pr.head_sha` are known, and a new head SHA is a new query. Every head of one PR shares the prefix `blastKeys.pull(prId)` = `["blast", prId]`. Only a finished Resync from the Blast radius note invalidates it (see "Resync from the Blast radius note"); a finished review run does not, because a review does not change the map |
 | `["run-trace", runId]` | `useRunTrace` | `GET /runs/:id/trace` | fetched when the drawer opens; `retry: false` |
 | `["pr-comments", prId]` | `usePrComments` | `GET /pulls/:id/comments` | invalidated by posting a comment |
+| `["context", repoId]` | `useContextFiles` | `GET /repos/:id/context` | not polled; read again by the Project Context page's Refresh and when stale on mount. Nothing invalidates it, because attaching a document does not change the list |
+| `["context-file", repoId, path]` | `useContextFile` | `GET /repos/:id/context/file?path=` | enabled once both are known. Every key shares the prefix `contextKeys.files` = `["context-file"]`, which a successful attachment save invalidates, so the "Used by" counts are read again |
+| `["agent-context", agentId]` · `["skill-context", skillId]` | `useAgentContext` · `useSkillContext` | `GET /agents/:id/context` · `GET /skills/:id/context` | written by the save hooks (below); never polled |
 
 The Files changed tab joins two of these. From `["smart-diff", prId, headSha]` it takes only the
 group each path belongs to and the group order; the findings it draws come from `["reviews", prId]`
@@ -69,6 +72,25 @@ restoring or deleting a skill invalidates `skills` and every `agent-skills`; del
 invalidates `agents`, since link counts change. `useSetAgentSkills` is optimistic: the list
 reorders at once and rolls back if the server refuses. File import goes through `api.upload`
 (a `FormData` body gets its own multipart header; only string bodies are sent as JSON).
+
+Project context (L05): the Context tabs save an agent's or a skill's attached paths with
+`useSetAgentContext` / `useSetSkillContext`, which share one internal hook, `useSaveContextPaths`
+(`src/lib/hooks/context.ts`), and return `{ save, isPending }`. A tab calls `save(paths)` on every
+change, so the hook keeps **one `PUT` in flight**:
+
+1. `save` writes `paths` into the owner's query (`["agent-context", id]` or `["skill-context", id]`)
+   at once, so the list reorders before the server answers.
+2. With no save in flight it sends `PUT /agents|skills/:id/context` with `{ paths }`. With one in flight
+   it keeps `paths` as the single waiting list, replacing any earlier waiting list.
+3. On success it remembers the answer as the last confirmed list and invalidates `["context-file"]`. If a
+   list is waiting it sends that one next; otherwise it writes the answer into the cache.
+4. On failure it drops the waiting list and writes the last confirmed list back, so the screen shows what
+   the server holds. With no confirmed list known, it invalidates the owner's query instead. The error
+   toast is the global `MutationCache.onError`; the tab adds none.
+
+The queue state is in refs, not React state: it is not something the screen renders. The Project Context
+page's **Resync** button is `useResyncRepoIntel`: it starts the job and invalidates
+`["repo-intel-state", repoId]`, and does not wait for it or read `["context", repoId]` again.
 
 Keep server data in the query cache. Do not copy it into `useState`; derive from it instead
 (the severity counters are a `useMemo` over `review.findings`).

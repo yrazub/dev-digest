@@ -154,6 +154,14 @@
       "review": false,
       "why": "Writes INSIGHTS.md entries; has no review rules."
     },
+    "execute-plan": {
+      "review": false,
+      "why": "Orchestrates the agents over an approved plan; has no review rules."
+    },
+    "workflow-retro": {
+      "review": false,
+      "why": "Retrospective of a multi-agent run; has no review rules."
+    },
     "pr-self-review": {
       "review": false,
       "why": "This skill."
