@@ -93,7 +93,9 @@ session carries each step:
    recommended answer first, and the **execution mode**: multi-agent or single-agent, with the
    agent's recommendation first. A recommendation the user accepts that changes the spec goes to
    `spec-creator` first (a `write` pass on the draft, or a new spec that supersedes an approved
-   one) and is approved again; only then go on.
+   one) and is approved again; only then go on. An approved spec that nothing has been built from
+   yet is reopened instead: set `Status: draft` in the umbrella, every module spec and every
+   index row, then run the `write` pass — `spec-creator` refuses to edit an approved spec.
 3. Run `implementation-planner` with pass `plan`, the spec path, the Requirements review, the
    answers and the chosen mode.
 4. Show the plan to the user in full and wait for approval. Resolve its "Open questions"

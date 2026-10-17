@@ -91,6 +91,21 @@ be obvious to anyone reading the code, it does not belong here.
   when the discovery agent is gone (new session).
   **Evidence 2026-10-16:** `.claude/agents/README.md:86` — step 0.4, "the Discovery report and
   the answers".
+  **2026-10-16:** the same holds for `implementation-planner`: on L05 the `plan` pass was a
+  `SendMessage` to the agent that ran `review`. The message carried only the outcomes and pointed
+  to the saved review (`.devdigest/sdd/<feature>/review.md`) instead of pasting it back.
+- **2026-10-16** — to change an approved spec that nothing has been built from yet (the review
+  pass found gaps), reopen it: set `Status: draft` in the umbrella and every module spec, and in
+  every index row (`specs/README.md` and each `<package>/specs/README.md`). Then run `spec-creator`
+  `write` with the changes. It edits in place, keeps the criterion IDs, defers items to a
+  "Deferred" table instead of deleting them, and leaves the status alone. Set `approved` again
+  after the user agrees. Asked to amend an `approved` spec directly, `spec-creator` stops and
+  writes nothing, because it may only add a `Superseded by` line to an approved spec
+  (`.claude/agents/spec-creator.md:316`). "Feature workflow" step 2 names only "a `write` pass on
+  the draft, or a new spec that supersedes an approved one" (`.claude/agents/README.md:94-95`), so
+  the reopen route is not written down there. Superseding needs new file names, because the
+  umbrella and module specs share one name.
+  **2026-10-17:** the reopen route is now step 2 of "Feature workflow" (`.claude/agents/README.md:96-98`).
 
 ## Tool & Library Notes
 
@@ -221,6 +236,13 @@ be obvious to anyone reading the code, it does not belong here.
   images, videos, or canvas-based content.` because the page had not rendered yet — a retry after a
   screenshot returned the text. **See also:** the `chrome-devtools` `--autoConnect` entries above.
   **Evidence 2026-10-16:** `.claude/settings.local.json:5` (local-only, not in git).
+- **2026-10-16** — a subagent's final report that contains a literal tag-like string such as
+  `<total_tokens>` (here, a UI string template in a plan's file table) is flagged by the Claude
+  Code harness as a "harness-signal tag". Every such `<` is rewritten to `<\`, and a banner line
+  is prepended to the report. When a report is saved verbatim (an Implementation Plan to
+  `specs/plans/`), drop the banner and undo the escape (`sed 's/<\\total_tokens>/<total_tokens>/g'`),
+  then check that no `<\` is left. Evidence: `specs/plans/L05-project-context.md:217`, the
+  `ProjectContextView` row, footer `"<documents.length> files · <total_tokens> tokens total"`.
 
 ## Decisions
 
@@ -481,3 +503,7 @@ the editor tool.
 - **2026-10-16** — `implementer` reads the spec, `implementation-planner` has an `amend` pass, and the `spec-creator` write guard was observed blocking in a live subagent run; decision and evidence recorded above.
 - **2026-10-16** — first real `spec-creator` run: L05 Project Context, discovery → write → amend,
   approved as `specs/L05-project-context.md` + server, client, reviewer-core module specs; tips above.
+- **2026-10-16** — L05 Project Context planned: the `implementation-planner` review (19 findings), a
+  reopen-as-draft amendment through `spec-creator` (P3 deferred to fit the lab's scope), and the
+  plan saved as `specs/plans/L05-project-context.md` (11 phases, multi-agent); entries above.
+  **See also:** `server/INSIGHTS.md` (tokenizer).

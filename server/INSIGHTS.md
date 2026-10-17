@@ -143,6 +143,15 @@ Traps we have already hit in the server. Append-only. See the root
   **Extended 2026-10-06:** built since: `StructuredRequest.reasoning: false` and `.signal` (OpenRouter provider only), and no repair retry after `finish_reason: length` (`OutputTruncatedError`). About 40 live runs on one PR showed what a single run hides: with `temperature: 0` the same input gives `medium` in roughly five runs of six and `low` in the rest (the model's `basis: 'insufficient'` flips), and latency ranges 2–30 s for 70–1200 output tokens depending on the upstream provider — three default-reasoning runs in a row hit the 30 s budget while reasoning-off runs minutes later took 2–11 s. Judge a prompt or setting change on at least six runs per variant; two prompt wordings I compared on fewer could not be told apart.
   **Extended 2026-10-06 (2):** a `low` tier has two model-driven causes and the tier alone does not say which: `basis: 'insufficient'` (now applied only when no linked issue or specification was read — `deriveConfidence`, `basisOverruled`) and `injection_suspected`. After the guard, 5 of 14 runs on the same PR were still `low`, every one through `injection_suspected: true`; I had first put all such runs down to `basis` after checking a single record. Read the downgrade line of the run (`basis insufficient — forced to low` / `injection suspected — forced to low`) before naming a cause.
   **Extended 2026-10-06 (3):** the injection flag in those runs was caused by one sentence of the demo PR's own description, "Not meant to be merged" — text that addresses a reviewer. With only that sentence removed, 10 of 10 runs gave `medium` with `injection_suspected: false` (5 of 14 `low` before). So the flag was working as specified, on a borderline input, and inconsistently; a fixture for intent tests should not address the reader.
+- **2026-10-16** — `TiktokenTokenizer.count` calls `this.enc.encode(text)` with js-tiktoken's
+  default `disallowedSpecial = "all"`. A text that contains a special-token string such as
+  `<|endoftext|>` therefore throws. The adapter's `catch` treats any throw as "the encoder failed
+  to load" and sets `broken = true` for the rest of the process. After that, every count (repo-map
+  budget, `skills_tokens`, and project context from L05 on) falls back to `approxTokens`
+  (chars/4), so one committed markdown file or one diff can switch the whole server to the
+  estimate. Use `encode(text, [], [])` to count special tokens as plain text, and keep `broken`
+  for load failures only. Planned as R-SRV-40/41 in `specs/plans/L05-project-context.md`,
+  phase 3; not fixed at the time of writing (`src/adapters/tokenizer/index.ts:30-39`, `count`).
 
 ## Decisions
 
@@ -328,3 +337,5 @@ session the serial lane gave `Test Files 19 passed (19)` right after a full run 
 - **2026-10-10** — L04 `devdigest-mcp`: no file under `src/` changed; one integration test and its helper added, not yet executed (Open Questions). The package's own findings are in `../mcp/INSIGHTS.md`.
 - **2026-10-11** — L04 Blast Radius specified, no code yet (`specs/L04-blast-radius.md`, `server/specs/`, `client/specs/`, `mcp/specs/`); the facade's real caller cap and degraded behaviour recorded above.
 - **2026-10-11** — L04 Blast Radius built: the `blast` module and `GET /pulls/:id/blast`, the per-symbol cap, seeded index rows for PR #482; entries above. Plan: `specs/plans/L04-blast-radius.md` (revision 2).
+- **2026-10-16** — L05 Project Context planned, no code yet (`specs/plans/L05-project-context.md`);
+  the tokenizer special-token fallback recorded above. **See also:** `../INSIGHTS.md`.
