@@ -77,12 +77,16 @@ function file(over: Partial<ProjectContextFile> = {}): ProjectContextFile {
   };
 }
 
-function renderView() {
-  render(
+function viewTree() {
+  return (
     <NextIntlClientProvider locale="en" messages={{ context: messages }}>
       <ProjectContextView repoId="r1" />
-    </NextIntlClientProvider>,
+    </NextIntlClientProvider>
   );
+}
+
+function renderView() {
+  return render(viewTree());
 }
 
 function row(path: string): HTMLElement {
@@ -274,5 +278,44 @@ describe("ProjectContextView", () => {
     expect(row("docs/Guide.md")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("changing the selected document logs no React style-collision warning", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      nav.search = new URLSearchParams({ path: "specs/alpha.md" });
+      fileState.data = file();
+      const view = renderView();
+      expect(row("specs/alpha.md")).toHaveAttribute("aria-current", "true");
+
+      nav.search = new URLSearchParams({ path: "docs/Guide.md" });
+      view.rerender(viewTree());
+
+      expect(row("docs/Guide.md")).toHaveAttribute("aria-current", "true");
+      expect(row("specs/alpha.md")).not.toHaveAttribute("aria-current");
+      const messages = error.mock.calls.map((call) => call.map(String).join(" "));
+      expect(messages.filter((m) => m.includes("style property during rerender"))).toEqual([]);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it("not cloned and empty keep the Refresh button next to their message; a list with no selection prompts for one", () => {
+    filesState.data = list({ state: "not_cloned", documents: [], total_tokens: 0 });
+    renderView();
+    expect(screen.getByText("Repository not cloned yet")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+    cleanup();
+
+    filesState.data = list({ documents: [], total_tokens: 0 });
+    renderView();
+    expect(screen.getByText("No markdown under specs/, docs/ or insights/ in acme/x")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+    cleanup();
+
+    filesState.data = list();
+    renderView();
+    expect(screen.getByText("Select a document to preview it")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
   });
 });

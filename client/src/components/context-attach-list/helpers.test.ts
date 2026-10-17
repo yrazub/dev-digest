@@ -7,6 +7,7 @@ import {
   movePath,
   orderRows,
   runCapSkips,
+  splitPath,
   togglePath,
   type AttachRow,
 } from "./helpers";
@@ -140,5 +141,16 @@ describe("attachMode", () => {
   it("an error wins over kept data (a failed refetch keeps `data`)", () => {
     expect(attachMode({ ...base, files: { ...base.files, isError: true } })).toBe("error");
     expect(attachMode({ ...base, pathsError: true })).toBe("error");
+  });
+});
+
+describe("splitPath", () => {
+  it("splits the name from the folder, which keeps its trailing slash", () => {
+    expect(splitPath("docs/specs/a.md")).toEqual({ name: "a.md", folder: "docs/specs/" });
+    expect(splitPath("gone/x.md")).toEqual({ name: "x.md", folder: "gone/" });
+  });
+
+  it("has an empty folder when the path has no slash", () => {
+    expect(splitPath("x.md")).toEqual({ name: "x.md", folder: "" });
   });
 });

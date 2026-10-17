@@ -18,7 +18,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Badge, ErrorState, Skeleton } from "@devdigest/ui";
+import { Badge, ErrorState, Icon, Skeleton } from "@devdigest/ui";
 import { useContextFiles } from "@/lib/hooks/context";
 import { useActiveRepo } from "@/lib/repo-context";
 import { ContextPreviewDrawer } from "./ContextPreviewDrawer";
@@ -33,6 +33,7 @@ export function ContextAttachList({
   pathsError,
   onRetryPaths,
   onSave,
+  compact = false,
 }: {
   heading: string;
   paths: string[] | undefined;
@@ -40,6 +41,8 @@ export function ContextAttachList({
   pathsError: boolean;
   onRetryPaths: () => void;
   onSave: (paths: string[]) => void;
+  /** Tighter rows with an icon-only Preview (the skill tab, N2c). */
+  compact?: boolean;
 }) {
   const t = useTranslations("context");
   const { repoId, activeRepo } = useActiveRepo();
@@ -97,44 +100,48 @@ export function ContextAttachList({
   return (
     <div style={s.wrap}>
       <div style={s.headRow}>
-        <h3 style={s.heading}>{heading}</h3>
-        <input
-          type="search"
-          style={s.filter}
-          value={query}
-          placeholder={t("attach.filterPlaceholder")}
-          aria-label={t("attach.filterPlaceholder")}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+        <h2 style={s.heading}>{heading}</h2>
+        <label style={s.filterWrap}>
+          <Icon.Search size={13} />
+          <input
+            type="search"
+            style={s.filter}
+            value={query}
+            placeholder={t("attach.filterPlaceholder")}
+            aria-label={t("attach.filterPlaceholder")}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
       </div>
       <p style={s.hint}>{filtering ? t("attach.dragDisabled") : t("attach.orderHint")}</p>
 
       {visible.length === 0 ? (
-        <p style={s.hint}>{t("attach.noMatch", { query })}</p>
+        <div style={s.noMatch}>{t("attach.noMatch", { query })}</div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={attachedRows.map((r) => r.path)} strategy={verticalListSortingStrategy}>
-            <ul style={s.list}>
+            <ul style={s.list(compact)}>
               {attachedRows.map((r) => (
                 <ContextRow
                   key={r.path}
                   row={r}
                   repoName={repoName}
                   draggable={!filtering}
+                  compact={compact}
                   onToggle={(on) => toggle(r.path, on)}
                   onPreview={() => setPreviewPath(r.path)}
                 />
               ))}
             </ul>
           </SortableContext>
-          {attachedRows.length > 0 && restRows.length > 0 && <div style={s.divider} />}
-          <ul style={s.list}>
+          <ul style={s.restList(compact, attachedRows.length > 0 && restRows.length > 0)}>
             {restRows.map((r) => (
               <ContextRow
                 key={r.path}
                 row={r}
                 repoName={repoName}
                 draggable={false}
+                compact={compact}
                 onToggle={(on) => toggle(r.path, on)}
                 onPreview={() => setPreviewPath(r.path)}
               />
@@ -143,9 +150,15 @@ export function ContextAttachList({
         </DndContext>
       )}
 
-      <div style={s.totalRow}>
-        <span style={s.total(total > list.soft_cap_tokens)}>{t("attach.total", { count: total })}</span>
-        {total > list.soft_cap_tokens && <Badge color="var(--crit)">{t("attach.softCap")}</Badge>}
+      <div style={s.footer}>
+        <span className="mono" style={s.total(total > list.soft_cap_tokens)}>
+          {t("attach.total", { count: total })}
+        </span>
+        {total > list.soft_cap_tokens && (
+          <Badge color="var(--crit)" bg="var(--crit-bg)" icon="AlertTriangle">
+            {t("attach.softCap")}
+          </Badge>
+        )}
       </div>
       {skips.length > 0 && <p style={s.runCap}>{t("attach.runCap", { paths: skips.join(", ") })}</p>}
 

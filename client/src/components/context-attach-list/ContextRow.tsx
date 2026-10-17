@@ -6,15 +6,16 @@ import React from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslations } from "next-intl";
-import { Badge, Button, Icon } from "@devdigest/ui";
-import { kindColor } from "@/lib/context-display";
-import type { AttachRow } from "./helpers";
+import { Badge, Icon } from "@devdigest/ui";
+import { kindBg, kindColor } from "@/lib/context-display";
+import { splitPath, type AttachRow } from "./helpers";
 import { s } from "./styles";
 
 export function ContextRow({
   row,
   repoName,
   draggable,
+  compact,
   onToggle,
   onPreview,
 }: {
@@ -22,6 +23,8 @@ export function ContextRow({
   repoName: string;
   /** Only attached rows, and only while no filter is applied. */
   draggable: boolean;
+  /** Tighter padding and an icon-only Preview (the skill tab). */
+  compact: boolean;
   onToggle: (on: boolean) => void;
   onPreview: () => void;
 }) {
@@ -32,11 +35,19 @@ export function ContextRow({
   });
   const { doc, path, attached } = row;
   const unusable = doc !== null && doc.status !== "ok";
+  const [hovered, setHovered] = React.useState(false);
+  const { name, folder } = splitPath(path);
 
   return (
     <li
       ref={setNodeRef}
-      style={{ ...s.row(attached, isDragging), transform: CSS.Transform.toString(transform), transition }}
+      style={{
+        ...s.row({ attached, dragging: isDragging, hovered, compact }),
+        transform: CSS.Transform.toString(transform),
+        transition: transition ?? "background .12s",
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       {draggable ? (
         <button
@@ -59,17 +70,35 @@ export function ContextRow({
         aria-label={t("attach.checkbox", { path })}
         onChange={(e) => onToggle(e.target.checked)}
       />
-      <span className="mono" style={s.path}>
-        {path}
+      <span style={s.pathWrap}>
+        <span className="mono" style={s.name}>
+          {name}
+        </span>
+        {folder && (
+          <span className="mono" style={s.folder}>
+            {folder}
+          </span>
+        )}
       </span>
       {doc === null && <span style={s.note}>{t("attach.notFound", { repo: repoName })}</span>}
       {doc?.status === "too_large" && <span style={s.note}>{t("attach.tooLarge")}</span>}
       {doc?.status === "unreadable" && <span style={s.note}>{t("attach.unreadable")}</span>}
-      {doc && <Badge color={kindColor(doc.kind)}>{doc.kind}</Badge>}
       {doc && (
-        <Button size="sm" onClick={onPreview}>
-          {t("attach.preview")}
-        </Button>
+        <Badge color={kindColor(doc.kind)} bg={kindBg(doc.kind)} style={s.kindBadge}>
+          {doc.kind}
+        </Badge>
+      )}
+      {doc && (
+        <button
+          type="button"
+          style={s.preview(compact)}
+          aria-label={compact ? t("attach.preview") : undefined}
+          title={compact ? t("attach.preview") : undefined}
+          onClick={onPreview}
+        >
+          <Icon.Eye size={13} />
+          {!compact && t("attach.preview")}
+        </button>
       )}
     </li>
   );

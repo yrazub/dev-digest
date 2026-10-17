@@ -24,6 +24,12 @@ export function attachMode(input: {
   return input.files.data.state === "not_cloned" ? "not_cloned" : "list";
 }
 
+/** A path split for display: `folder` runs up to and including the last `/` (or is empty), `name` is the rest. */
+export function splitPath(path: string): { name: string; folder: string } {
+  const cut = path.lastIndexOf("/") + 1;
+  return { name: path.slice(cut), folder: path.slice(0, cut) };
+}
+
 /** Attached paths in stored order (not-found ones included), then the other documents by path. */
 export function orderRows(documents: readonly SpecFile[], paths: readonly string[]): AttachRow[] {
   const byPath = new Map(documents.map((d) => [d.path, d]));

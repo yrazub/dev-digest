@@ -5,9 +5,9 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Badge, Button, Drawer, ErrorState, Skeleton } from "@devdigest/ui";
+import { Badge, Button, Drawer, ErrorState, Icon, Skeleton } from "@devdigest/ui";
 import { SafeMarkdown } from "@/components/safe-markdown";
-import { kindColor } from "@/lib/context-display";
+import { kindBg, kindColor } from "@/lib/context-display";
 import { useContextFile } from "@/lib/hooks/context";
 import type { AttachRow } from "./helpers";
 import { s } from "./styles";
@@ -55,27 +55,47 @@ export function ContextPreviewDrawer({
 
   return (
     <Drawer
+      width={560}
       title={
-        <span className="mono" style={{ overflowWrap: "anywhere" }}>
+        <span className="mono" style={s.drawerTitle}>
+          <Icon.FileText size={15} style={{ color: doc ? kindColor(doc.kind) : "var(--text-muted)", flexShrink: 0 }} />
           {row.path}
         </span>
       }
+      subtitle={
+        <div style={s.drawerSub}>
+          {doc && (
+            <Badge color={kindColor(doc.kind)} bg={kindBg(doc.kind)} style={{ padding: "1px 8px" }}>
+              {doc.kind}
+            </Badge>
+          )}
+          {usedBy && (
+            <span style={s.drawerUsedBy}>
+              <Icon.Cpu size={12} />
+              {usedBy}
+            </span>
+          )}
+          {doc?.tokens != null && (
+            <span className="mono" style={s.drawerTokens}>
+              {t("page.tokens", { count: doc.tokens })}
+            </span>
+          )}
+        </div>
+      }
       onClose={onClose}
     >
-      <div style={s.drawerMeta}>
-        {doc && <Badge color={kindColor(doc.kind)}>{doc.kind}</Badge>}
-        {doc?.tokens != null && <span style={s.muted}>{t("page.tokens", { count: doc.tokens })}</span>}
+      <div style={s.drawerAction}>
         <Button
           size="sm"
-          kind={row.attached ? "primary" : "secondary"}
+          kind={row.attached ? "secondary" : "primary"}
+          icon={row.attached ? "Check" : "Plus"}
           disabled={blocked}
           onClick={() => onToggle(!row.attached)}
         >
           {row.attached ? t("attach.attached") : t("attach.attach")}
         </Button>
       </div>
-      {usedBy && <div style={s.drawerNote}>{usedBy}</div>}
-      <div style={s.drawerContent}>{body}</div>
+      <div style={s.drawerPanel}>{body}</div>
     </Drawer>
   );
 }

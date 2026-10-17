@@ -71,20 +71,25 @@ function file(over: Partial<ProjectContextFile> = {}): ProjectContextFile {
   };
 }
 
-function renderList(props: { heading?: string; paths?: string[] | undefined; pathsLoading?: boolean; pathsError?: boolean } = {}) {
+function listTree(props: { heading?: string; paths?: string[] | undefined; pathsLoading?: boolean; pathsError?: boolean; compact?: boolean } = {}) {
   const paths = "paths" in props ? props.paths : [];
-  render(
+  return (
     <NextIntlClientProvider locale="en" messages={{ context: messages }}>
       <ContextAttachList
         heading={props.heading ?? "Project context"}
         paths={paths}
         pathsLoading={props.pathsLoading ?? false}
         pathsError={props.pathsError ?? false}
+        compact={props.compact}
         onRetryPaths={onRetryPaths}
         onSave={onSave}
       />
-    </NextIntlClientProvider>,
+    </NextIntlClientProvider>
   );
+}
+
+function renderList(props: Parameters<typeof listTree>[0] = {}) {
+  return render(listTree(props));
 }
 
 /** Document paths in the order the checkboxes appear on screen. */
@@ -125,9 +130,10 @@ describe("ContextAttachList rows", () => {
       expect(screen.getByRole("checkbox", { name: "Attach insights/z.md" })).toBeChecked();
       expect(screen.getByRole("checkbox", { name: "Attach docs/a.md" })).not.toBeChecked();
 
-      // each row: path, kind badge, Preview
+      // each row: the path as name and folder, kind badge, Preview
       const row = within(rowOf("docs/a.md"));
-      expect(row.getByText("docs/a.md")).toBeInTheDocument();
+      expect(row.getByText("a.md")).toBeInTheDocument();
+      expect(row.getByText("docs/")).toBeInTheDocument();
       expect(row.getByText("docs")).toBeInTheDocument();
       expect(row.getByRole("button", { name: "Preview" })).toBeInTheDocument();
       expect(screen.getAllByRole("button", { name: "Preview" })).toHaveLength(4);
@@ -185,6 +191,39 @@ describe("ContextAttachList rows", () => {
     expect(onSave).not.toHaveBeenCalled();
     await user.click(screen.getByRole("checkbox", { name: "Attach docs/bad.md" }));
     expect(onSave).toHaveBeenLastCalledWith([]);
+  });
+});
+
+describe("ContextAttachList row styling", () => {
+  it("hovering a row and then attaching it logs no React style-collision warning", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const user = userEvent.setup();
+      const view = renderList({ paths: [] });
+
+      await user.hover(rowOf("docs/a.md"));
+      await user.unhover(rowOf("docs/a.md"));
+      view.rerender(listTree({ paths: ["docs/a.md"] }));
+
+      expect(screen.getByRole("checkbox", { name: "Attach docs/a.md" })).toBeChecked();
+      const messages = error.mock.calls.map((call) => call.map(String).join(" "));
+      expect(messages.filter((m) => m.includes("style property during rerender"))).toEqual([]);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it("Preview shows its text by default and is icon-only (still named Preview) when compact", () => {
+    renderList({ paths: [] });
+    const full = screen.getAllByRole("button", { name: "Preview" });
+    expect(full).toHaveLength(4);
+    for (const button of full) expect(button.textContent).toBe("Preview");
+    cleanup();
+
+    renderList({ paths: [], compact: true });
+    const compact = screen.getAllByRole("button", { name: "Preview" });
+    expect(compact).toHaveLength(4);
+    for (const button of compact) expect(button.textContent).toBe("");
   });
 });
 

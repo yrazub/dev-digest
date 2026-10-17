@@ -4,9 +4,9 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Badge, ErrorState, Skeleton } from "@devdigest/ui";
+import { Badge, ErrorState, Icon, Skeleton } from "@devdigest/ui";
 import { SafeMarkdown } from "@/components/safe-markdown";
-import { kindColor } from "@/lib/context-display";
+import { kindBg, kindColor } from "@/lib/context-display";
 import { useContextFile } from "@/lib/hooks/context";
 import { s } from "./styles";
 
@@ -14,12 +14,20 @@ export function DocumentPane({ repoId, path }: { repoId: string; path: string })
   const t = useTranslations("context");
   const { data, isLoading, isError, refetch } = useContextFile(repoId, path);
 
-  if (isError) return <ErrorState body={t("page.fileLoadError")} onRetry={() => refetch()} />;
+  if (isError) {
+    return (
+      <div style={s.paneBody}>
+        <ErrorState body={t("page.fileLoadError")} onRetry={() => refetch()} />
+      </div>
+    );
+  }
   if (isLoading || !data) {
     return (
-      <div style={s.stack}>
-        <Skeleton height={20} width="50%" />
-        <Skeleton height={160} />
+      <div style={s.paneBody}>
+        <div style={s.stack}>
+          <Skeleton height={20} width="50%" />
+          <Skeleton height={160} />
+        </div>
       </div>
     );
   }
@@ -36,16 +44,23 @@ export function DocumentPane({ repoId, path }: { repoId: string; path: string })
   else body = <div style={s.muted}>{data.status === "too_large" ? t("page.tooLarge") : t("page.unreadable")}</div>;
 
   return (
-    <div style={s.pane}>
+    <>
       <div style={s.paneHeader}>
         <span className="mono" style={s.panePath}>
           {data.path}
         </span>
-        <Badge color={kindColor(data.kind)}>{data.kind}</Badge>
+        <Badge color={kindColor(data.kind)} bg={kindBg(data.kind)} style={s.kindBadge}>
+          {data.kind}
+        </Badge>
         {data.tokens !== null && <span style={s.paneMeta}>{t("page.tokens", { count: data.tokens })}</span>}
+        <span style={s.usedBy}>
+          <Icon.Cpu size={12} />
+          {usedBy}
+        </span>
       </div>
-      <div style={s.paneMeta}>{usedBy}</div>
-      <div style={s.content}>{body}</div>
-    </div>
+      <div style={s.paneBody}>
+        <div style={s.paneInner}>{body}</div>
+      </div>
+    </>
   );
 }

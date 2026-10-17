@@ -19,6 +19,12 @@ function isWebUrl(href: string | undefined): href is string {
 /* Module-level, so the renderer types are the same on every render. An inline map
    gives React new component types each time and remounts their DOM nodes. */
 const COMPONENTS: Components = {
+  h1: ({ children }) => (
+    <h1 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 14px", color: "var(--text-primary)" }}>{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 style={{ fontSize: 15, fontWeight: 600, margin: "18px 0 8px", color: "var(--text-primary)" }}>{children}</h2>
+  ),
   p: ({ children }) => <p style={{ margin: "0 0 10px" }}>{children}</p>,
   strong: ({ children }) => (
     <strong style={{ fontWeight: 650, color: "var(--text-primary)" }}>{children}</strong>

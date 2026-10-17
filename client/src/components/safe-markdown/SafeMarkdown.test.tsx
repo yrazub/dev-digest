@@ -49,6 +49,12 @@ describe("SafeMarkdown", () => {
     expect(screen.getByText("npm test")).toBe(code);
   });
 
+  it("renders # and ## as level-1 and level-2 headings", () => {
+    render(<SafeMarkdown>{"# Title\n\n## Sub"}</SafeMarkdown>);
+    expect(screen.getByRole("heading", { level: 1, name: "Title" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Sub" })).toBeInTheDocument();
+  });
+
   it("renders nothing for an empty or null body", () => {
     const { container, rerender } = render(<SafeMarkdown>{null}</SafeMarkdown>);
     expect(container).toBeEmptyDOMElement();

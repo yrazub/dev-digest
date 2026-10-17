@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { compareByPath, formatRootList, kindColor } from "./context-display";
+import { compareByPath, formatRootList, kindBg, kindColor } from "./context-display";
 
 describe("formatRootList", () => {
   it("joins three roots with commas and the or-word", () => {
@@ -29,6 +29,19 @@ describe("kindColor", () => {
   it("gives any other root the neutral colour, including names that exist on Object.prototype", () => {
     expect(kindColor("adr")).toBe("var(--text-secondary)");
     expect(kindColor("constructor")).toBe("var(--text-secondary)");
+  });
+});
+
+describe("kindBg", () => {
+  it("gives each named kind its tinted background", () => {
+    expect(kindBg("specs")).toBe("var(--accent-bg)");
+    expect(kindBg("docs")).toBe("#10b9811a");
+    expect(kindBg("insights")).toBe("#f59e0b1a");
+  });
+
+  it("gives any other root the neutral hover background, including names that exist on Object.prototype", () => {
+    expect(kindBg("adr")).toBe("var(--bg-hover)");
+    expect(kindBg("constructor")).toBe("var(--bg-hover)");
   });
 });
 

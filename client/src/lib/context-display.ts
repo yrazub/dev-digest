@@ -11,6 +11,17 @@ export function kindColor(kind: string): string {
   return Object.hasOwn(KIND_COLORS, kind) ? KIND_COLORS[kind]! : "var(--text-secondary)";
 }
 
+const KIND_BACKGROUNDS: Record<string, string> = {
+  specs: "var(--accent-bg)",
+  docs: "#10b9811a",
+  insights: "#f59e0b1a",
+};
+
+/** Badge background of a document's `kind`; any custom search root gets the vendored `Badge` default. */
+export function kindBg(kind: string): string {
+  return Object.hasOwn(KIND_BACKGROUNDS, kind) ? KIND_BACKGROUNDS[kind]! : "var(--bg-hover)";
+}
+
 /** "specs/, docs/ or insights/" for three roots, "adr/" for one. */
 export function formatRootList(roots: readonly string[], orWord: string): string {
   const folders = roots.map((r) => `${r}/`);

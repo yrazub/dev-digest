@@ -20,6 +20,7 @@ export function ContextTab({ skillId }: { skillId: string }) {
       pathsError={isError}
       onRetryPaths={() => void refetch()}
       onSave={save}
+      compact
     />
   );
 }
