@@ -49,6 +49,17 @@ describe("SafeMarkdown", () => {
     expect(screen.getByText("npm test")).toBe(code);
   });
 
+  it("renders no image element — remote or script URL — and shows the alt text instead", () => {
+    render(
+      <SafeMarkdown>
+        {"![tracker](https://example.com/pixel.png) ![bad](javascript:alert(1)) ![](https://example.com/x.png)"}
+      </SafeMarkdown>,
+    );
+    expect(document.querySelector("img")).toBeNull();
+    expect(screen.getByText("tracker")).toBeInTheDocument();
+    expect(screen.getByText("bad")).toBeInTheDocument();
+  });
+
   it("renders # and ## as level-1 and level-2 headings", () => {
     render(<SafeMarkdown>{"# Title\n\n## Sub"}</SafeMarkdown>);
     expect(screen.getByRole("heading", { level: 1, name: "Title" })).toBeInTheDocument();

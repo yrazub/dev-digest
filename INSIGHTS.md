@@ -521,3 +521,4 @@ the editor tool.
   **See also:** `server/INSIGHTS.md` (tokenizer).
 - **2026-10-17** — L05 Project Context executed: phases 7–11, a fix round (plan amended twice, R-WEB-44 reopened and re-approved), phases 12–13, docs, e2e 13/13. **See also:** `server/INSIGHTS.md`, `client/INSIGHTS.md`, `e2e/INSIGHTS.md`.
 - **2026-10-17** — L05 follow-up: design gaps found by the user after push → phase 14 (N6/N2b/N2c styling, style-collision warning), final checks re-run, e2e 13/13. Deferred: `SafeMarkdown` has no `img` rule (`![x](javascript:…)` renders `<img src="">`).
+- **2026-10-17** — the deferred `SafeMarkdown` image follow-up is closed: no `<img>` is rendered at all, only the alt text (a remote image would call out from the viewer's browser; `javascript:` gave `src=""`). See `client/src/components/safe-markdown/SafeMarkdown.tsx` (`img` renderer).

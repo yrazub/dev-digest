@@ -1,5 +1,7 @@
 /* SafeMarkdown — renders untrusted repository markdown. No raw-HTML plugin (raw
-   HTML shows as text); only http(s) links are clickable, in a new tab. The
+   HTML shows as text); only http(s) links are clickable, in a new tab; images are
+   never loaded — a remote image in a document would call out from the viewer's
+   browser, and a script URL renders as `src=""` — so only their alt text shows. The
    vendored `Markdown` is not used: it keeps mailto:, relative and other links. */
 import React from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
@@ -56,13 +58,17 @@ const COMPONENTS: Components = {
     ) : (
       <>{children}</>
     ),
+  img: ({ alt }) => (alt ? <span style={{ color: "var(--text-muted)" }}>{alt}</span> : null),
 };
+
+/* Module-level for the same reason as COMPONENTS: one stable plugin list. */
+const REMARK_PLUGINS = [remarkGfm];
 
 export function SafeMarkdown({ children }: { children?: string | null }) {
   if (!children) return null;
   return (
     <div className="dd-md" style={{ fontSize: "inherit", lineHeight: 1.55 }}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={COMPONENTS}>
         {children}
       </ReactMarkdown>
     </div>
