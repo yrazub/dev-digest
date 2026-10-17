@@ -105,6 +105,8 @@ Traps we have already hit in the server. Append-only. See the root
   downstream.length` in the client and in `mcp`, which miscounts when two same-named changed
   symbols share one group; it is now `totals.symbols_without_callers`, counted by name in
   `toBlastRadius` (`src/modules/blast/domain.ts`). **See also:** `../mcp/INSIGHTS.md`.
+- **2026-10-17** — The global rate-limit plugin is registered only when `config.nodeEnv !== 'test'` (`src/app.ts:99`), so a 429 test must call `buildApp` with `NODE_ENV: 'production'`. Point `DATABASE_URL` at `postgres://x:x@127.0.0.1:1/none` so the boot-time run reaper never reaches a real database, and probe with `GET /repos/not-a-uuid/context`: it has no own `config.rateLimit` and answers 422 before any database access (`test/app-rate-limit.test.ts:33`).
+- **2026-10-17** — `FsCloneFiles` treats only `ENOENT`, `ENOTDIR` and `ELOOP` as a miss (`src/adapters/clone-files/index.ts:50`): a symlink loop reads as `not_found`, every other read error propagates. That is the seam for the NFR-6 "project context unavailable" run test — override `cloneFiles` with a read that throws another code (e.g. `EACCES`) and `forRun` rejects while the run continues. `chmod 000` fixtures prove nothing as root or on win32, so gate them on `process.getuid?.() !== 0` (`test/clone-files.test.ts:15`, `canDenyRead`).
 
 ## Tool & Library Notes
 
@@ -152,6 +154,7 @@ Traps we have already hit in the server. Append-only. See the root
   estimate. Use `encode(text, [], [])` to count special tokens as plain text, and keep `broken`
   for load failures only. Planned as R-SRV-40/41 in `specs/plans/L05-project-context.md`,
   phase 3; not fixed at the time of writing (`src/adapters/tokenizer/index.ts:30-39`, `count`).
+- **2026-10-17** — An `EnvSchema` key that `.env.example` ships empty (`LOG_LEVEL=`, `API_RATE_LIMIT_MAX=`) needs `z.preprocess((v) => (v === '' ? undefined : v), …)` around it: a bare `z.coerce.number()` turns `''` into `0`, which fails `.min(1)` and stops `loadConfig` at boot (`src/platform/config.ts:40`, `:50`).
 
 ## Decisions
 
@@ -339,3 +342,4 @@ session the serial lane gave `Test Files 19 passed (19)` right after a full run 
 - **2026-10-11** — L04 Blast Radius built: the `blast` module and `GET /pulls/:id/blast`, the per-symbol cap, seeded index rows for PR #482; entries above. Plan: `specs/plans/L04-blast-radius.md` (revision 2).
 - **2026-10-16** — L05 Project Context planned, no code yet (`specs/plans/L05-project-context.md`);
   the tokenizer special-token fallback recorded above. **See also:** `../INSIGHTS.md`.
+- **2026-10-17** — L05 Project Context built (13 phases; phases 12–13 were review fixes): the configurable `API_RATE_LIMIT_MAX`, the clone-file miss codes and the rate-limit test recipe recorded above. **See also:** `../e2e/INSIGHTS.md` (the 429s that motivated the setting).

@@ -57,6 +57,13 @@ Traps we have already hit in the web app. Append-only. See the root
   `errorUpdatedAt`, so a failing request still ends the wait; a mocked query without
   `errorUpdatedAt` turns `Math.max` into `NaN` and the wait silently never starts
   (`useResyncWait` in `.../BlastRadiusCard/_components/DegradedNote/use-resync-wait.ts`).
+- **2026-10-17** — The vendored `Checkbox` takes no `disabled` prop and gets its accessible name only from its `label` child (`src/vendor/ui/kit/Checkbox.tsx:5-15`), so a row that must be disabled or carry an `aria-label` such as "Attach <path>" uses a native `<input type="checkbox">` (`src/components/context-attach-list/ContextRow.tsx:55-59`).
+- **2026-10-17** — The vendored `Tabs` renders plain `<button>`s with no `tablist`/`tab` roles (`src/vendor/ui/kit/Tabs.tsx:25`): a test clicks a tab with `getByRole("button", { name })` and checks tab order by comparing the buttons' `textContent` with the known labels.
+- **2026-10-17** — react-markdown v9's default URL transform keeps `mailto:` and relative hrefs as live anchors, and the vendored `Markdown` adds no filter. Text that comes from a repository (Project Context documents) goes through `SafeMarkdown`, whose module-level `a` renderer links only `http:`/`https:` (`src/components/safe-markdown/SafeMarkdown.tsx:9` `isWebUrl`, `:40`).
+
+## What Works
+
+- **2026-10-17** — A save queue is tested without timers by having the mocked `fetch` return a PUT promise the test holds, then settling it with `await act(async () => resolve(res))`; the test decides what is in flight, so "three quick saves give exactly two PUTs" is deterministic (`src/lib/hooks/context.test.tsx:42-44`).
 
 ## Tool & Library Notes
 
@@ -86,6 +93,8 @@ Traps we have already hit in the web app. Append-only. See the root
   `qc.refetchQueries` on the key instead of waiting on timers; it adds no call to an
   `invalidateQueries` spy, so the spy counts only what the hook did. Unmount and `qc.clear()` in
   `afterEach`, or the poll outlives the test (`src/lib/hooks/reviews.test.tsx:127`).
+- **2026-10-17** — dnd-kit's keyboard sensor finds no drop target in jsdom, where every rect is zero. Spy `Element.prototype.getBoundingClientRect` to give each row a box (top = index × 40), focus the drag handle, then `user.keyboard("{Space}")`, `{ArrowDown}`, `{Space}` (`src/components/context-attach-list/ContextAttachList.test.tsx:215`, `:226`).
+- **2026-10-17** — In `messages/en/*.json` (ICU, intl-messageformat) a straight apostrophe before `{` starts a quoted literal, so `'{query}'` prints `{query}` verbatim. A parameter shown inside straight quotes is written `''{query}''` (`messages/en/context.json:36`, `attach.noMatch`); older keys avoid it with curly quotes.
 
 
 ## Decisions
@@ -154,6 +163,7 @@ function identity a component depends on; the original code is in commit `54e2b1
 **Cause:** `tsconfig.json` includes `.next/types/**/*.ts` (`tsconfig.json:33`), and that gitignored folder still held the generated `page.ts` and `validator.ts` entry of a route that was later deleted from `src/app` (`repos/[repoId]/conventions`). The error is `Cannot find module '../../../../../../src/app/repos/[repoId]/conventions/page.js'`.
 **Fix / rule:** errors only under `.next/` are a stale build artefact, not a code failure. Run `pnpm exec next typegen` (rewrites `validator.ts`), delete the leftover `.next/types/app/<deleted route>/` folder, and rerun. Not with `pnpm dev` running against the same folder.
 **Evidence:** `tsconfig.json:33`; nothing in the repository shows the stale file, it is gitignored.
+**2026-10-17:** the same file fails right after a route is *added*: the first `pnpm typecheck` gave `.next/types/validator.ts(77,52): TS2344: '"/repos/[repoId]/context"' does not satisfy the constraint 'AppRoutes'` while a running Next process rewrote `.next/types`; a second run was clean. Rerun before debugging.
 
 ## Session Notes
 
@@ -165,3 +175,4 @@ function identity a component depends on; the original code is in commit `54e2b1
 - **2026-10-05** — L03 Intent card, `usePrIntent` / `useRegenerateIntent`, the out-of-scope badge and the trace count; a stale `.next/types` blocked the first baseline.
 - **2026-10-07** — L03 Smart Diff: findings inside `diff-viewer` behind an optional prop, the grouped Files changed tab, the run-settled refresh hook; review fix for the double body. Plan: `specs/plans/L03-smart-diff.md` (revision 2).
 - **2026-10-11** — L04 Blast radius block on the PR Overview tab: tree and graph views, the degraded note with Resync (`useResyncWait`), `useBlastRadius`; entries above.
+- **2026-10-17** — L05 Project Context client: the Project Context page, `SafeMarkdown`, the shared `context-attach-list` with its coalescing save queue, the agent/skill Context tabs and the run-trace block; entries above.

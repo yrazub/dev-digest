@@ -443,6 +443,12 @@ the editor tool.
 **Fix / rule:** after changing an existing MCP entry, reconnect that server in `/mcp` or reload the window before reading `/context`; check the running process (for a Docker server, `docker inspect` its environment and start time) before concluding the change did not work. Do not rewrite the entry a second time to "fix" it.
 **Evidence:** nothing in the repository shows it — the entry is in the user-scope config. The project-scoped equivalent is the `devdigest-mcp` entry, `.mcp.json:14-17`, where an `env` edit needs the same reconnect.
 
+### plan-verifier flags a test-writer's `e2e/specs/README.md` row as a "Do not touch" breach
+**Date:** 2026-10-17
+**Cause:** the L05 plan's Constraints said "Do not touch … every `CLAUDE.md`, `README.md` and `docs/**` (doc-writer)", but the test-writer brief requires a new flow's row in the flow index.
+**Fix / rule:** a plan's "do not touch every README.md" constraint exempts `e2e/specs/README.md`, and an e2e phase names that row in its Tests line.
+**Evidence:** `.claude/agents/test-writer.md:73` ("add its row to `e2e/specs/README.md`"); `specs/plans/L05-project-context.md` Constraints, as amended.
+
 
 ## Session Notes
 
@@ -507,3 +513,4 @@ the editor tool.
   reopen-as-draft amendment through `spec-creator` (P3 deferred to fit the lab's scope), and the
   plan saved as `specs/plans/L05-project-context.md` (11 phases, multi-agent); entries above.
   **See also:** `server/INSIGHTS.md` (tokenizer).
+- **2026-10-17** — L05 Project Context executed: phases 7–11, a fix round (plan amended twice, R-WEB-44 reopened and re-approved), phases 12–13, docs, e2e 13/13. **See also:** `server/INSIGHTS.md`, `client/INSIGHTS.md`, `e2e/INSIGHTS.md`.

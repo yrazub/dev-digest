@@ -120,6 +120,7 @@ no secrets, under a 6x CPU throttle, or with the linux-x64 binary in a container
 changes landed in one commit, so which one mattered was not separated. The install step prints
 the version — read it first when the CI errors differ from the local wording.
 **Evidence:** `../.github/workflows/e2e-web.yml:116-120` (pin, `AGENT_BROWSER_BIN`, version print).
+**2026-10-17:** locally, `agent-browser` on `PATH` turned out to be a dangling symlink into a deleted scratch folder. `AGENT_BROWSER_BIN` (read at `run.ts:43`) set to the global install's `lib/node_modules/agent-browser/bin/agent-browser-<platform>` binary ran the suite.
 
 ### A flow's "persisted after reload" check fails: the reloaded page shows the old value
 **Date:** 2026-10-11
@@ -132,6 +133,19 @@ screen proves the optimistic update, not the save.
 **Evidence:** `specs/08-skills.flow.json:25`, `specs/09-conventions.flow.json:16`;
 `../client/src/lib/hooks/agents.ts:129` and `../client/src/lib/hooks/conventions.ts:46` (`onMutate`).
 
+### The last flows of a hermetic run fail with `Wait timed out` on a page that never rendered
+**Date:** 2026-10-17
+**Cause:** the API's global rate limit (120 requests per minute per client) was active in the hermetic stack; flows 01–12 used about 100 requests in their first 40 s from one IP, so flow 13 got HTTP 429 and its page stayed empty. The server log shows `Rate limit exceeded, retry in N seconds`.
+**Fix / rule:** the limit is now `API_RATE_LIMIT_MAX`; `scripts/e2e.sh` exports 10000 (override with `E2E_API_RATE_LIMIT_MAX`) and the CI workflow sets the same on its API step. Do not paper over a 429 with a `wait` step — grep the log for `Rate limit exceeded` first.
+**Evidence:** `../scripts/e2e.sh:45`; `../server/src/app.ts:99`.
+**See also:** `../server/INSIGHTS.md` (testing the limit).
+
+### A toast check times out right after a `wait --url` that passed
+**Date:** 2026-10-17
+**Cause:** the toast is fired in the mutation's `onSuccess`, before `router.push`, and lives 4 s (`../client/src/lib/toast.tsx:55`). Under `next dev` the URL changes only once the cold-compiled target route has answered; on a loaded host that took 3.9 s and 21 s, so the toast was gone before the URL wait returned. Flow 08 failed twice in a row this way and passed in other runs.
+**Fix / rule:** wait for a transient toast before the `wait --url` that follows the navigation. To tell a slow host from a regression, compare `Ready in` and `Compiled / in` in the passing and failing logs — a uniform 3–10x slowdown is the host.
+**Evidence:** `specs/08-skills.flow.json:14` (toast wait, now before the URL wait).
+
 ## Session Notes
 
 - **2026-09-30** — added `08-skills` (create skill → link to agent → persists) and fixed the `04`/`05` click race.
@@ -140,3 +154,4 @@ screen proves the optimistic update, not the save.
 - **2026-10-07** — added `11-pr-smart-diff` (grouped Files changed tab on the nine seeded files); hermetic run 11/11 with the dev stack stopped first.
 - **2026-10-11** — fixed the PR #16 `e2e web` failure: pinned agent-browser and its path in the workflow, added the `find` retry and failure output to the runner, and made `08`/`09` wait for the save before reloading.
 - **2026-10-11** — added `12-pr-blast-radius` (the seeded Blast radius block and the Graph round trip); hermetic run 12/12 from a separate worktree.
+- **2026-10-17** — added `13-project-context`; the 429s that led to `API_RATE_LIMIT_MAX`, and flow 08's toast-before-URL reorder; hermetic run 13/13.
