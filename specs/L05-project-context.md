@@ -42,7 +42,15 @@ A specification stops being a document only for humans and starts steering the r
   file, New folder, Upload, Edit). The page is view-only: the clone is a read-only mirror that a
   resync overwrites (`reset --hard`), so an edit would be lost and would never reach GitHub. The
   instructor allows a view-only page ([29:10]). Declined in discovery (G4).
-- Storing document content in the database. Only attached paths are stored.
+- Storing document content in the database outside the run trace. Only attached paths are
+  stored; the run trace keeps the text sent in that run (AC-14, AC-81; amendment Q1).
+- Caching document lists or token counts, in the database or in memory. The list is built from
+  the clone on every request (amendment Q4).
+- The P3 criteria AC-31, AC-32, AC-58, AC-59, AC-60, AC-61 and AC-87. They are deferred, not
+  deleted (see "Deferred" under Acceptance criteria): the goal is to meet the lab's criteria
+  without extra scope (user decision, 2026-10-16). With AC-58 and AC-59 deferred, the Context tabs
+  show and total only the owner's own attachments; a run still merges the skills' documents
+  (AC-63–AC-65).
 - Reading documents from the PR's head or from a local branch. Documents come from the
   repository's default branch as last cloned or resynced; a document must be merged to the
   default branch to be seen ([40:20]).
@@ -84,7 +92,7 @@ A specification stops being a document only for humans and starts steering the r
 
 | ID | Priority | Requirement | Story | Verify by |
 |---|---|---|---|---|
-| AC-1 | P1 | WHEN `GET /repos/:id/context` is called for a cloned repository, the API shall return every `.md` file that lies under a folder named after a search root, at any depth of the clone's working tree. | US-1 | integration (server) |
+| AC-1 | P1 | WHEN `GET /repos/:id/context` is called for a cloned repository, the API shall return every file whose name ends in `.md`, matched without regard to case, that lies under a folder named after a search root, at any depth of the clone's working tree. | US-1 | integration (server) |
 | AC-2 | P1 | WHERE the server's search-root setting is not set, the API shall use the search roots `specs`, `docs` and `insights`. | US-1 | unit (server) |
 | AC-3 | P2 | WHERE the server's search-root setting names other folder names, the API shall search under folders with those names instead of the defaults. | US-1 | unit (server) |
 | AC-4 | P1 | The API shall leave out every file inside a directory named `node_modules`, `dist`, `build`, `coverage`, `.next`, `out`, `vendor` or `.git`. | US-1 | unit (server) |
@@ -97,7 +105,7 @@ A specification stops being a document only for humans and starts steering the r
 | AC-11 | P2 | IF a document cannot be decoded as UTF-8 text, THEN the API shall mark it `unreadable`. | US-1 | unit (server) |
 | AC-12 | P2 | WHEN a repository holds more than 1,000 documents, the API shall return the first 1,000 by path and mark the list as capped at 1,000. | US-1 | unit (server) |
 | AC-13 | P2 | IF the repository has no clone on disk, THEN the API shall answer `200` with the state `not_cloned` and an empty document list. | US-1 | integration (server) |
-| AC-14 | P1 | The API shall store no document content in the database. | US-2 | integration (server) |
+| AC-14 | P1 | The API shall store no document content in the database outside the run trace, which keeps the text sent in that run. | US-2 | integration (server) |
 | AC-15 | P1 | The API shall count a document's tokens with the same token counter the run trace uses. | US-1 | unit (server) |
 | AC-16 | P1 | WHEN the user opens the Project Context page of a repository, the Project Context page shall list every document the API returned with its path, its type badge (coloured for `specs`, `docs` and `insights`, neutral for any other search root) and its token count. | US-1 | unit (client) |
 | AC-17 | P1 | WHEN the user selects a document on the Project Context page, the Project Context page shall show that document's content rendered as markdown. | US-1 | unit (client) |
@@ -107,15 +115,13 @@ A specification stops being a document only for humans and starts steering the r
 | AC-21 | P2 | WHEN the user presses Refresh on the Project Context page, the Project Context page shall request the document list again. | US-1 | unit (client) |
 | AC-22 | P2 | WHEN the user types in the Project Context page's filter, the Project Context page shall show only the documents whose path contains the typed text, ignoring case. | US-1 | unit (client) |
 | AC-23 | P2 | The Project Context page shall keep the selected document's path in the URL. | US-1 | unit (client) |
-| AC-24 | P2 | IF the repository has no documents, THEN the Project Context page shall show "No markdown under specs/, docs/ or insights/ in `<repository>`" with a Resync action. | US-1 | unit (client) |
+| AC-24 | P2 | IF the repository has no documents, THEN the Project Context page shall show "No markdown under `<roots>` in `<repository>`", where `<roots>` names each search root the API returned (for the defaults, "specs/, docs/ or insights/"), with a Resync action. | US-1 | unit (client) |
 | AC-25 | P2 | WHILE the document list is loading, the Project Context page and the Context tab shall show a loading skeleton. | US-1, US-2 | unit (client) |
 | AC-26 | P2 | IF the document list request fails, THEN the Project Context page and the Context tab shall show an error state with a Retry action. | US-1, US-2 | unit (client) |
 | AC-27 | P2 | WHILE the repository is not cloned, the Project Context page and the Context tab shall show "Repository not cloned yet". | US-1, US-2 | unit (client) |
 | AC-28 | P2 | WHEN the document list is capped, the Project Context page shall show a mark that names the 1,000-document cap. | US-1 | unit (client) |
 | AC-29 | P2 | WHEN the user selects a document, the Project Context page shall show "Used by N agents · M skills", where N also counts each agent that receives the document only through an enabled linked skill and states how many agents do so (e.g. "Used by 2 agents (1 via skill) · 1 skill"). | US-6 | unit (client) |
 | AC-30 | P2 | WHEN `GET /repos/:id/context/file` is called for a document, the API shall return the number of agents, enabled or disabled, that attach it directly; the number of other agents that link an enabled skill attaching it; and the number of skills, enabled or disabled, that attach it. | US-6 | integration (server) |
-| AC-31 | P3 | The Project Context page header shall show the branch and the short commit SHA the documents were read from. | US-1 | unit (client) |
-| AC-32 | P3 | The Project Context page shall offer a type filter with one option per document type and the number of documents of that type. | US-1 | unit (client) |
 | AC-33 | P1 | The agent editor shall show a Context tab after the Skills tab. | US-2 | unit (client) |
 | AC-34 | P1 | The skill editor shall show a Context tab, titled "Project context to use", between the Config and Preview tabs. | US-3 | unit (client) |
 | AC-35 | P1 | WHEN the user opens a Context tab, the Context tab shall list every document of the active repository with a checkbox, its path, its type badge (coloured for `specs`, `docs` and `insights`, neutral for any other search root) and a Preview control. | US-2, US-3 | unit (client) |
@@ -130,7 +136,7 @@ A specification stops being a document only for humans and starts steering the r
 | AC-44 | P2 | IF the attached total exceeds 4,000 tokens, THEN the Context tab shall show an "over 4K soft cap" badge and keep attaching enabled. | US-2, US-3 | unit (client) |
 | AC-45 | P2 | IF the attached total exceeds 16,000 tokens, THEN the Context tab shall show a note that names the documents a run will skip. | US-2, US-3 | unit (client) |
 | AC-46 | P2 | IF an attached path is not found in the active repository, THEN the Context tab shall show it at its attached position, marked "not found in `<repository>`", counted as 0 tokens, with a checkbox that still detaches it. | US-2, US-3 | unit (client) |
-| AC-47 | P2 | IF a document is marked `too_large` or `unreadable`, THEN the Context tab shall show the mark and disable the document's checkbox. | US-2, US-3 | unit (client) |
+| AC-47 | P2 | IF a document is marked `too_large` or `unreadable`, THEN the Context tab shall show the mark and keep the document's checkbox enabled only while the document is attached, so that it can be detached but not attached. | US-2, US-3 | unit (client) |
 | AC-48 | P2 | IF saving the attached list fails, THEN the Context tab shall restore the last saved state and show an error message. | US-2, US-3 | unit (client) |
 | AC-49 | P2 | WHILE a save is in flight, the Context tab shall queue further changes so that the stored list ends equal to the last list shown. | US-2, US-3 | unit (client) |
 | AC-50 | P2 | IF no document matches the filter, THEN the Context tab shall show "No documents match '`<text>`'". | US-2, US-3 | unit (client) |
@@ -141,10 +147,6 @@ A specification stops being a document only for humans and starts steering the r
 | AC-55 | P2 | WHEN the attached paths of an agent or a skill change, the API shall leave the agent's and the skill's version unchanged. | US-2, US-3 | integration (server) |
 | AC-56 | P2 | WHEN an agent or a skill is deleted, the API shall delete its attached paths. | US-2, US-3 | integration (server) |
 | AC-57 | P2 | The preview drawer shall show "Used by N agents · M skills", counted as on the Project Context page (AC-29, AC-30). | US-6 | unit (client) |
-| AC-58 | P3 | The agent's Context tab shall also list, read-only and marked "via skill `<name>`", the documents attached to the agent's enabled linked skills, and include them in its token total. | US-2, US-3 | unit (client) |
-| AC-59 | P3 | WHEN `GET /agents/:id/context` is called, the API shall return the documents the agent inherits from its enabled linked skills, each with the skill's name. | US-2, US-3 | integration (server) |
-| AC-60 | P3 | The Context tab shall show each document's token count on its row. | US-2, US-3 | unit (client) |
-| AC-61 | P3 | IF the active repository has no documents, THEN the Context tab shall show an empty state with a link to the Project Context page. | US-2, US-3 | unit (client) |
 | AC-62 | P1 | WHEN a review run starts for an agent that has attached documents, the run shall insert the text of each attached document into the `## Project context` section of the prompt. | US-4 | integration (server) |
 | AC-63 | P1 | WHERE an agent links an enabled skill that has attached documents, the run shall also insert that skill's documents. | US-3, US-4 | integration (server) |
 | AC-64 | P1 | The run shall insert the agent's documents first in their attached order, then each linked skill's documents in the agent's skill order and in each skill's attached order. | US-4 | integration (server) |
@@ -169,22 +171,40 @@ A specification stops being a document only for humans and starts steering the r
 | AC-83 | P2 | WHILE a run used the map-reduce strategy, the Project context block shall show its per-call token count and "sent in N calls". | US-5 | unit (client) |
 | AC-84 | P2 | IF a run inserted no document, THEN the "Specs read" row shall show "none" and the Prompt assembly section shall show no Project context block. | US-5 | unit (client) |
 | AC-85 | P2 | WHEN the user opens the trace of a run recorded before this feature, the trace drawer shall render it as before. | US-5 | unit (client) |
-| AC-86 | P1 | The Project Context page and the preview drawer shall render raw HTML inside a document as text and make only `http` and `https` links clickable. | US-1 | unit (client) |
-| AC-87 | P3 | IF a document's path does not fit its row, THEN the row shall shorten the path in the middle and show the full path in a tooltip. | US-1, US-2 | unit (client) |
-| AC-88 | P1 | IF `PUT /agents/:id/context` or `PUT /skills/:id/context` receives more than 200 paths, a duplicate path, or a path that is absolute, contains a `..` segment, does not end in `.md`, does not lie under a search-root folder, or breaks the character rules of AC-9, THEN the API shall answer `422`. | US-2, US-3 | integration (server) |
+| AC-86 | P1 | The Project Context page and the preview drawer shall render raw HTML inside a document as text, make only `http` and `https` links clickable, and open each such link in a new tab without access to the opening page. | US-1 | unit (client) |
+| AC-88 | P1 | IF `PUT /agents/:id/context` or `PUT /skills/:id/context` receives more than 200 paths, a duplicate path, or a path that is absolute, contains an empty, `.` or `..` segment (which covers a leading `./` and a `//`), does not end in `.md` (matched without regard to case), does not lie under a search-root folder, or breaks the character rules of AC-9, THEN the API shall answer `422`. | US-2, US-3 | integration (server) |
 | AC-89 | P1 | IF `GET /repos/:id/context/file` is asked for a path that is not a discovered document of that repository, THEN the API shall answer `404`. | US-1 | integration (server) |
 | AC-90 | P2 | IF the repository, agent or skill named in a request does not exist in the caller's workspace, THEN the API shall answer `404`. | US-1, US-2, US-3 | integration (server) |
+| AC-91 | P2 | WHEN the user of the seeded stack, whose repository has no clone, opens the "Project Context" item of the sidebar, the Project Context page shall show "Repository not cloned yet". | US-1 | e2e |
+| AC-92 | P2 | WHEN the user of the seeded stack opens `/agents/:id?tab=context` for a seeded agent, the agent editor shall show its Context tab as the open tab. | US-2 | e2e |
+
+### Deferred
+
+These P3 criteria are deferred by the user's decision of 2026-10-16 (meet the lab's criteria
+without extra scope). They keep their IDs and text, are not part of this delivery, and no
+remaining criterion depends on them. Taking one up later means moving it back into the table
+above together with its module requirements, which are deferred in the module specs.
+
+| ID | Priority | Requirement | Story | Verify by |
+|---|---|---|---|---|
+| AC-31 | P3 — deferred | The Project Context page header shall show the branch and the short commit SHA the documents were read from. | US-1 | unit (client) |
+| AC-32 | P3 — deferred | The Project Context page shall offer a type filter with one option per document type and the number of documents of that type. | US-1 | unit (client) |
+| AC-58 | P3 — deferred | The agent's Context tab shall also list, read-only and marked "via skill `<name>`", the documents attached to the agent's enabled linked skills, and include them in its token total. | US-2, US-3 | unit (client) |
+| AC-59 | P3 — deferred | WHEN `GET /agents/:id/context` is called, the API shall return the documents the agent inherits from its enabled linked skills, each with the skill's name. | US-2, US-3 | integration (server) |
+| AC-60 | P3 — deferred | The Context tab shall show each document's token count on its row. | US-2, US-3 | unit (client) |
+| AC-61 | P3 — deferred | IF the active repository has no documents, THEN the Context tab shall show an empty state with a link to the Project Context page. | US-2, US-3 | unit (client) |
+| AC-87 | P3 — deferred | IF a document's path does not fit its row, THEN the row shall shorten the path in the middle and show the full path in a tooltip. | US-1, US-2 | unit (client) |
 
 ## Edge cases
 | ID | Case | Expected behaviour | Covered by |
 |---|---|---|---|
-| EC-1 | The repository has no `.md` under any search root | Empty state on the page with a Resync action; empty state on the tabs linking to the page | AC-24, AC-61 |
+| EC-1 | The repository has no `.md` under any search root | Empty state on the page naming the configured search roots, with a Resync action. The tabs' own empty state with a link to the page is deferred: until then a tab shows an empty list and "≈ 0 tokens" | AC-24; Non-goal (deferred AC-61) |
 | EC-2 | The repository is not cloned yet, or its clone is missing on disk | `200` with `not_cloned`; "Repository not cloned yet" on page and tabs; runs continue without project context | AC-13, AC-27, AC-72 |
 | EC-3 | No repository is active when an editor's Context tab opens | "Add a repository" with a link | AC-51 |
 | EC-4 | The list is loading, or its request fails | Skeleton; error state with Retry | AC-25, AC-26 |
 | EC-5 | More than 1,000 documents | First 1,000 by path, a cap mark | AC-12, AC-28 |
-| EC-6 | A document is larger than 100 KB | Listed as `too_large`, cannot be attached; skipped at run time if attached earlier | AC-10, AC-47, AC-71 |
-| EC-7 | A `.md` file is not valid UTF-8 | Listed as `unreadable`, cannot be attached | AC-11, AC-47, AC-71 |
+| EC-6 | A document is larger than 100 KB | Listed as `too_large`, cannot be attached; if it was attached earlier, it can still be detached, and a run skips it | AC-10, AC-47, AC-71 |
+| EC-7 | A `.md` file is not valid UTF-8 | Listed as `unreadable`, cannot be attached; if it was attached earlier, it can still be detached, and a run skips it | AC-11, AC-47, AC-71 |
 | EC-8 | An empty document | Listed with 0 tokens; skipped at run time with the reason `empty` | AC-6, AC-71 |
 | EC-9 | A file name with a newline, quote, `<`, `>` or backslash, or a path over 512 characters | Not discovered, cannot be attached | AC-9, AC-88 |
 | EC-10 | A committed symlink named `docs/x.md` pointing at `~/.devdigest/secrets.json` | Not discovered; never read at run time | AC-5, AC-71 |
@@ -195,7 +215,7 @@ A specification stops being a document only for humans and starts steering the r
 | EC-15 | The same path is attached to the agent and to one of its skills | Inserted once, at its first position | AC-65 |
 | EC-16 | A skill with documents is disabled or unlinked | Its documents are not inserted | AC-63 |
 | EC-17 | Attached total over 4,000 tokens; effective total over 16,000 tokens | Soft-cap badge, still attachable; a note naming what a run will skip; the run skips the overflow whole | AC-44, AC-45, AC-73 |
-| EC-18 | The user toggles several rows quickly; a save fails | Saves queued, the final stored list equals the last list shown; on failure the last saved state comes back with an error | AC-48, AC-49 |
+| EC-18 | The user toggles several rows quickly; a save fails | One save at a time per agent or skill; changes made meanwhile collapse into the latest list, so the final stored list equals the last list shown; on failure the last list the server confirmed comes back, the waiting changes are dropped, and an error shows | AC-48, AC-49 |
 | EC-19 | The filter matches nothing | "No documents match" text | AC-50 |
 | EC-20 | A PR edits an attached document to weaken its rule | The run reads the default branch, not the PR head | AC-66 |
 | EC-21 | A document changes after a run | The trace keeps the text that was sent | AC-81 |
@@ -210,15 +230,23 @@ A specification stops being a document only for humans and starts steering the r
 | EC-30 | A document says "ignore these issues" or "do not flag X" | Fenced as data; the trusted note and the injection guard forbid waiving a finding | AC-68, AC-69 |
 | EC-31 | The user wants to edit a document | Not on this page; edit it in the repository and resync | AC-18, Non-goal |
 | EC-32 | A document contains a secret | Sent to the model only if attached | Non-goal |
-| EC-33 | A very long path | Shortened in the middle, full path in a tooltip | AC-87 |
+| EC-33 | A very long path | Middle-shortening with a tooltip is deferred; until then the row shows the path as it fits | Non-goal (deferred AC-87) |
 | EC-34 | Attaching changes an agent or a skill | No version bump, no snapshot ([30:01]) | AC-55 |
 | EC-35 | A forged attach request with `../../.devdigest/secrets.json` or an absolute path | `422`; nothing stored | AC-88 |
 | EC-36 | A document counted by name and description only, instead of its body | Not done: tokens are always counted from the document's full text ([25:46]) | AC-15 |
+| EC-37 | A forged attach request with `./specs/a.md`, `specs/./a.md` or `specs//a.md` — paths that discovery never returns | `422`; nothing stored | AC-88 |
+| EC-38 | A document named `docs/README.MD` | Discovered, and attachable, like `.md` | AC-1, AC-88 |
+| EC-39 | A document whose text contains a tokenizer special-token marker such as `<\|endoftext\|>` | Counted as plain text; the counts of every other document are unaffected | AC-15, NFR-4 |
+| EC-40 | The clone exists but its `HEAD` cannot be read | The list is unaffected; the branch-and-SHA header that would need it is deferred | Non-goal (deferred AC-31) |
+| EC-41 | The user presses Esc while the preview drawer is open | The drawer closes | AC-40, NFR-7 |
+| EC-42 | A custom search-root setting and a repository with no documents | The empty-state text names the configured roots, not the defaults | AC-24 |
 
 ## Non-functional requirements
 - NFR-1 — Performance: `GET /repos/:id/context` answers in at most 2,000 ms for a clone with up
   to 5,000 files and 1,000 documents, on the developer machine that runs the studio.
-  `GET /repos/:id/context/file` answers in at most 500 ms for a 100 KB document.
+  `GET /repos/:id/context/file` answers in at most 500 ms for a 100 KB document. Nothing is
+  cached (Non-goals); both targets are verified by one manual measurement on a synthetic tree of
+  1,000 documents, and there is no automated latency test (amendment Q4).
 - NFR-2 — LLM cost: project context adds 0 LLM calls. Per LLM call, it adds at most 16,000
   tokens of document text (the hard cap). A map-reduce run sends the section with each of its N
   review calls, so its project-context cost is at most N × 16,000 tokens; the trace shows N.
@@ -228,7 +256,9 @@ A specification stops being a document only for humans and starts steering the r
   the client.
 - NFR-4 — Token counts: the page, the tabs and the trace use one counter (the server tokenizer,
   `cl100k_base`). For a file that did not change, the count shown on the page equals the count
-  in the trace. Counts are shown as approximate ("≈").
+  in the trace. Counts are shown as approximate ("≈"). Document text is untrusted: a special-token
+  marker in it (e.g. `<|endoftext|>`) is counted as plain text, and no single document can switch
+  the counter to an estimate for other documents.
 - NFR-5 — Security: reads stay inside the clone after symlinks are resolved; discovery never
   follows a symlink; every document's text is fenced with `wrapUntrusted()`; the shared
   `INJECTION_GUARD` stays appended to every system prompt, unchanged; every finding still passes
@@ -236,7 +266,8 @@ A specification stops being a document only for humans and starts steering the r
 - NFR-6 — Reliability: project context never fails a run. Every problem with an attached document
   becomes a skipped entry with a reason, a Live Log line and a trace entry.
 - NFR-7 — Accessibility: each checkbox has an accessible name that includes the path; reordering
-  works with the keyboard; the preview drawer closes with Esc.
+  works with the keyboard; the preview drawer closes with Esc (carried by the client requirement
+  that covers AC-40).
 
 ## Live check
 
@@ -268,15 +299,25 @@ prompt carries the attached document's path and full text (AC-62, AC-67, AC-81).
   counts every agent and skill that attaches the path, enabled or disabled, and an agent counts
   as "via skill" only through an enabled skill linked to it (former OQ-2, AC-29, AC-30, AC-57).
 - The code at base commit `6ef278b` (`feature/sdd-agents`, 0 commits behind `origin/main`).
+- **Amendment, 2026-10-16** — the implementation-planner's Requirements review of this spec
+  (findings F1–F19, clarifications Q1–Q15) and the user's answers, applied in place against base
+  `origin/main` `1445e4d`, with the spec reopened as a draft. In this file: AC-1, AC-14, AC-24,
+  AC-47, AC-86 and AC-88 reworded; AC-31, AC-32, AC-58–AC-61 and AC-87 moved to "Deferred"
+  (scope = the lab's criteria); AC-91 and AC-92 (an e2e smoke flow, Q15) added; NFR-1 (manual
+  measurement, nothing cached, Q4), NFR-4 (special-token text, tokenizer fix) and NFR-7 amended;
+  the content non-goal limited to the run trace (Q1); EC-1, EC-6, EC-7, EC-18 and EC-33 amended
+  and EC-37–EC-42 added. Q9, Q12 and Q14 are plan-only and change no text here. The module specs
+  carry the rest (Q2 run facade, Q3 clone-file port, Q5 safe markdown, Q8 save coalescing, Q10
+  path rules, Q13 `HEAD`, the tokenizer requirements).
 
 **Data flow**
 | Data | Produced by | Contract | Consumed by | When unavailable |
 |---|---|---|---|---|
-| Discovered documents: path, type, size, tokens, status; list state, caps, branch and SHA | `server` — walks the clone | `GET /repos/:id/context` → `ProjectContextList` | `client` — Project Context page, both Context tabs | `not_cloned` → state message; unknown repository → `404`; request error → error state with Retry |
+| Discovered documents: path, type, size, tokens, status; list state, search roots, caps | `server` — walks the clone | `GET /repos/:id/context` → `ProjectContextList` | `client` — Project Context page, both Context tabs | `not_cloned` → state message; unknown repository → `404`; request error → error state with Retry |
 | One document's content and its "Used by" counts | `server` — reads one file inside the clone; counts attachments | `GET /repos/:id/context/file?path=` → `ProjectContextFile` | `client` — page preview, preview drawer | not a discovered document → `404`; error → error state |
-| An agent's attached paths, and the documents it inherits from skills | `server` | `GET` / `PUT /agents/:id/context` → `AgentContext` | `client` — agent Context tab; `server` run | unknown agent → `404`; save failure → tab reverts |
-| A skill's attached paths | `server` | `GET` / `PUT /skills/:id/context` → `SkillContext` | `client` — skill Context tab; `server` run | unknown skill → `404`; save failure → tab reverts |
-| The run's effective documents with their text | `server` — the review run reads the clone of the PR's repository once per agent run | the engine's `specs` input (path + text) | `reviewer-core` — `## Project context` section | each problem → skipped with a reason; no clone → all skipped `not_cloned`; the run continues |
+| An agent's attached paths (the documents inherited from skills are deferred with AC-59) | `server` | `GET` / `PUT /agents/:id/context` → `AgentContext` | `client` — agent Context tab; `server` run | unknown agent → `404`; save failure → tab restores the last list the server confirmed |
+| A skill's attached paths | `server` | `GET` / `PUT /skills/:id/context` → `SkillContext` | `client` — skill Context tab; `server` run | unknown skill → `404`; save failure → tab restores the last list the server confirmed |
+| The run's effective documents with their text, and the loaded and skipped records | `server` — project context, asked by the review run once per agent run; reads the clone of the PR's repository | the engine's `specs` input (path + text) | `reviewer-core` — `## Project context` section; the review run — Live Log and trace | each problem → skipped with a reason; no clone → all skipped `not_cloned`; the run continues |
 | Trace: `specs_read`, the section's tokens, per-document path / origin / tokens / text, skipped entries, the number of calls | `server` — the review run | `RunTrace.specs_read`, `PromptAssembly` new fields | `client` — run trace drawer | old traces lack the fields → "none" and no block |
 | A run started over MCP | `devdigest-mcp` `run_agent_on_pr` → the same server run | unchanged | — | unchanged; no MCP change |
 
@@ -314,17 +355,22 @@ sequenceDiagram
 | The Project Context page and its nav item, both Context tabs and the preview drawer, every state above, the run trace changes | `client/` | [`client/specs/L05-project-context.md`](../client/specs/L05-project-context.md) |
 | The `## Project context` section: per-document heading and fence, the trusted note, omission, the prompt-assembly record | `reviewer-core/` | [`reviewer-core/specs/L05-project-context.md`](../reviewer-core/specs/L05-project-context.md) |
 | No change | `mcp/` | — |
-| Browser flows from the `e2e` hints above | `e2e/` | written by `test-writer` in `e2e/specs/` |
+| The smoke flow of AC-91 and AC-92 (the criteria verified by `e2e`) | `e2e/` | written by `test-writer` in `e2e/specs/` |
 
 ## Untrusted inputs
 | Input | Origin | Reaches | Handling |
 |---|---|---|---|
-| Document text | a file in the repository, written by anyone who can commit to its default branch | page and drawer preview; the LLM prompt; the persisted trace | Read only from inside the clone, at most 100 KB, valid UTF-8 only. Rendered as markdown with raw HTML shown as text and only `http`/`https` links clickable; shown as plain text in the trace. In the prompt each document is fenced with `wrapUntrusted()` (which escapes a literal `</untrusted>`), after a trusted note; `INJECTION_GUARD` is unchanged and never weakened; `groundFindings()` remains the gate every finding passes. |
+| Document text | a file in the repository, written by anyone who can commit to its default branch | page and drawer preview; the token counter; the LLM prompt; the persisted trace | Read only from inside the clone, at most 100 KB, strictly valid UTF-8 only. Counted as plain text, special-token markers included (NFR-4). Stored nowhere but the run trace. Rendered as markdown with raw HTML shown as text and only `http`/`https` links clickable, each opening in a new tab without access to the opening page; shown as plain text in the trace. In the prompt each document is fenced with `wrapUntrusted()` (which escapes a literal `</untrusted>`), after a trusted note; `INJECTION_GUARD` is unchanged and never weakened; `groundFindings()` remains the gate every finding passes. |
 | Document path (file name) | the repository | UI, the prompt's heading line, the trace | Discovery drops paths with control characters, `"`, `<`, `>`, `\` or over 512 characters. The engine also replaces any such character in a heading. The UI renders paths as text. |
-| Paths in `PUT /agents/:id/context` and `PUT /skills/:id/context` | the client | the database; file reads at run time | Validated by the route schema and the search roots: at most 200 paths, no duplicates, relative, no `..` segment, ending in `.md`, under a search-root folder, the AC-9 character rules → otherwise `422`. At read time the path must still resolve inside the clone after symlinks. |
+| Paths in `PUT /agents/:id/context` and `PUT /skills/:id/context` | the client | the database; file reads at run time | Validated by the route schema and the search roots: at most 200 paths, no duplicates, relative, no empty, `.` or `..` segment, ending in `.md` in any case, under a search-root folder, the AC-9 character rules → otherwise `422`. At read time the path must still resolve inside the clone after symlinks. |
 | The `path` query of `GET /repos/:id/context/file` | the client | one file read | Same rules; must be a discovered document of that repository → otherwise `404`. |
 | Symbolic links in the clone | the repository | discovery and reads | Discovery never follows them; a read whose target resolves outside the clone is refused and recorded as skipped. |
 | LLM output that cites a document | the model | findings | Unchanged: the rationale is rendered as text, and grounding drops any finding without a real diff line. |
 
 ## Open questions
-None. The user answered both questions of the draft on 2026-10-16 (see Inputs and provenance).
+The user answered both questions of the first draft on 2026-10-16 (see Inputs and provenance).
+One question comes from the amendment:
+
+| ID | Question | Recommended answer | Blocks |
+|---|---|---|---|
+| OQ-1 | What priority do the e2e smoke criteria AC-91 and AC-92 have? The amendment instruction gave none; P2 is assumed. | P2: the behaviours they check are already P1/P2 criteria verified by cheaper suites (AC-19, AC-27, AC-33, AC-54); the flow guards against wiring regressions only. | AC-91, AC-92 (priority only) |
