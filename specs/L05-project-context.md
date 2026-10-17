@@ -240,6 +240,7 @@ above together with its module requirements, which are deferred in the module sp
 | EC-40 | The clone exists but its `HEAD` cannot be read | The list is unaffected; the branch-and-SHA header that would need it is deferred | Non-goal (deferred AC-31) |
 | EC-41 | The user presses Esc while the preview drawer is open | The drawer closes | AC-40, NFR-7 |
 | EC-42 | A custom search-root setting and a repository with no documents | The empty-state text names the configured roots, not the defaults | AC-24 |
+| EC-43 | Every attached document is skipped — every run on a repository without a clone (AC-72), or every document `over_cap`, `empty`, `unreadable` or missing | "Specs read" shows "none" and Prompt assembly shows no Project context block; Prompt assembly still lists each skipped path with its reason, on its own | AC-82, AC-84 |
 
 ## Non-functional requirements
 - NFR-1 — Performance: `GET /repos/:id/context` answers in at most 2,000 ms for a clone with up
@@ -309,6 +310,13 @@ prompt carries the attached document's path and full text (AC-62, AC-67, AC-81).
   and EC-37–EC-42 added. Q9, Q12 and Q14 are plan-only and change no text here. The module specs
   carry the rest (Q2 run facade, Q3 clone-file port, Q5 safe markdown, Q8 save coalescing, Q10
   path rules, Q13 `HEAD`, the tokenizer requirements).
+- **Amendment, 2026-10-17** — a `plan-verifier` gap and the user's approved resolution, applied in
+  place at `feature/sdd-agents` `1f6404c`, with the spec reopened as a draft. The client
+  requirement for AC-82 put the skipped list inside the Project context block, which AC-84 removes
+  when nothing is inserted, so a run that skipped every attached document could not meet AC-82.
+  In this file: EC-43 added; AC-82 and AC-84 unchanged. In the client module spec: R-WEB-44
+  reworded (the skipped list sits under the block when it is shown, otherwise on its own) and its
+  test hint extended; R-WEB-46 unchanged.
 
 **Data flow**
 | Data | Produced by | Contract | Consumed by | When unavailable |

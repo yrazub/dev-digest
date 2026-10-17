@@ -80,7 +80,7 @@ the other states are defined here.
 | R-WEB-41 | WHEN a trace has `specs_read` entries, the "Specs read" row shall show each path with `≈ <tokens> tok` taken from the matching `prompt_assembly.specs_loaded` entry. | AC-78 |
 | R-WEB-42 | WHEN `prompt_assembly.specs` is not null, Prompt assembly shall show a block labelled "Project context — attached specs (untrusted)" with `prompt_assembly.specs_tokens` as its meta. | AC-79 |
 | R-WEB-43 | WHEN the user expands a document row under the Project context block, the trace drawer shall show that entry's `text` with Copy and fullscreen actions. | AC-80 |
-| R-WEB-44 | WHEN `prompt_assembly.specs_skipped` is not empty, the Project context block shall list each skipped path with a readable reason. | AC-82 |
+| R-WEB-44 | WHEN `prompt_assembly.specs_skipped` is not empty, Prompt assembly shall list each skipped path with a readable reason — under the Project context block when the block is shown, otherwise on its own. | AC-82 |
 | R-WEB-45 | WHILE `prompt_assembly.specs_calls` is greater than 1, the Project context block's meta shall read "≈ `<specs_tokens>` tokens per call · sent in `<specs_calls>` calls". | AC-83 |
 | R-WEB-46 | IF `specs_read` is empty, THEN the "Specs read" row shall show "none" and Prompt assembly shall show no Project context block. | AC-84 |
 | R-WEB-47 | WHEN a trace lacks `specs_tokens`, `specs_calls`, `specs_loaded` and `specs_skipped`, the trace drawer shall render as it does today. | AC-85 |
@@ -162,7 +162,7 @@ Type badge colours: `specs` accent, `docs` `#10b981`, `insights` `#f59e0b` (desi
 | the safe markdown component's test | R-WEB-48: raw HTML shown as text; `https:` link with `target` and `rel`; `javascript:`, `mailto:` and relative links not clickable |
 | the shared attach list's test | R-WEB-19–R-WEB-35, R-WEB-37, R-WEB-50, with an agent owner and a skill owner; three or more rows for order and caps; an attached `too_large` row detachable; a failed save after queued changes |
 | `AgentEditor.test.tsx`, `SkillDetail.test.tsx` | R-WEB-17, R-WEB-18, R-WEB-36 |
-| `RunTraceDrawer.test.tsx` | R-WEB-41–R-WEB-47, including a trace fixture without the new fields |
+| `RunTraceDrawer.test.tsx` | R-WEB-41–R-WEB-47, including a trace fixture without the new fields, and for R-WEB-44 a trace with `specs_read: []`, `specs: null` and two `not_cloned` skips: "Specs read" shows "none", there is no Project context block, and both skipped paths show with their reason |
 | `nav` / app-shell test | R-WEB-4 |
 
 Component tests mock `fetch`; a behaviour that only fails against a real server belongs in an
