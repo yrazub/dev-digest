@@ -9,9 +9,12 @@ import {
   vector,
   index,
   uniqueIndex,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { workspaces } from './core';
 import { repos } from './repos';
+import { agents } from './agents';
+import { skills } from './skills';
 
 // ============================================================ Context & codebase
 
@@ -124,3 +127,32 @@ export const onboarding = pgTable('onboarding', {
   json: jsonb('json').notNull(),
   generatedAt: timestamp('generated_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+/**
+ * Project Context attachments (L05): the repository-relative markdown paths an
+ * agent or a skill carries into a review run. Only the path and its order are
+ * stored — document text is read from the clone at run time.
+ */
+export const agentContextDocs = pgTable(
+  'agent_context_docs',
+  {
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    path: text('path').notNull(),
+    order: integer('order').notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.agentId, t.path] }) }),
+);
+
+export const skillContextDocs = pgTable(
+  'skill_context_docs',
+  {
+    skillId: uuid('skill_id')
+      .notNull()
+      .references(() => skills.id, { onDelete: 'cascade' }),
+    path: text('path').notNull(),
+    order: integer('order').notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.skillId, t.path] }) }),
+);
