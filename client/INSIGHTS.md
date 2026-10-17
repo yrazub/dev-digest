@@ -165,6 +165,12 @@ function identity a component depends on; the original code is in commit `54e2b1
 **Evidence:** `tsconfig.json:33`; nothing in the repository shows the stale file, it is gitignored.
 **2026-10-17:** the same file fails right after a route is *added*: the first `pnpm typecheck` gave `.next/types/validator.ts(77,52): TS2344: '"/repos/[repoId]/context"' does not satisfy the constraint 'AppRoutes'` while a running Next process rewrote `.next/types`; a second run was clean. Rerun before debugging.
 
+### Console: "Removing a style property during rerender (borderColor) when a conflicting property is set (border)"
+**Date:** 2026-10-17
+**Cause:** a selected row was styled `{ ...s.row, ...s.rowActive }` — `s.row` set the `border` shorthand, `s.rowActive` the `borderColor` longhand — so deselecting removed a longhand while its shorthand stayed. Tests stayed green: the warning fires only on a re-render that swaps style objects.
+**Fix / rule:** a state-dependent style is a function in `styles.ts` that returns one complete object, every branch setting the same keys; never spread one style object over another, and never pair a shorthand with its longhand on one element. Regression test: spy `console.error`, `rerender` with another selection, join all arguments, assert no "style property during rerender".
+**Evidence:** `src/app/repos/[repoId]/context/_components/ProjectContextView/styles.ts:62` (`row(active)`); `ProjectContextView.test.tsx:297`.
+
 ## Session Notes
 
 - **2026-09-28** — diagnosed and fixed the unstyled-app breakage caused by `next build` overwriting the dev server's `.next`.

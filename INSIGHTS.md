@@ -449,6 +449,12 @@ the editor tool.
 **Fix / rule:** a plan's "do not touch every README.md" constraint exempts `e2e/specs/README.md`, and an e2e phase names that row in its Tests line.
 **Evidence:** `.claude/agents/test-writer.md:73` ("add its row to `e2e/specs/README.md`"); `specs/plans/L05-project-context.md` Constraints, as amended.
 
+### A feature passes every check and still looks nothing like the design
+**Date:** 2026-10-17
+**Cause:** the L05 Project Context page shipped with no horizontal padding, a wrapping title and loose placeholder text, although plan-verifier, architecture-reviewer, 20 `/pr-self-review` reviewers and e2e all passed. The spec described the layout only structurally ("two columns, like N6"); the implementer built from that text, never from the bundled design; every check reads code, accessibility trees or text, none looks at pixels. The user found it from a screenshot.
+**Fix / rule:** a plan phase that builds a new screen carries a `Verify (manual, screenshots)` line naming the design screen and what to compare, run by the main session in one browser tab; give the implementer the decoded design values (padding, widths, panels), not just the screen name.
+**Evidence:** `specs/plans/L05-project-context.md:399` (the screenshot Verify added in the phase-14 fix); decoding the design: see the 2026-09-22 Tool & Library Notes entry on `__bundler/manifest`.
+
 
 ## Session Notes
 
@@ -514,3 +520,4 @@ the editor tool.
   plan saved as `specs/plans/L05-project-context.md` (11 phases, multi-agent); entries above.
   **See also:** `server/INSIGHTS.md` (tokenizer).
 - **2026-10-17** — L05 Project Context executed: phases 7–11, a fix round (plan amended twice, R-WEB-44 reopened and re-approved), phases 12–13, docs, e2e 13/13. **See also:** `server/INSIGHTS.md`, `client/INSIGHTS.md`, `e2e/INSIGHTS.md`.
+- **2026-10-17** — L05 follow-up: design gaps found by the user after push → phase 14 (N6/N2b/N2c styling, style-collision warning), final checks re-run, e2e 13/13. Deferred: `SafeMarkdown` has no `img` rule (`![x](javascript:…)` renders `<img src="">`).
