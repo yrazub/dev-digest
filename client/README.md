@@ -106,13 +106,15 @@ finds them in the repository's clone; the UI has three places for them
 
 - **The Project Context page** (`/repos/:repoId/context`, the **Project Context** item of the sidebar's
   Workspace section, `ProjectContextView`) is view only: no control creates, uploads, edits or
-  deletes a document. The left column lists the documents with their path, a kind badge and
-  `≈ N tokens`, above a filter (a case-insensitive path substring) and a footer with the file and
-  token totals of the whole list, which the filter does not change. The right column previews the
-  selected document through `SafeMarkdown`, with its "Used by N agents (V via skill) · M skills" line
-  (the parenthesis only when V is above 0). The selection is `?path=` in the URL. **Refresh** reads the
-  list again. A list cut by the server shows "Showing the first N documents". Other states: a loading
-  skeleton; a load failure with *Retry*; *Repository not cloned yet*; and, when no document is found,
+  deletes a document. It is a full-height two-pane layout (design N6). The left column has a header
+  with the repository and a **Refresh** icon button, a filter (a case-insensitive path substring), the
+  documents with their path, a kind badge and `≈ N tokens`, and a footer with the file and token
+  totals of the whole list, which the filter does not change. The right column previews the selected
+  document through `SafeMarkdown`, with its "Used by N agents (V via skill) · M skills" line (the
+  parenthesis only when V is above 0); with nothing selected it shows "Select a document to preview it".
+  The selection is `?path=` in the URL. **Refresh** reads the list again. A list cut by the server
+  shows "Showing the first N documents". Other states, shown in the right column: a loading skeleton;
+  a load failure with *Retry*; *Repository not cloned yet*; and, when no document is found,
   *No markdown under specs/, docs/ or insights/ in <repository>* (the folders are the server's
   configured search roots) with a **Resync** button. Resync only starts `POST /repos/:id/resync`; it does
   not wait, and the list is read again with Refresh.
