@@ -1,0 +1,23 @@
+{
+  "name": "Project Context page and the agent Context tab on a repository that has no clone",
+  "description": "Opens Project Context from the sidebar on the seeded demo repo (it has no clone_path) and confirms the page shows its not-cloned state, then opens the seeded Security Reviewer, switches to its Context tab, checks the tab is carried in the URL and that a reload keeps it, with the same not-cloned state in the attach list. Exercises the nav item, /repos/:repoId/context, GET /repos/:id/context, the ?tab=context URL state and GET /agents/:id/context. Read-only: nothing is attached or saved, and no model call is made.",
+  "steps": [
+    { "cmd": ["wait", "30000"], "label": "let the API's 120 requests per minute window of the earlier flows reset" },
+    { "cmd": ["open", "{BASE}/"], "label": "load the app" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "landed on the demo repo" },
+    { "cmd": ["find", "role", "link", "click", "--name", "Project Context"], "label": "open Project Context from the sidebar" },
+    { "cmd": ["wait", "--url", "/context"], "label": "context route reached" },
+    { "cmd": ["wait", "--text", "Repository not cloned yet"], "label": "the page shows the not-cloned state of the seeded repo" },
+    { "cmd": ["open", "{BASE}/agents"], "label": "load the Agents page" },
+    { "cmd": ["wait", "--text", "Security Reviewer"], "label": "seeded Security Reviewer is listed" },
+    { "cmd": ["find", "text", "Security Reviewer", "click"], "label": "open the agent" },
+    { "cmd": ["wait", "--url", "/agents/"], "label": "agent editor route reached" },
+    { "cmd": ["wait", "--text", "Configuration"], "label": "the agent editor has rendered" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Context", "--exact"], "label": "switch to the Context tab" },
+    { "cmd": ["wait", "--url", "tab=context"], "label": "the tab is carried in the URL" },
+    { "cmd": ["wait", "--text", "Repository not cloned yet"], "label": "the Context tab shows the not-cloned state" },
+    { "cmd": ["reload"], "label": "reload the editor" },
+    { "cmd": ["wait", "--url", "tab=context"], "label": "the URL keeps the tab after a reload" },
+    { "cmd": ["wait", "--text", "Repository not cloned yet"], "label": "the Context tab is shown again after a reload" }
+  ]
+}
