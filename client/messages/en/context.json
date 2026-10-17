@@ -1,24 +1,21 @@
 {
   "title": "Project Context",
-  "chunks": "{count} chunks",
-  "reindex": "Re-index",
-  "indexing": "Indexing…",
-  "resync": "Resync",
-  "resyncing": "Resyncing…",
-  "indexStatus": "Index status: {status}",
-  "loadError": "Couldn’t load specs",
-  "kb": "{kb}kb",
-  "empty": {
-    "title": "No spec files yet",
-    "body": "Drop your PRDs, tech specs, and acceptance criteria under .devdigest/specs/. Every agent and the PR brief read them as grounding context."
-  },
-  "mode": {
-    "preview": "preview",
-    "edit": "edit"
-  },
-  "editor": {
-    "loadError": "Couldn’t load spec",
-    "save": "Save",
-    "saving": "Saving…"
+  "page": {
+    "refresh": "Refresh",
+    "filterPlaceholder": "Filter documents",
+    "footer": "{files, plural, one {# file} other {# files}} · {tokens, number} tokens total",
+    "tokens": "≈ {count, number} tokens",
+    "notCloned": "Repository not cloned yet",
+    "empty": "No markdown under {roots} in {repo}",
+    "or": "or",
+    "resync": "Resync",
+    "capped": "Showing the first {cap, number} documents",
+    "usedBy": "Used by {agents, plural, one {# agent} other {# agents}} · {skills, plural, one {# skill} other {# skills}}",
+    "usedByVia": "Used by {agents, plural, one {# agent} other {# agents}} ({via} via skill) · {skills, plural, one {# skill} other {# skills}}",
+    "tooLarge": "too large",
+    "unreadable": "cannot be read",
+    "loadError": "Couldn’t load documents",
+    "fileLoadError": "Couldn’t load this document",
+    "selectPrompt": "Select a document to preview it"
   }
 }
