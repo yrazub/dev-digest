@@ -27,6 +27,8 @@ import { AgentsRepository } from '../modules/agents/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
 import { IntentRepository } from '../modules/intent/repository.js';
 import { IntentService } from '../modules/intent/service.js';
+import { ProjectContextRepository, drizzleProjectContextUnitOfWork } from '../modules/project-context/repository.js';
+import { ProjectContextService } from '../modules/project-context/service.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { MAX_CALLERS_PER_SYMBOL } from '../modules/repo-intel/constants.js';
@@ -82,6 +84,7 @@ export class Container {
   private _agentsRepo?: AgentsRepository;
   private _reviewRepo?: ReviewRepository;
   private _intent?: IntentService;
+  private _projectContext?: ProjectContextService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -122,6 +125,20 @@ export class Container {
       github: () => this.github(),
       llm: (p) => this.llm(p),
       tokenizer: this.tokenizer,
+    }));
+  }
+
+  /**
+   * L05 project-context service. Built here (not in a module) because the `reviews` run
+   * reaches it as `container.projectContext` and a module never imports another module.
+   */
+  get projectContext(): ProjectContextService {
+    return (this._projectContext ??= new ProjectContextService({
+      store: new ProjectContextRepository(this.db),
+      uow: drizzleProjectContextUnitOfWork(this.db),
+      files: this.cloneFiles,
+      tokenizer: this.tokenizer,
+      roots: this.config.projectContextRoots,
     }));
   }
 
