@@ -27,7 +27,11 @@ The orchestrating chat is the most expensive part of a run: every turn re-reads 
 - **From each report take only what the state needs** (below), and tell the user the status line
   plus anything that needs a decision. Do not paste whole reports.
 - **On `CHECKPOINT`, stop.** Tell the user to open a new chat and run the command it names. The
-  default is a new chat every 3 committed phases (`--per-chat <n>` on `start` changes it).
+  default is a new chat every 3 committed phases (`--per-chat <n>` on `start` changes it), and the
+  final checks always begin in a new chat — also after a fix phase. Do not re-run `start` in the
+  same chat to get past it. If the user asks to continue here anyway, say once what it costs
+  (every later turn re-reads the whole chat; in the L05 run the one chat that kept going was ~70%
+  of the feature's 505M tokens — `docs/retros/ledger.md`), then do as they decide.
 
 ## 1. Start or resume
 
@@ -61,6 +65,12 @@ table, copied as it is (the only part of a report you hand over verbatim). From 
 - "Existing tests edited" is not empty → check that every row quotes a plan or spec item; a row
   without one goes to the user.
 - Insight candidates → `$S note … insight`.
+
+**manual check** — if the phase has a `Verify (manual, screenshots)` line, run it yourself before
+the commit, once the test-writer is green. Check memory first (`memory_pressure`), ask the user to
+start the stack if it is down, use one browser tab with scaled screenshots or region zooms (never a
+full accessibility tree in the chat), and close the tab after. A mismatch with the design goes back
+to `implementer` for the same phase.
 
 **commit** — stage the files both reports list, commit them together, record the commit:
 

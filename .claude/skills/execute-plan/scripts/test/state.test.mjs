@@ -65,6 +65,7 @@ test('the checkpoint asks for a new chat after per-chat committed phases, and st
 test('after the last phase: verifier and reviewer in parallel, then docs, e2e, insights, self-review', () => {
   cli('start', PLAN, '--per-chat', '9');
   for (const n of ['1', '2', '3']) cli('phase', PLAN, n, 'committed', '--commit', `c${n}`);
+  cli('start', PLAN); // the final checks run in a new chat
   assert.match(next(cli('show', PLAN)), /Run plan-verifier and architecture-reviewer in parallel: plan .*, base origin\/main/);
   cli('final', PLAN, 'verify', 'pass');
   assert.match(next(cli('final', PLAN, 'arch', 'pass')), /Run doc-writer/);
@@ -109,7 +110,19 @@ test('single-agent mode: the main session builds each phase; the checks are opti
   write(planText('single-agent', phases('Only')));
   assert.match(next(cli('start', PLAN)), /Build phase 1 yourself — run plan-phase\.mjs/);
   cli('phase', PLAN, '1', 'committed', '--commit', 'c1');
+  cli('start', PLAN); // the final checks run in a new chat
   assert.match(next(cli('show', PLAN)), /In single-agent mode both are optional/);
+});
+
+test('the final checks start in a new chat, also after a fix phase; a resumed chat goes straight to them', () => {
+  cli('start', PLAN, '--per-chat', '9');
+  for (const n of ['1', '2', '3']) cli('phase', PLAN, n, 'committed', '--commit', `c${n}`);
+  assert.match(next(cli('show', PLAN)), /^NEXT: CHECKPOINT — all phases are committed \(3 in this chat\)\. .*\/execute-plan specs\/plans\/demo\.md for the final checks\./);
+  assert.match(next(cli('start', PLAN)), /Run plan-verifier and architecture-reviewer/);
+  cli('final', PLAN, 'verify', 'fail');
+  write(planText('multi-agent', phases('Contracts', 'Server', 'e2e flow', 'Review fixes')));
+  cli('start', PLAN, '--accept-plan-change');
+  assert.match(next(cli('phase', PLAN, '4', 'committed', '--commit', 'c4')), /CHECKPOINT — all phases are committed \(1 in this chat\)/);
 });
 
 test('a plan without an execution mode line defaults to multi-agent and says so', () => {

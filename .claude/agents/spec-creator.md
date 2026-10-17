@@ -299,6 +299,16 @@ ways. A contract is specified once, in the server spec (it is authored in
 `server/src/vendor/shared`); other module specs refer to it by name. An e2e flow is not specified
 here — the `e2e` hints in the umbrella are for `test-writer`, who owns `e2e/specs/`.
 
+**A client module spec with a new or restyled screen carries a `## Layout` section** with the
+design's numbers for each screen it names: the page container (padding, max-width, full-bleed or
+not), column widths and the gap or border between them, which areas are panels (background,
+border, radius), row padding, heading sizes, and where each control sits. Copy the numbers from the
+design source — `docs/DevDigest Design*.html` is a bundle; decode its `__bundler/manifest` (root
+`INSIGHTS.md`, 2026-09-22) — and name the screen ID. Where the spec departs from the design (a
+control the design lacks, a feature left out), say so in that section. Without it the implementer
+builds from the structure alone: in L05 the Project Context page shipped with no side padding and
+a wrapping title, past every automated check (root `INSIGHTS.md`, 2026-10-17).
+
 ## Step 7 — write: indexes and superseding
 
 - Add a row for each new spec to the index of its folder, in that table's own columns:

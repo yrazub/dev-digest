@@ -203,6 +203,11 @@ export function nextAction(state) {
   }
 
   const f = state.final;
+  // The final checks always start in a fresh chat: the orchestrator's own context is the biggest
+  // cost of a run (L05 retro, docs/retros/ledger.md), and the checks need none of the phase chatter.
+  if (state.chat.committed > 0 && FINAL_STEPS.every((s) => f[s].status === 'pending')) {
+    return `CHECKPOINT — all phases are committed (${state.chat.committed} in this chat). Stop and ask the user to open a new chat and run /execute-plan ${plan} for the final checks.`;
+  }
   const failed = FINAL_STEPS.filter((s) => f[s].status === 'fail');
   if (failed.length) {
     return `Final step ${failed.join(', ')} failed. Take the report to the user; fixes go into the plan as a new phase (implementation-planner, pass amend), then state.mjs start ${plan} --accept-plan-change.`;
