@@ -16,7 +16,6 @@ the model is actually sent is in its "Review context" section; neither is repeat
 |---|---|---|
 | Built at construction | `config` `db` `secrets` `auth` `jobs` `runBus` | `runBus` is the process-wide singleton from `src/platform/sse.ts` |
 | Lazy getters | `git` `agentsRepo` `reviewRepo` `intent` `projectContext` `blast` `codeIndex` `repoIntel` `depgraph` `tokenizer` `httpFetch` `cloneFiles` `priceBook` | created on first use, then reused |
-| Plain getter | `repoIntelLimits` | returns `{ callersPerSymbol }`, the facade's `MAX_CALLERS_PER_SYMBOL`; nothing is created. No code reads it any more (see below) |
 | Async, need a secret | `github()` · `llm(provider)` · `embedder()` | cached after the first call; a missing key throws `ConfigError` **at resolve time**, which is why the server boots with no keys at all |
 
 - `llm('openrouter')` is `reviewer-core`'s `OpenRouterProvider`, with the container's `priceBook`
@@ -38,8 +37,6 @@ the model is actually sent is in its "Review context" section; neither is repeat
   module both use it, so it is built here and not in either module. It reads `this.repoIntel`, so a
   test's `repoIntel` override applies. The cap reaches the service as `callerLimit` and the response
   as `caller_limit`.
-- `repoIntelLimits` returns the same constant, but no code reads the getter: `container.blast` uses
-  `MAX_CALLERS_PER_SYMBOL` directly.
 - `embedder()` is gated by config: when embeddings are disabled it throws before creating a
   client, so the app makes no OpenAI requests.
 - After a key changes in Settings, `invalidateSecretCaches()` drops the cached LLM, GitHub and

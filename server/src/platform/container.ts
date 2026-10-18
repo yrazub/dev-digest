@@ -176,11 +176,6 @@ export class Container {
     return this._repoIntel;
   }
 
-  /** Read-time limits of the repo-intel facade, for modules that may not import its constants. */
-  get repoIntelLimits(): { callersPerSymbol: number } {
-    return { callersPerSymbol: MAX_CALLERS_PER_SYMBOL };
-  }
-
   /** Import-graph builder (dependency-cruiser). T3 indexer pipeline only. */
   get depgraph(): DepGraph {
     if (this.overrides.depgraph) return this.overrides.depgraph;
