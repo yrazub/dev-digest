@@ -124,7 +124,7 @@ The approved structural changes (Q9, Q10) and the R-SRV-24 read land here, befor
 | `server/src/modules/blast/routes.ts` | Uses `container.blast` instead of constructing the service. The route, its schema and its answer are unchanged. Imports of `BlastRepository`, `BlastService` and `BlastSource` that are no longer needed go away. | onion-architecture, fastify-best-practices, security | edge-thin-routes, sec-missing-authz |
 | `server/src/modules/project-context/ports.ts` | Adds `ProjectContextStore.workspaceAttachments(workspaceId): Promise<WorkspaceAgentAttachments[]>`, where `WorkspaceAgentAttachments = { agentName: string; agentPaths: string[]; skills: { name: string; paths: string[] }[] }`. It covers the enabled agents of the workspace; each agent's paths and its enabled linked skills in `agent_skills.order` are in stored order. | onion-architecture | dep-domain-framework-free |
 | `server/src/modules/project-context/repository.ts` | Implements `workspaceAttachments`: `agents` filtered by `workspace_id` and `enabled = true`, each with `agentPaths` and the same skill query as `runAttachments` (enabled skills only). | onion-architecture, drizzle-orm-patterns, security | db-only-in-repository, sec-missing-authz |
-| `server/src/modules/project-context/domain.ts` | Adds pure `mergeWorkspace(agents: readonly WorkspaceAgentAttachments[]): string[]`. It sorts agents by `agentName` in code-unit order, applies `mergeEffective` per agent (agent paths, then skill paths), and keeps each path once at its first position across all agents. | onion-architecture | dep-domain-framework-free |
+| `server/src/modules/project-context/domain.ts` | Adds pure `mergeWorkspace(agents: readonly { agentName: string; agentPaths: readonly string[]; skills: readonly { name: string; paths: readonly string[] }[] }[]): string[]`, its parameter typed structurally as `mergeEffective`'s is, so `domain.ts` imports nothing from `./ports.js` (`WorkspaceAgentAttachments` stays in `ports.ts` and is assignable to it). It sorts agents by `agentName` in code-unit order, applies `mergeEffective` per agent (agent paths, then skill paths), and keeps each path once at its first position across all agents. | onion-architecture | dep-inward-only, dep-domain-framework-free |
 | `server/src/modules/project-context/service.ts` | Adds `forWorkspace(input: { workspaceId: string; repo: { owner: string; name: string; clonePath: string \| null } }): Promise<ProjectContextForWorkspace>`, returning `{ attached: number; notCloned: boolean; documents: { path: string; text: string }[]; skipped: { path: string; reason: ContextSkipReason }[] }`. It reads each merged path once with `files.read` and `MAX_CONTEXT_DOC_BYTES`, using the same `not_cloned`, `miss` and `empty` handling as `forRun` and the same reasons. It applies **no** run cap (Q14) and calls no LLM. | onion-architecture, security | dep-inward-only, sec-path-traversal |
 
 **Tests (test-writer):**
@@ -315,7 +315,7 @@ This phase builds the section shell: the hook, the strings, the loading, empty, 
 |---|---|---|---|
 | `client/src/lib/hooks/brief.ts` (new) | `briefKeys.detail(prId, headSha) = ["pr-brief", prId, headSha]`. `usePrBrief(prId, headSha)` (GET, `enabled: !!prId`). `useGenerateBrief(prId, headSha)` (POST, `onSuccess` → `setQueryData` on that key; no other invalidation). Types come from `@devdigest/shared` (type-only). | frontend-ui-architecture, security | logic-no-server-state-copy, struct-one-way |
 | `client/messages/en/brief.json` | Changes `block.risks` → "Risk areas" and `unavailableHint` → "Generate a Why+Risk brief for this PR.". Adds every key of the client spec "Strings" plus `inputs.item`, `inputs.omitted` and the copy in Assumptions. Enum-mirroring keys use the exact enum values. | — | — |
-| `client/src/lib/use-media-query.ts` (new) | `useMediaQuery(query: string): boolean` over `window.matchMedia` with `useSyncExternalStore` (server snapshot `false`). | frontend-ui-architecture, react-best-practices, security | react-hooks-conditional, logic-no-effect-derivation |
+| `client/src/app/repos/[repoId]/pulls/[number]/_components/PrBriefSection/use-media-query.ts` (new) | `useMediaQuery(query: string): boolean` over `window.matchMedia` with `useSyncExternalStore` (server snapshot `false`). Its only consumer is `PrBriefSection`, so it sits in that folder (struct-colocate), not in shared `src/lib/`. | frontend-ui-architecture, react-best-practices, next-best-practices, security | react-hooks-conditional, logic-no-effect-derivation |
 | `client/src/app/repos/[repoId]/pulls/[number]/_components/PrBriefSection/PrBriefSection.tsx` (new) | `PrBriefSection({ prId, headSha, repoId, repoFullName, poll })`, described below. Model text is rendered as text nodes only. | frontend-ui-architecture, react-best-practices, next-best-practices, security | split-no-nested-definitions, split-pure, logic-no-server-state-copy, react-nested-component, react-render-side-effect, sec-xss |
 | `…/_components/PrBriefSection/index.ts` (new) | Re-exports `PrBriefSection`. | frontend-ui-architecture, next-best-practices | struct-one-way |
 | `…/_components/PrBriefSection/styles.ts` (new) | `s` with the client spec Layout values: section body (column, gap 16); summary panel (padding 16, 1 px `var(--border)`, radius 10, `var(--bg-elevated)`, text 13.5 px / 1.55 `var(--text-secondary)`); inputs and stale lines (12.5 px muted, `AlertTriangle` 14 px `var(--warn)`, gap 6, margin-top 8); empty card (max-width 340, icon box 48 × 48 radius 12 `var(--bg-hover)`, title 15/700, hint 13/1.5, margins 14/6/18); `grid(narrow)` returning a complete object (`1fr 1fr` or `1fr`, gap 16); footer (11.5 px muted). | frontend-ui-architecture, next-best-practices | split-pure |
@@ -338,7 +338,7 @@ This phase builds the section shell: the hook, the strings, the loading, empty, 
 
 **Tests (test-writer):**
 - Add `client/src/lib/hooks/brief.test.tsx`: GET only on mount; a POST's response lands in `["pr-brief", prId, headSha]`; a new `headSha` refetches; no other key is invalidated.
-- Add `client/src/lib/use-media-query.test.ts` with a stubbed `matchMedia`.
+- Add `…/PrBriefSection/use-media-query.test.ts` with a stubbed `matchMedia`.
 - Add `…/PrBriefSection/helpers.test.ts`: `briefViewMode` for each combination, including `{ data, isError: true }`; `inputsLine`.
 - Add `…/PrBriefSection/PrBriefSection.test.tsx` (mocked hooks with stable mutation objects; `IntentCard` and `BlastRadiusCard` mocked to record props) covering R-WEB-1–R-WEB-6, R-WEB-11–R-WEB-14, R-WEB-17 (grid template with `matchMedia` stubbed narrow), R-WEB-20, R-WEB-21, R-WEB-22–R-WEB-29 and R-WEB-31, with the fixtures named in the client spec Tests row, a loading state that shows no Generate button, and summary markup rendered as text.
 - Extend `…/IntentCard/IntentCard.test.tsx`: `hideRiskTags` removes the tag row only when set (R-WEB-15, R-WEB-16), and `footer` renders in the record, empty, error and loading states.
@@ -381,7 +381,7 @@ This phase fills the brief with its two model-written blocks and makes a Review 
 | `…/PrBriefSection/helpers.ts` | Adds `elidePath(file: string): string`: whole when at most 56 characters, otherwise the first 20 characters, "…" and the last 35. | frontend-ui-architecture | logic-pure-domain |
 | `…/PrBriefSection/PrBriefSection.tsx` | Passes `<RiskAreas risks={brief.risks.risks} />` as the `IntentCard` `footer` while a brief is shown, and renders `<ReviewFocus items={brief.review_focus} onOpen={onOpenFocus} />` below the grid and above the footer. Gains the prop `onOpenFocus(file: string, line: number)`. | frontend-ui-architecture, react-best-practices, next-best-practices, security | split-pure, react-nested-component |
 | `…/OverviewTab/OverviewTab.tsx` | Passes the new `onOpenFocus` prop through. | frontend-ui-architecture, react-best-practices, next-best-practices, security | react-nested-component |
-| `client/src/lib/use-pr-detail-nav.ts` (new) | Pure `focusSearch` and `tabSearch` plus the `usePrDetailNav` hook, described below. | frontend-ui-architecture, react-best-practices, security | logic-pure-domain, react-hooks-conditional |
+| `client/src/app/repos/[repoId]/pulls/[number]/_lib/use-pr-detail-nav.ts` (new) | Pure `focusSearch` and `tabSearch` plus the `usePrDetailNav` hook, described below. Its only consumer is this route's `page.tsx`, so it sits in the route's private `_lib/` folder (struct-colocate), not in shared `src/lib/`. | frontend-ui-architecture, react-best-practices, next-best-practices, security | logic-pure-domain, react-hooks-conditional |
 | `client/src/app/repos/[repoId]/pulls/[number]/page.tsx` | Uses `usePrDetailNav` for `tab`, `setTab` (tab bar and `onRunStart`), `setParam` (trace drawer) and `openFocus`, passed to `OverviewTab` as `onOpenFocus`. | frontend-ui-architecture, react-best-practices, next-best-practices, security | struct-one-way, react-hooks-conditional |
 
 `ReviewFocus` behaviour:
@@ -390,7 +390,7 @@ This phase fills the brief with its two model-written blocks and makes a Review 
 - With no items it shows `brief.reviewFocus.empty`.
 - A click calls `onOpen(file, line)`.
 
-`client/src/lib/use-pr-detail-nav.ts`:
+`client/src/app/repos/[repoId]/pulls/[number]/_lib/use-pr-detail-nav.ts`:
 - Pure `focusSearch(current: URLSearchParams, file: string, line: number): string` sets `tab=diff`, `file` (encoded by `URLSearchParams`) and `line`, keeping every other parameter.
 - Pure `tabSearch(current: URLSearchParams, tab: string): string` sets `tab` and deletes `file` and `line`.
 - Hook `usePrDetailNav(base: string)` returns `{ tab, setTab, setParam, openFocus }`. `setTab` and `setParam` use `router.replace`; `openFocus` uses `router.push`.
@@ -398,7 +398,7 @@ This phase fills the brief with its two model-written blocks and makes a Review 
 **Tests (test-writer):**
 - Extend `…/PrBriefSection/PrBriefSection.test.tsx`: R-WEB-7–R-WEB-10, R-WEB-19 (a 70-character path shows 20 + "…" + 35 and `:line`; a 40-character one is whole; `title` always the full `<file>:<line>`), R-WEB-20 and R-WEB-30, with three or more risks and focus items. Model text renders as text, not markup. A click calls `onOpenFocus(file, line)`.
 - Extend `…/PrBriefSection/helpers.test.ts`: `elidePath` at 56, 57 and 70 characters.
-- Add `client/src/lib/use-pr-detail-nav.test.ts`:
+- Add `client/src/app/repos/[repoId]/pulls/[number]/_lib/use-pr-detail-nav.test.ts`:
   - `focusSearch` keeps `order`, `trace` and `blast` and encodes the path (R-WEB-35);
   - `openFocus` calls `router.push` (R-WEB-36);
   - `setTab` calls `router.replace` without `file` and `line` (R-WEB-41).
@@ -497,6 +497,74 @@ This phase covers AC-83 and AC-84 end to end on the seeded stack, and fixes the 
 - AC-83 / R-SRV-41, R-WEB-21 — flow 14 shows the seeded brief on the Overview tab of PR #482 with no model call.
 - AC-84 / R-WEB-32, R-WEB-34 — flow 14's click on `src/config.ts:12` lands on Files changed with `src/config.ts` open and line 12 as the jump target.
 - AC-15 — flow 10 passes with the risk-area tag absent on Overview and present on Agent runs, and every flow of the hermetic run passes.
+
+### 10 · Review fixes — layer placement, full-map risk validation, colocated hooks (`server`, `client`)
+
+This phase closes the verification and architecture gaps of phases 2–7 without changing behaviour, except in one place. Risk references are now validated against the full blast map that `blast.forPull` returned, as phase 3 item 11 and R-SRV-6 already say, instead of the map trimmed for the prompt. The pure rules that leaked into `brief/service.ts` move to `brief/domain.ts`. `project-context/domain.ts` stops importing its ports file. Two single-consumer client hooks move next to their consumer. The server comes first, then the client, and the two are verified one after the other, never in parallel (`server/INSIGHTS.md:277-289`).
+
+| File | Change | Skills | Rules to respect |
+|---|---|---|---|
+| `server/src/modules/project-context/domain.ts` | Removes `import type { WorkspaceAgentAttachments } from './ports.js'`. `mergeWorkspace` takes `agents: readonly { agentName: string; agentPaths: readonly string[]; skills: readonly { name: string; paths: readonly string[] }[] }[]`, typed structurally like `mergeEffective` (`:68-71`). Its body and behaviour are unchanged. After the change the file imports nothing from `./ports.js`. `ports.ts` and `service.ts` are unchanged. | onion-architecture, security | dep-inward-only, dep-domain-framework-free |
+| `server/src/modules/brief/domain.ts` | Adds these exports, with the bodies moved unchanged from `service.ts`. (a) `trimsOf(original: BriefFacts, facts: BriefFacts): BriefTrims`, next to `fitToBudget`. (b) `callerLines(blast: BlastRadiusResponse): string[]`. (c) `sentBlast(blast: BlastRadiusResponse, omittedCallers: number): BlastRadius`. (d) `blastFilesOf(blast: BlastRadius \| null): Set<string>`. (e) `diffTotals(pull: { filesCount: number; additions: number; deletions: number }, files: readonly { additions: number; deletions: number }[]): BriefFacts['totals']`, the former inline `hasStats` rule: the PR's own totals when any of the three is above 0, otherwise sums over `files`, with `files` = `files.length`. Every new type import comes from `@devdigest/shared`. The `pull` parameter is structural, so `domain.ts` still imports nothing from `./ports.js`; importing `BriefPull` would repeat F1. | onion-architecture, security | dep-inward-only, dep-domain-framework-free |
+| `server/src/modules/brief/service.ts` | Deletes its private `trimsOf`, `callerLines`, `sentBlast` and `blastFilesOf` and the inline `hasStats` totals block, and imports the five rules from `./domain.js`. `totals` comes from `diffTotals(pull, files)`. In the `validateDraft` call, `blastFiles` becomes `blastFilesOf(blast)` over the full map `readBlast` returned. The stored `record.blast` stays `sentBlast(blast, fit.trims.callers)` (phase 4 item 10). The comment above the `validateDraft` call says "the full blast map". Type imports it no longer uses go away. Log lines, error mapping and step order are unchanged. | onion-architecture, security | dep-inward-only, sec-secret-exposure |
+| `server/src/db/seed.ts` | Comment-only: in the PR Brief block's header comment (`:377-378`), "flows 05, 10 and 11" becomes "flow 14". No value changes. | onion-architecture, drizzle-orm-patterns, security | sec-hardcoded-secret |
+| `client/src/app/repos/[repoId]/pulls/[number]/_lib/use-pr-detail-nav.ts` (new) | The content of `client/src/lib/use-pr-detail-nav.ts`, moved unchanged: `focusSearch`, `tabSearch`, `usePrDetailNav`. | frontend-ui-architecture, react-best-practices, next-best-practices, security | logic-pure-domain, react-hooks-conditional |
+| `client/src/lib/use-pr-detail-nav.ts` (deleted) | Removed; its content now lives in the route's `_lib/`. | — | — |
+| `client/src/app/repos/[repoId]/pulls/[number]/page.tsx` | Imports `usePrDetailNav` from `./_lib/use-pr-detail-nav`, in the same relative style as its `./_components/…` imports. Nothing else changes. | frontend-ui-architecture, react-best-practices, next-best-practices, security | struct-one-way, react-hooks-conditional |
+| `client/src/app/repos/[repoId]/pulls/[number]/_components/PrBriefSection/use-media-query.ts` (new) | The content of `client/src/lib/use-media-query.ts`, moved unchanged. | frontend-ui-architecture, react-best-practices, next-best-practices, security | react-hooks-conditional, logic-no-effect-derivation |
+| `client/src/lib/use-media-query.ts` (deleted) | Removed; its content now lives in `PrBriefSection/`. | — | — |
+| `…/_components/PrBriefSection/PrBriefSection.tsx` | Imports `useMediaQuery` from `./use-media-query` instead of `@/lib/use-media-query`. Nothing else changes. | frontend-ui-architecture, react-best-practices, next-best-practices, security | struct-one-way, react-nested-component |
+
+**Tests (test-writer):**
+- Extend `server/test/brief-domain.test.ts`. Use three or more items in every list (`server/INSIGHTS.md:264-268`).
+  - `trimsOf`:
+    - identical facts give all counts 0 and all flags false;
+    - facts with 2 documents, 1 finding, 1 caller and 3 files fewer give exactly those counts;
+    - a shorter issue body sets `issueBodyCut` only;
+    - an issue set to null sets `issueDropped` only;
+    - a changed description sets `descriptionCut`.
+  - `callerLines` flattens `downstream[].callers` in order as `file:line name`, over three or more symbols.
+  - `sentBlast`:
+    - with 0 omitted, every caller is kept;
+    - omitting k removes the last k callers of the flat list, across `downstream` entries;
+    - `changed_symbols` and `summary` are unchanged;
+    - omitting at least the total leaves every `callers` list empty.
+  - `blastFilesOf`:
+    - `null` gives an empty set;
+    - otherwise the union of `changed_symbols[].file` and `downstream[].callers[].file`, each file once.
+  - `diffTotals`:
+    - non-zero PR stats are returned as given;
+    - all-zero PR stats are summed from three files;
+    - one non-zero stat out of three means the PR's own values are used.
+- Extend `server/test/brief-service.test.ts` with the P4.F3 pin (R-SRV-6, EC-12). The fixture:
+  - a blast map with one changed symbol and three or more callers, the last in `src/far/caller.ts` (not a changed file);
+  - a `tokenizer` whose `count` exceeds 8,000 while the text holds the `src/far/caller.ts` caller line and stays small otherwise;
+  - a model draft with one risk whose only `file_refs` entry is `src/far/caller.ts:7`.
+
+  Assert:
+  - the saved brief keeps that risk with `file_refs: ['src/far/caller.ts:7']`;
+  - `dropped.risks` is 0;
+  - `blast_radius` is recorded `trimmed` / `over_budget` with `omitted` ≥ 1;
+  - the saved `blast` holds no caller in `src/far/caller.ts`.
+
+  Add a second case: a risk citing only a file in neither the PR nor the map is still dropped (`dropped.risks` 1).
+- Move `client/src/lib/use-pr-detail-nav.test.ts` to `client/src/app/repos/[repoId]/pulls/[number]/_lib/use-pr-detail-nav.test.ts`, changing only its import to `./use-pr-detail-nav`. Its cases stay as they are.
+- Move `client/src/lib/use-media-query.test.ts` to `…/_components/PrBriefSection/use-media-query.test.ts`, changing only its import to `./use-media-query`. Its cases stay as they are.
+- Expected to change:
+  - `client/src/lib/use-pr-detail-nav.test.ts` and `client/src/lib/use-media-query.test.ts` fail to resolve their import once the implementer moves the hooks. They are moved as above, never fixed in place.
+  - Every other test passes unedited, including `server/test/project-context-domain.test.ts` (`mergeWorkspace`), `server/test/project-context-service.test.ts`, `server/test/brief.it.test.ts`, `server/test/brief-seed.it.test.ts`, `…/PrBriefSection/PrBriefSection.test.tsx` and `…/OverviewTab/OverviewTab.test.tsx`.
+  - `pnpm typecheck` does not cover `server/test/**`, so a type slip in the server tests shows only in vitest (`server/INSIGHTS.md:77`).
+  - Run the full `pnpm test` in `client`: a vitest path filter with brackets matches nothing (`client/INSIGHTS.md:86-90`).
+
+**Verify (code):** `cd server && pnpm typecheck` · `cd server && pnpm arch:check` · `cd server && pnpm exec vitest run --exclude '**/*.it.test.ts'` · `cd server && pnpm exec vitest run .it.test --no-file-parallelism` · then, not in parallel, `cd client && pnpm typecheck` (clean except `client/src/lib/use-pr-detail-nav.test.ts` and `client/src/lib/use-media-query.test.ts`) · `cd client && pnpm test` (may fail only on those two files)
+**Verify (phase):** `cd server && pnpm typecheck && pnpm arch:check && pnpm exec vitest run --exclude '**/*.it.test.ts' && pnpm exec vitest run .it.test --no-file-parallelism` · then `cd client && pnpm typecheck && pnpm test`
+**Done when:**
+- P4.F3 / AC-47, R-SRV-6, EC-12 — `BriefService.generate` validates risk references against `blastFilesOf` of the full map `blast.forPull` returned. A risk citing only a caller file that the budget cut from the prompt is kept, with `dropped.risks` 0. The stored `blast` still omits that caller. `brief-service.test.ts` pins both.
+- F1 / R-SRV-24 (groundwork) — `server/src/modules/project-context/domain.ts` has no import from `./ports.js`. `mergeWorkspace` takes a structural parameter, and `project-context-domain.test.ts` passes unedited.
+- F3 / R-SRV-6, R-SRV-14, R-SRV-17, R-SRV-18 (groundwork) — `trimsOf`, `callerLines`, `sentBlast`, `blastFilesOf` and `diffTotals` are exported from `server/src/modules/brief/domain.ts`. `brief/domain.ts` has no import from `./ports.js`. `brief/service.ts` defines none of them and has no inline totals rule. `brief-domain.test.ts` covers each.
+- F2 / R-WEB-17, R-WEB-35, R-WEB-36, R-WEB-41 (placement only) — `usePrDetailNav` lives in `client/src/app/repos/[repoId]/pulls/[number]/_lib/use-pr-detail-nav.ts` and `useMediaQuery` in `…/_components/PrBriefSection/use-media-query.ts`. Neither file exists under `client/src/lib/`. Their tests pass at the new paths.
+- M1 / R-SRV-41 (fixture contract) — the header comment of the seeded-brief block in `server/src/db/seed.ts` names flow `14` and no other flow.
+- `pnpm arch:check` reports no new violation and no new baseline entry.
 
 ## Out of scope
 - The deferred P3 criteria AC-85–AC-89 and R-WEB-43–R-WEB-47: verdict banner, expandable risk explanation, risk click, "File not in this PR's diff" message, skeleton.
