@@ -29,7 +29,7 @@ import {
 import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
 import { ApiError } from "@/lib/api";
 import { githubPrUrl } from "@/lib/github-urls";
-import { usePrDetailNav } from "@/lib/use-pr-detail-nav";
+import { usePrDetailNav } from "./_lib/use-pr-detail-nav";
 import type { FindingRecord } from "@devdigest/shared";
 
 export default function PRDetailPage() {

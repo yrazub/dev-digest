@@ -6,11 +6,14 @@
  */
 import { describe, it, expect } from 'vitest';
 import { BriefInput, BriefInputKind } from '@devdigest/shared';
-import type { Risk, Severity } from '@devdigest/shared';
+import type { BlastRadius, BlastRadiusResponse, Risk, Severity } from '@devdigest/shared';
 import {
   BriefModelOutput,
+  blastFilesOf,
+  callerLines,
   capBrief,
   cutToTokens,
+  diffTotals,
   findLinkedIssueNumber,
   fitToBudget,
   formatRanges,
@@ -18,6 +21,8 @@ import {
   recordInputs,
   refPath,
   selectReviewFindings,
+  sentBlast,
+  trimsOf,
   validateDraft,
 } from '../src/modules/brief/domain.js';
 import type { BriefFacts, BriefOrigin, BriefTrims, LineRange } from '../src/modules/brief/domain.js';
@@ -730,5 +735,210 @@ describe('capBrief', () => {
     expect(summary.startsWith(kept)).toBe(true);
     // The cut falls between words: the last kept word is a whole one.
     expect(words).toContain(kept.split(' ').at(-1));
+  });
+});
+
+// ---------------------------------------------------------------- what the budget cut (R-SRV-17)
+
+describe('trimsOf', () => {
+  function original(): BriefFacts {
+    return {
+      title: 'Add rate limiting',
+      intent: null,
+      files: ['a.ts', 'b.ts', 'c.ts', 'd.ts', 'e.ts'].map((path) => ({
+        path,
+        role: 'core' as const,
+        additions: 1,
+        deletions: 0,
+        ranges: [{ start: 1, end: 3 }],
+      })),
+      totals: { files: 5, additions: 5, deletions: 0 },
+      blast: {
+        summary: 'one symbol, four callers',
+        totals: { symbols: 1, callers: 4, endpoints: 0, crons: 0, symbols_without_callers: 0 },
+        callers: ['c1.ts:1 one', 'c2.ts:2 two', 'c3.ts:3 three', 'c4.ts:4 four'],
+      },
+      findings: ['a.ts:1 CRITICAL one', 'a.ts:2 WARNING two', 'a.ts:3 WARNING three'],
+      description: 'a long description',
+      issue: { number: 7, title: 'Issue', body: 'a long issue body' },
+      documents: ['one', 'two', 'three'].map((n) => ({ path: `docs/${n}.md`, text: n })),
+    };
+  }
+
+  it('gives all counts 0 and all flags false for identical facts', () => {
+    const o = original();
+    expect(trimsOf(o, o)).toEqual({
+      documents: 0,
+      findings: 0,
+      issueBodyCut: false,
+      issueDropped: false,
+      descriptionCut: false,
+      callers: 0,
+      files: 0,
+    });
+  });
+
+  it('counts the documents, findings, callers and files that are fewer, and nothing else', () => {
+    const o = original();
+    const cut: BriefFacts = {
+      ...o,
+      documents: o.documents.slice(0, 1),
+      findings: o.findings.slice(0, 2),
+      blast: { ...o.blast!, callers: o.blast!.callers.slice(0, 3) },
+      files: o.files.slice(0, 2),
+    };
+    expect(trimsOf(o, cut)).toEqual({
+      documents: 2,
+      findings: 1,
+      issueBodyCut: false,
+      issueDropped: false,
+      descriptionCut: false,
+      callers: 1,
+      files: 3,
+    });
+  });
+
+  it('sets issueBodyCut only for a shorter issue body', () => {
+    const o = original();
+    const cut: BriefFacts = { ...o, issue: { ...o.issue!, body: 'a long' } };
+    expect(trimsOf(o, cut)).toMatchObject({ issueBodyCut: true, issueDropped: false, descriptionCut: false });
+  });
+
+  it('sets issueDropped only when the issue is gone', () => {
+    const o = original();
+    expect(trimsOf(o, { ...o, issue: null })).toMatchObject({ issueBodyCut: false, issueDropped: true });
+  });
+
+  it('sets descriptionCut for a changed description', () => {
+    const o = original();
+    expect(trimsOf(o, { ...o, description: 'a long' })).toMatchObject({
+      descriptionCut: true,
+      issueBodyCut: false,
+      issueDropped: false,
+    });
+  });
+
+  it('counts no callers when the facts carry no blast map', () => {
+    const o = { ...original(), blast: null };
+    expect(trimsOf(o, o).callers).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------- the blast map as sent
+
+describe('blast map helpers', () => {
+  const caller = (name: string, file: string, line: number) => ({ name, file, line });
+  const symbol = (name: string, file: string) => ({ name, file, kind: 'function' as const });
+  const entry = (symbolName: string, callers: ReturnType<typeof caller>[]) => ({
+    symbol: symbolName,
+    callers,
+    endpoints_affected: [],
+    crons_affected: [],
+  });
+
+  const blast: BlastRadiusResponse = {
+    changed_symbols: [symbol('alpha', 'src/a.ts'), symbol('beta', 'src/b.ts'), symbol('gamma', 'src/a.ts')],
+    downstream: [
+      entry('alpha', [caller('c1', 'src/x.ts', 1), caller('c2', 'src/y.ts', 2)]),
+      entry('beta', [caller('c3', 'src/x.ts', 30)]),
+      entry('gamma', [caller('c4', 'src/z.ts', 4), caller('c5', 'src/w.ts', 5)]),
+    ],
+    summary: '3 symbols, 5 callers',
+    totals: { symbols: 3, callers: 5, endpoints: 0, crons: 0, symbols_without_callers: 0 },
+    degraded: false,
+    reason: null,
+    indexed_sha: 'abc123',
+    caller_limit: 50,
+  };
+
+  describe('callerLines', () => {
+    it('flattens the callers of every symbol in order as file:line name', () => {
+      expect(callerLines(blast)).toEqual([
+        'src/x.ts:1 c1',
+        'src/y.ts:2 c2',
+        'src/x.ts:30 c3',
+        'src/z.ts:4 c4',
+        'src/w.ts:5 c5',
+      ]);
+    });
+  });
+
+  describe('sentBlast', () => {
+    const flat = (b: BlastRadius) => b.downstream.flatMap((d) => d.callers.map((c) => c.name));
+
+    it('keeps every caller when 0 are omitted', () => {
+      expect(flat(sentBlast(blast, 0))).toEqual(['c1', 'c2', 'c3', 'c4', 'c5']);
+    });
+
+    it('removes the last k callers of the flat list, across downstream entries', () => {
+      const sent = sentBlast(blast, 3);
+      expect(flat(sent)).toEqual(['c1', 'c2']);
+      // The entries stay, only their callers go: the cut crosses the "beta" and "gamma" entries.
+      expect(sent.downstream.map((d) => [d.symbol, d.callers.length])).toEqual([
+        ['alpha', 2],
+        ['beta', 0],
+        ['gamma', 0],
+      ]);
+      expect(flat(sentBlast(blast, 1))).toEqual(['c1', 'c2', 'c3', 'c4']);
+    });
+
+    it('leaves changed_symbols and summary unchanged', () => {
+      const sent = sentBlast(blast, 2);
+      expect(sent.changed_symbols).toEqual(blast.changed_symbols);
+      expect(sent.summary).toBe(blast.summary);
+    });
+
+    it('leaves every callers list empty when at least the total is omitted', () => {
+      for (const omitted of [5, 9]) {
+        const sent = sentBlast(blast, omitted);
+        expect(sent.downstream).toHaveLength(3);
+        expect(sent.downstream.every((d) => d.callers.length === 0)).toBe(true);
+      }
+    });
+  });
+
+  describe('blastFilesOf', () => {
+    it('gives an empty set for null', () => {
+      expect(blastFilesOf(null).size).toBe(0);
+    });
+
+    it('is the union of the changed symbols files and the callers files, each once', () => {
+      const files = blastFilesOf(sentBlast(blast, 0));
+      expect([...files].sort()).toEqual(['src/a.ts', 'src/b.ts', 'src/w.ts', 'src/x.ts', 'src/y.ts', 'src/z.ts']);
+    });
+  });
+});
+
+// ---------------------------------------------------------------- totals
+
+describe('diffTotals', () => {
+  const files = [
+    { additions: 10, deletions: 1 },
+    { additions: 20, deletions: 2 },
+    { additions: 5, deletions: 0 },
+  ];
+
+  it("returns the PR's own totals when they are filled in", () => {
+    expect(diffTotals({ filesCount: 9, additions: 247, deletions: 38 }, files)).toEqual({
+      files: 9,
+      additions: 247,
+      deletions: 38,
+    });
+  });
+
+  it('sums the files when all three PR stats are 0', () => {
+    expect(diffTotals({ filesCount: 0, additions: 0, deletions: 0 }, files)).toEqual({
+      files: 3,
+      additions: 35,
+      deletions: 3,
+    });
+  });
+
+  it("uses the PR's own values when only one of the three stats is above 0", () => {
+    expect(diffTotals({ filesCount: 0, additions: 0, deletions: 4 }, files)).toEqual({
+      files: 0,
+      additions: 0,
+      deletions: 4,
+    });
   });
 });

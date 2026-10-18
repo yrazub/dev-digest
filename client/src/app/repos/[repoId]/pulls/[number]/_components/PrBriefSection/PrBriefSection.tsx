@@ -10,12 +10,12 @@ import { Button, Card, Icon, IconBtn, SectionLabel } from "@devdigest/ui";
 import type { BriefInput, PrBriefRecord } from "@devdigest/shared";
 import { formatCostUsd } from "@/lib/format-cost";
 import { useGenerateBrief, usePrBrief } from "@/lib/hooks/brief";
-import { useMediaQuery } from "@/lib/use-media-query";
 import { BlastRadiusCard } from "../BlastRadiusCard";
 import { IntentCard } from "../IntentCard";
 import { ReviewFocus } from "./_components/ReviewFocus";
 import { RiskAreas } from "./_components/RiskAreas";
 import { briefViewMode, generateErrorKind, inputsLine, shortSha } from "./helpers";
+import { useMediaQuery } from "./use-media-query";
 import { s } from "./styles";
 
 interface PrBriefSectionProps {

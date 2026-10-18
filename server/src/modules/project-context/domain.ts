@@ -1,6 +1,5 @@
 import { ContextDocPath } from '@devdigest/shared';
 import { MAX_CONTEXT_DOCS } from './constants.js';
-import type { WorkspaceAgentAttachments } from './ports.js';
 
 /** A raw file the clone walk found: relative `/`-separated path, size in bytes. */
 export interface RawEntry {
@@ -91,7 +90,13 @@ export function mergeEffective(
  * each agent's effective paths (`mergeEffective`), every path kept once at its first position
  * across all agents. The sort is stable, so equal names keep the order they came in.
  */
-export function mergeWorkspace(agents: readonly WorkspaceAgentAttachments[]): string[] {
+export function mergeWorkspace(
+  agents: readonly {
+    agentName: string;
+    agentPaths: readonly string[];
+    skills: readonly { name: string; paths: readonly string[] }[];
+  }[],
+): string[] {
   const sorted = [...agents].sort((a, b) =>
     a.agentName < b.agentName ? -1 : a.agentName > b.agentName ? 1 : 0,
   );

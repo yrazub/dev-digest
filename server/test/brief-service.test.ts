@@ -723,6 +723,68 @@ describe('BriefService.generate — the budget (R-SRV-16 to R-SRV-18)', () => {
     expect(res.brief!.dropped.review_focus).toBe(1);
   });
 
+  describe('risk references are validated against the full blast map, not the map as sent (R-SRV-6, EC-12)', () => {
+    const FAR_FILE = 'src/far/caller.ts';
+    // Three callers, the last in a file the PR does not change.
+    const FAR_BLAST: BlastRadiusResponse = {
+      ...BLAST,
+      downstream: [
+        {
+          symbol: 'rateLimit',
+          callers: [
+            { name: 'boot', file: 'src/server.ts', line: 88 },
+            { name: 'wrap', file: 'src/mid/wrap.ts', line: 3 },
+            { name: 'faraway', file: FAR_FILE, line: 7 },
+          ],
+          endpoints_affected: [],
+          crons_affected: [],
+        },
+      ],
+      totals: { symbols: 1, callers: 3, endpoints: 0, crons: 0, symbols_without_callers: 0 },
+    };
+    // Over the budget exactly while the far caller line is in the text: dropping that caller fits.
+    const overWhileFarCallerIsIn = {
+      count: (text: string) => (text.includes(FAR_FILE) ? INPUT_BUDGET_TOKENS + 1000 : 100),
+    };
+    const draftOf = (file_refs: string[]) => ({
+      summary: `A rate limiter guards the API. ${MODEL_MARK}`,
+      risks: [{ kind: 'breaking_api', title: 'Far caller', explanation: 'It calls the limiter.', severity: 'medium', file_refs }],
+      review_focus: [],
+    });
+    const farSetup = (file_refs: string[]) =>
+      setup({
+        blast: FAR_BLAST,
+        tokenizer: overWhileFarCallerIsIn,
+        llm: new MockLLMProvider('openai', { structuredBySchema: { [BRIEF_SCHEMA_NAME]: draftOf(file_refs) } }),
+      });
+
+    it('keeps a risk whose only reference is a caller the budget cut from the prompt; the stored blast still omits that caller', async () => {
+      const h = farSetup([`${FAR_FILE}:7`]);
+      const res = await generate(h);
+
+      expect(sentText(structuredCalls(h.llm)[0]!)).not.toContain(FAR_FILE);
+      const saved = h.store.saves[0]!;
+      expect(saved.risks.risks).toHaveLength(1);
+      expect(saved.risks.risks[0]!.file_refs).toEqual([`${FAR_FILE}:7`]);
+      expect(res.brief!.dropped.risks).toBe(0);
+      expect(saved.dropped.risks).toBe(0);
+      expect(inputOf(saved, 'blast_radius')).toMatchObject({ status: 'trimmed', reason: 'over_budget' });
+      expect(inputOf(saved, 'blast_radius')!.omitted).toBeGreaterThanOrEqual(1);
+      const storedCallers = saved.blast!.downstream.flatMap((d) => d.callers);
+      expect(storedCallers.map((c) => c.file)).toEqual(['src/server.ts', 'src/mid/wrap.ts']);
+      expect(storedCallers.some((c) => c.file === FAR_FILE)).toBe(false);
+    });
+
+    it('still drops a risk whose only reference is in neither the PR nor the map', async () => {
+      const h = farSetup(['src/ghost.ts:4']);
+      const res = await generate(h);
+
+      expect(res.brief!.risks.risks).toEqual([]);
+      expect(res.brief!.dropped.risks).toBe(1);
+      expect(h.store.saves[0]!.dropped.risks).toBe(1);
+    });
+  });
+
   it('sums the stored files for the totals when the PR row has no stats yet (all three zero)', async () => {
     const h = setup({ pull: { additions: 0, deletions: 0, filesCount: 0 } });
     await generate(h);

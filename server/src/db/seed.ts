@@ -374,7 +374,7 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
   // row. `pr_brief.pr_id` is the primary key, so `onConflictDoNothing()` never overwrites a brief a
   // generation stored. `GET /pulls/:id/brief` answers it with no model call; `stale` is computed on
   // read (`head_sha` equals the seeded PR's). `blast` stays null: the live Blast radius block shows
-  // the map. The strings are the fixtures flows 05, 10 and 11 assert on
+  // the map. The strings are the fixtures flow 14 asserts on
   // (`e2e/specs/seed-fixtures.md`).
   const seededBrief = {
     pr_id: pr!.id,

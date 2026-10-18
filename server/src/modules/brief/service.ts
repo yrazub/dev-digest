@@ -1,7 +1,6 @@
 import { ZodError } from 'zod';
 import { OutputTruncatedError } from '@devdigest/reviewer-core';
 import type {
-  BlastRadius,
   BlastRadiusResponse,
   BriefInput,
   GitHubClient,
@@ -25,18 +24,22 @@ import {
 } from './constants.js';
 import {
   BriefModelOutput,
+  blastFilesOf,
+  callerLines,
   capBrief,
+  diffTotals,
   findLinkedIssueNumber,
   fitToBudget,
   parseNewSideRanges,
   recordInputs,
   selectReviewFindings,
+  sentBlast,
+  trimsOf,
   validateDraft,
   type BriefFacts,
   type BriefFile,
   type BriefIssue,
   type BriefOrigin,
-  type BriefTrims,
   type LineRange,
 } from './domain.js';
 import { buildBriefMessages } from './prompt.js';
@@ -86,37 +89,6 @@ function failureReason(err: unknown): BriefFailureReason {
   const message = err instanceof Error ? err.message : '';
   if (err instanceof ZodError || /schema/i.test(message)) return 'schema_invalid';
   return 'model_failed';
-}
-
-/** The trims a smaller `facts` implies against the `original`, so a count can name them exactly. */
-function trimsOf(original: BriefFacts, facts: BriefFacts): BriefTrims {
-  return {
-    documents: original.documents.length - facts.documents.length,
-    findings: original.findings.length - facts.findings.length,
-    issueBodyCut: original.issue !== null && facts.issue !== null && original.issue.body !== facts.issue.body,
-    issueDropped: original.issue !== null && facts.issue === null,
-    descriptionCut: original.description !== facts.description,
-    callers: (original.blast?.callers.length ?? 0) - (facts.blast?.callers.length ?? 0),
-    files: original.files.length - facts.files.length,
-  };
-}
-
-function callerLines(blast: BlastRadiusResponse): string[] {
-  return blast.downstream.flatMap((d) => d.callers.map((c) => `${c.file}:${c.line} ${c.name}`));
-}
-
-/** The map as sent: the callers left out by the budget are removed from the end of the flat list. */
-function sentBlast(blast: BlastRadiusResponse, omittedCallers: number): BlastRadius {
-  let keep = callerLines(blast).length - omittedCallers;
-  return {
-    changed_symbols: blast.changed_symbols,
-    downstream: blast.downstream.map((d) => {
-      const callers = d.callers.slice(0, Math.max(keep, 0));
-      keep -= d.callers.length;
-      return { ...d, callers };
-    }),
-    summary: blast.summary,
-  };
 }
 
 export class BriefService {
@@ -205,15 +177,7 @@ export class BriefService {
       deletions: f.deletions,
       ranges: parseNewSideRanges(f.patch),
     }));
-    // The PR's own totals; a row whose stats were never filled in (all zero) is summed from the files.
-    const hasStats = pull.filesCount > 0 || pull.additions > 0 || pull.deletions > 0;
-    const totals = hasStats
-      ? { files: pull.filesCount, additions: pull.additions, deletions: pull.deletions }
-      : {
-          files: files.length,
-          additions: files.reduce((n, f) => n + f.additions, 0),
-          deletions: files.reduce((n, f) => n + f.deletions, 0),
-        };
+    const totals = diffTotals(pull, files);
 
     const intentFacts: Intent | null =
       intent === null
@@ -303,10 +267,10 @@ export class BriefService {
         }),
         callTimeoutMs,
       );
-      // Validated against every changed file of the PR and the map as sent.
+      // Validated against every changed file of the PR and the full blast map, not the map as sent.
       const validated = validateDraft(result.data, {
         changedFiles: new Map<string, LineRange[] | null>(briefFiles.map((f) => [f.path, f.ranges])),
-        blastFiles: blastFilesOf(blast === null ? null : sentBlast(blast, fit.trims.callers)),
+        blastFiles: blastFilesOf(blast),
       });
       dropped = validated.dropped;
       brief = capBrief(result.data.summary, validated.risks, validated.review_focus);
@@ -391,12 +355,4 @@ export class BriefService {
       return { issue: null, miss: 'fetch_failed' };
     }
   }
-}
-
-function blastFilesOf(blast: BlastRadius | null): Set<string> {
-  const files = new Set<string>();
-  if (blast === null) return files;
-  for (const s of blast.changed_symbols) files.add(s.file);
-  for (const d of blast.downstream) for (const c of d.callers) files.add(c.file);
-  return files;
 }
