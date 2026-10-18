@@ -15,8 +15,8 @@ the model is actually sent is in its "Review context" section; neither is repeat
 | Kind | Members | Notes |
 |---|---|---|
 | Built at construction | `config` `db` `secrets` `auth` `jobs` `runBus` | `runBus` is the process-wide singleton from `src/platform/sse.ts` |
-| Lazy getters | `git` `agentsRepo` `reviewRepo` `intent` `projectContext` `codeIndex` `repoIntel` `depgraph` `tokenizer` `httpFetch` `cloneFiles` `priceBook` | created on first use, then reused |
-| Plain getter | `repoIntelLimits` | returns `{ callersPerSymbol }`, the facade's `MAX_CALLERS_PER_SYMBOL`; nothing is created |
+| Lazy getters | `git` `agentsRepo` `reviewRepo` `intent` `projectContext` `blast` `codeIndex` `repoIntel` `depgraph` `tokenizer` `httpFetch` `cloneFiles` `priceBook` | created on first use, then reused |
+| Plain getter | `repoIntelLimits` | returns `{ callersPerSymbol }`, the facade's `MAX_CALLERS_PER_SYMBOL`; nothing is created. No code reads it any more (see below) |
 | Async, need a secret | `github()` · `llm(provider)` · `embedder()` | cached after the first call; a missing key throws `ConfigError` **at resolve time**, which is why the server boots with no keys at all |
 
 - `llm('openrouter')` is `reviewer-core`'s `OpenRouterProvider`, with the container's `priceBook`
@@ -27,14 +27,19 @@ the model is actually sent is in its "Review context" section; neither is repeat
   never imports another module, so the container is where the two meet.
 - `projectContext` is the `ProjectContextService` (`modules/project-context/service.ts`), built the
   same way as `intent`: from a repository, a unit of work, the `cloneFiles` and `tokenizer` getters
-  and the configured search roots. The `reviews` run calls its `forRun`, and the module's own routes
-  call the rest, so the container is where the two meet. `cloneFiles` is the only file-system access
+  and the configured search roots. The `reviews` run calls its `forRun`, the `brief` module calls its
+  `forWorkspace`, and the module's own routes call the rest, so the container is where they meet. `cloneFiles` is the only file-system access
   of the feature (`FsCloneFiles` over `config.cloneDir`); a test replaces it with `MockCloneFiles`
   through `ContainerOverrides.cloneFiles`, and `projectContext` then reads through the mock.
-- `repoIntelLimits` exists so the `blast` module can state the facade's per-symbol caller cap in its
-  response (`caller_limit`) without importing `modules/repo-intel/constants.ts`. The container is the
-  composition root and already imports that module; the `blast` module reaches the number through
-  this getter and the facade through `repoIntel`, both from its `routes.ts`.
+- `blast` is the `BlastService` (`modules/blast/service.ts`), built here from a `BlastRepository`, the
+  `repoIntel` facade as its `BlastSource`, `config.repoIntelEnabled` and the facade's per-symbol caller
+  cap (`MAX_CALLERS_PER_SYMBOL`, imported here because the container is the composition root and a
+  module may not import `modules/repo-intel/constants.ts`). The `blast` module's route and the `brief`
+  module both use it, so it is built here and not in either module. It reads `this.repoIntel`, so a
+  test's `repoIntel` override applies. The cap reaches the service as `callerLimit` and the response
+  as `caller_limit`.
+- `repoIntelLimits` returns the same constant, but no code reads the getter: `container.blast` uses
+  `MAX_CALLERS_PER_SYMBOL` directly.
 - `embedder()` is gated by config: when embeddings are disabled it throws before creating a
   client, so the app makes no OpenAI requests.
 - After a key changes in Settings, `invalidateSecretCaches()` drops the cached LLM, GitHub and
@@ -210,6 +215,7 @@ Consequences worth knowing when changing the engine:
 |---|---|
 | `reviews` | `agent_runs` · `run_traces` · `reviews` · `findings` · `pull_requests` (review freshness only) |
 | `intent` | `pr_intent` (reads `pull_requests` · `repos` · `pr_files` and the `feature_models` key of `settings`) |
+| `brief` | `pr_brief` (reads `pull_requests` · `repos` · `pr_files` · `reviews` · `agent_runs` · `findings` and the `feature_models` key of `settings`; reaches intent, the blast map and the project documents through the container, and GitHub for one linked issue) |
 | `project-context` | `agent_context_docs` · `skill_context_docs` (paths and order only; reads `repos` · `agents` · `skills` · `agent_skills`, and the clone's files through the `cloneFiles` adapter) |
 | `smart-diff` | nothing — read-only (reads `pull_requests` · `pr_files` · `reviews` · `findings`; no GitHub, no model call) |
 | `blast` | nothing — read-only (reads `pull_requests` · `pr_files` itself, and the index tables through one `getBlastRadius` and one `getIndexState` call on the `repo-intel` facade; no GitHub, no model call) |
@@ -220,7 +226,7 @@ Consequences worth knowing when changing the engine:
 | `agents` | `agents` · `agent_versions` · `agent_skills` |
 | `settings` | `settings` |
 
-Three read models sit on top:
+These read models sit on top:
 
 - **Per run**, the timeline reads the summary columns on `agent_runs` and never joins `findings`.
 - **Per PR**, `GET /repos/:id/pulls` computes on read: the latest review's `score`; the **total**
@@ -241,3 +247,7 @@ Three read models sit on top:
   the index is a separate call (`POST /repos/:id/resync`). The route, the mark's resolution order and the
   contract are in [`../README.md`](../README.md) → "API map"; the facade's side is in
   [`../src/modules/repo-intel/README.md`](../src/modules/repo-intel/README.md).
+- **Per PR brief**, `GET /pulls/:id/brief` reads one stored `pr_brief` row and computes `stale` on read
+  (the stored head SHA against the PR's current one). Unlike the other read models it holds a model's answer,
+  written only by `POST /pulls/:id/brief`; a read never calls a model or GitHub. How a brief is built
+  is in [`../src/modules/brief/README.md`](../src/modules/brief/README.md).

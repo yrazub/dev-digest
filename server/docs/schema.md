@@ -15,7 +15,7 @@ Drizzle over Postgres with pgvector. One file per domain in
 | `repos.ts` | `repos` | starter — add repository |
 | `pulls.ts` | `pull_requests` `pr_files` `pr_commits` | starter — import PRs |
 | `agents.ts` | `agents` | starter — two built-in reviewers, plus your own |
-| `reviews.ts` | `reviews` `findings` · `pr_intent` · `pr_brief` | starter · L03 (`pr_intent`, and the `findings.scope` tag) · L05 |
+| `reviews.ts` | `reviews` `findings` · `pr_intent` · `pr_brief` | starter · L03 (`pr_intent`, and the `findings.scope` tag) · L05 (`pr_brief`) |
 | `runs.ts` | `agent_runs` `run_traces` `multi_agent_runs` | starter · L07 |
 | `repo-intel.ts` | `repo_index_state` | starter — the **Indexed** badge |
 | `skills.ts` | `skills` | L02 |
@@ -38,6 +38,33 @@ stores `risk_areas`, `confidence`, `sources`, the two flags `missing_context` an
 the database does not enforce, so the repository parses them on every read; a row that fails the
 parse reads as "not derived" and the next derivation replaces it. `findings.scope` is a nullable
 text column (`in_scope` / `out_of_scope`) that persists the reviewer's tag.
+
+### `pr_brief` (L05)
+
+`pr_brief` holds one PR Brief per pull request: `pr_id` is the primary key and a foreign key to
+`pull_requests` that cascades, and `json` is a single `jsonb` column. Only the `brief` module writes
+it, and only `POST /pulls/:id/brief` does: generating again replaces the row (an upsert on `pr_id`).
+
+```mermaid
+erDiagram
+  pull_requests ||--o| pr_brief : "has at most one"
+  pr_brief {
+    uuid pr_id PK "FK pull_requests.id, on delete cascade"
+    jsonb json "PrBriefRecord without stale"
+  }
+```
+
+`json` is the contract `PrBriefRecord` without `stale`
+([`review-api.ts`](../src/vendor/shared/contracts/review-api.ts)): the brief (`summary`, `intent`,
+`blast`, `risks`, `review_focus`, `history`) and how it was made (`head_sha`, `generated_at`, the
+provider and model, tokens and cost, the prompt's token count and budget, `inputs` and `dropped`).
+`stale` is computed on read from `head_sha` and is never stored.
+
+The database enforces none of that shape, so the repository parses `json` on every read; a row that
+fails the parse reads as "no brief" and the next generation replaces it. The row keeps a derived
+`intent` and `blast` as they were sent to the model, not references to `pr_intent` or the index, and
+none of the description, issue or document text the model was given. The seed inserts a row for PR #482 once and never overwrites a stored one; the module
+is explained in [`../src/modules/brief/README.md`](../src/modules/brief/README.md).
 
 ### `agent_context_docs` and `skill_context_docs` (L05)
 

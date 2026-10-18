@@ -43,7 +43,10 @@ surface (list, diff, findings, run controls) and the agent editor.
 **server-unit** — the DB-free majority: adapters, prompt assembly, grounding,
 repo-intel ranking & indexing, pricing, route smoke, the clone-file adapter over a temporary
 directory, and the global rate limit (`app-rate-limit.test.ts` builds the app with
-`NODE_ENV=production`, because the rate-limit plugin is not registered under `test`). The `typecheck` job also
+`NODE_ENV=production`, because the rate-limit plugin is not registered under `test`;
+`brief-rate-limit.test.ts` does the same for the PR Brief's per-route limit). The PR Brief's pure
+rules, prompt and service run here with fake ports, and `contracts-sync.test.ts` fails when the
+client's copies of `brief.ts` and `review-api.ts` drift from the server's. The `typecheck` job also
 runs on Windows, which doubles as the `@ast-grep/napi` prebuilt gate (install
 fails there if the win32 prebuilt is missing).
 
@@ -51,7 +54,8 @@ fails there if the win32 prebuilt is missing).
 (pgvector) via testcontainers, builds the Fastify app, migrates + seeds, and
 drives routes end-to-end: reviews + run lifecycle (incl. grounding), agents CRUD,
 repo-intel symbol clamping, pulls comments, settings models, the Project Context routes and a
-review run that inserts attached documents (clone files through `MockCloneFiles`). They self-skip when
+review run that inserts attached documents (clone files through `MockCloneFiles`), the PR Brief
+routes and its seeded row (`MockLLMProvider`, no real model). They self-skip when
 Docker is unavailable.
 
 `test/mcp-stdio.it.test.ts` is the one file here that drives another package. It listens on a

@@ -34,7 +34,7 @@ flowchart TD
   SETTINGS["/settings/:section<br/>API keys · models"]
 
   PULLS -->|"GET /repos/:id/pulls · /repos/:id/index-state"| API
-  PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments · /pulls/:id/intent · /pulls/:id/smart-diff · /pulls/:id/blast<br/>POST /pulls/:id/review · /pulls/:id/intent · /repos/:id/resync · /findings/:id/(accept|dismiss)"| API
+  PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments · /pulls/:id/intent · /pulls/:id/brief · /pulls/:id/smart-diff · /pulls/:id/blast<br/>POST /pulls/:id/review · /pulls/:id/intent · /pulls/:id/brief · /repos/:id/resync · /findings/:id/(accept|dismiss)"| API
   AGENTS -->|"/agents · /agents/:id · /agents/:id/skills · /agents/:id/context"| API
   SKILLS -->|"/skills · /skills/:id/versions · /skills/:id/context · /skills/import/(file|url)"| API
   CTX -->|"GET /repos/:id/context · /repos/:id/context/file?path=<br/>POST /repos/:id/resync"| API
@@ -44,19 +44,45 @@ flowchart TD
 
 The PR page (`/repos/:repoId/pulls/:number`) also shows the PR's derived intent (L03):
 
-- **`IntentCard`** sits at the top of the **Overview** and **Agent runs** tabs, so it precedes
-  the review results. It shows the summary, the in-scope and out-of-scope lists, risk areas, a
-  confidence badge, the sources it was derived from (an unreadable one is marked *not read*,
-  with a warning when a linked issue or document could not be read), and a re-run button. With
-  no stored intent it shows **Derive intent**. Model-derived text is rendered as plain text
-  nodes only.
+- **`IntentCard`** sits at the top of the **Agent runs** tab, so it precedes the review results, and
+  in the left column of the PR Brief section on the **Overview** tab (below). It shows the summary,
+  the in-scope and out-of-scope lists, risk areas, a confidence badge, the sources it was derived from
+  (an unreadable one is marked *not read*, with a warning when a linked issue or document could not
+  be read), and a re-run button. With no stored intent it shows **Derive intent**. On Overview the
+  card hides its own risk-area tags, because the brief's *Risk areas* take their place; on Agent runs
+  the tags stay. Model-derived text is rendered as plain text nodes only.
 - **`FindingCard`** shows an *Outside PR scope* badge on a finding the reviewer tagged
   `out_of_scope` (with the filter on, only a serious one survives).
 - **The run trace drawer** adds a badge with the number of out-of-scope findings filtered.
 
-The **Overview** tab also shows the **Blast radius** block (L04, `BlastRadiusCard`), above the
-description, for what the PR's changes can reach. It renders one answer of `GET /pulls/:id/blast`
-without regrouping or recounting it:
+The **Overview** tab opens with the **PR Brief** section (L05, `PrBriefSection`), above the PR
+description. It shows a cached, SHA-bound brief of the PR from `GET /pulls/:id/brief`; the page never
+asks a model on load. The section holds, top to bottom:
+
+- **Summary panel.** The model's summary, then one muted line on what the brief was built without
+  (`Generated without: …`) or with cut-down (`trimmed: …`), each input named with its reason and, when a
+  trim left something out, how many. When the PR has a newer head commit the panel adds *Generated for
+  <short SHA>; the PR has newer commits* with a **Regenerate brief** button.
+- **Intent | Blast radius grid.** The `IntentCard` on the left and the `BlastRadiusCard` on the right;
+  below 900 px they stack with Intent first. Once a brief is shown, its **Risk areas** sit at the foot
+  of the Intent card, whatever state the card is in: one entry per risk, with its kind icon coloured by severity,
+  its title and its file references as plain mono text. With none, *No notable risks flagged.*
+- **Review focus — read these first.** A list of buttons in the model's order, each showing the file
+  (shortened in the middle when long), the line and the reason. Clicking one opens Files changed at that
+  file and line (below).
+- **Footer.** The model, the cost, when it was generated and the input tokens against the budget; values
+  the record does not hold are left out. A line *Dropped: …* appears when the server removed risks or
+  focus items that named files outside the PR and its blast radius.
+- **States.** While loading, only the grid. With no stored brief, an empty card with **Generate brief**.
+  A failed load shows *The brief could not be loaded.* with *Try again* and no Generate button. The
+  header's **Regenerate brief** icon button (and **Generate brief**) start the model call; while it runs
+  the buttons read *Generating…* and the cached brief stays on screen. A failed generation adds a message
+  under the header, with a link to Settings when the brief's model has no API key. All model text is
+  rendered as plain text nodes.
+
+The **Blast radius** block (L04, `BlastRadiusCard`) sits in the right column of that grid, for what the
+PR's changes can reach. It renders one answer of `GET /pulls/:id/blast` without regrouping or
+recounting it:
 
 - **Summary row.** Four numbers — changed symbols, callers, endpoints, cron jobs — taken from the
   response's `totals`.
@@ -97,6 +123,13 @@ The **Files changed** tab (`?tab=diff`, `DiffTab`) is the Smart Diff view (L03):
   URL (see [`docs/ui-architecture.md`](docs/ui-architecture.md) → "URL state"). If the grouping
   request fails, the tab shows the flat list with a muted line saying so. A PR with no review shows
   a muted *No review has run yet* line.
+- **Jump from the PR Brief.** `?tab=diff&file=<path>&line=<n>` (what a Review focus click opens, see
+  [`docs/ui-architecture.md`](docs/ui-architecture.md) → "URL state") opens the role group and the file
+  card that hold `file`, even when they start collapsed, and scrolls the line into view inside the
+  page. The card gets an accent border, and the line a short highlight pulse. A line that is not in the
+  patch, or a file with no patch, scrolls to the card's header with no line marked. A `file` that is not
+  one of the PR's files does nothing, and shows no message. The jump happens once per navigation, in
+  Smart order and in Original order, and a manual tab change drops `file` and `line`.
 - **Fresh after a run.** The marks refresh when a run ends, on any tab, and after Accept, Dismiss
   and deleting a review or a run ([`docs/data-flow.md`](docs/data-flow.md)).
 

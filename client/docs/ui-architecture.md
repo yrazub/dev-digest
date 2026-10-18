@@ -44,7 +44,8 @@ time. Consequences worth knowing:
 ## URL state
 
 Anything that should survive a reload or a shared link lives in the URL, set with
-`router.replace` so it doesn't pile up history entries:
+`router.replace` so it doesn't pile up history entries (the one exception is the Review focus jump,
+below):
 
 - PR detail tabs: `?tab=overview | findings | diff`. The `findings` tab is labelled
   **"Agent runs"** in the UI and implemented by `FindingsTab`; there is no separate findings
@@ -53,6 +54,17 @@ Anything that should survive a reload or a shared link lives in the URL, set wit
   with no role headers. Smart order is the default and has no parameter: choosing it deletes
   `order`. `DiffTab` reads it with `useSearchParams()` and writes it with `router.replace`,
   keeping every other parameter (`tab=diff` stays).
+- The Review focus jump: `?tab=diff&file=<path>&line=<n>`. A click on a Review focus row in the PR
+  Brief section calls `openFocus` from `usePrDetailNav`
+  (`app/repos/[repoId]/pulls/[number]/_lib/use-pr-detail-nav.ts`), which **pushes** the URL, so Back
+  returns to the Overview the click came from, and keeps every other parameter. `DiffTab` reads `file`
+  and `line` with `useSearchParams()`, resolves them against the PR's own files (`jumpTarget`: an
+  unknown path means no jump, a `line` that is not a whole number of 1 or more means the file alone)
+  and performs the jump **once per navigation**: it opens the role group and the file card that hold
+  the target, scrolls the line (or the card header) into view inside `<main>`, and pulses the line
+  briefly. The marker stays after the pulse: the target card keeps its accent border and the line
+  keeps `data-jump-target="line"` (the card carries `data-jump-target="file"`), and `file` and `line`
+  stay in the URL. A manual tab change (`setTab`) removes `file` and `line`.
 - The Blast radius view on the Overview tab: `?blast=graph` shows the Graph view. The Tree view is the
   default and has no parameter: choosing it deletes `blast`, and any other value reads as the Tree.
   `BlastRadiusCard` reads it with `useSearchParams()` and writes it with `router.replace`, keeping every
@@ -84,12 +96,19 @@ hooks. `safe-markdown` renders repository markdown, which is untrusted. Use it, 
 text, and it renders only `http:` and `https:` links as anchors (new tab, `rel="noopener noreferrer"`),
 where the vendored component also keeps `mailto:` and relative links.
 
+A hook or helper that only one component or one route uses sits next to its consumer, not in
+`src/lib/`: `useMediaQuery` is `PrBriefSection/use-media-query.ts`, and `usePrDetailNav` is in the PR
+detail route's private `_lib/` folder (`app/repos/[repoId]/pulls/[number]/_lib/`).
+
 Shared components never import from `src/app/`. `diff-viewer` shows findings without knowing
 where the finding card lives: the Files changed route passes a `DiffFindingApi`
 (`src/components/diff-viewer/findings.ts`) whose `renderFinding` returns its own `InlineFinding`,
 and without that prop the viewer renders as it did before (the skills route uses it that way). The
 viewer exports `isCounted` and `mostSevere` so the route's group marks count a finding the same
-way the file dot and the line tag do.
+way the file dot and the line tag do. The jump from the PR Brief works the same way: `DiffTab` owns
+the URL and the "already jumped" state and passes the viewer an optional `target` (a `DiffJumpTarget`)
+and an `onJumped` callback; the matching file card opens, scrolls and calls `onJumped` once. Without
+them the viewer renders as before.
 
 A rule two routes share, and that has no UI, goes to a pure file in `src/lib/` rather than into either
 route's `_components/`: `resyncSettled` (`src/lib/repo-intel-resync.ts`) decides when a resync has
@@ -112,7 +131,9 @@ Both are path aliases in `tsconfig.json`, not installed dependencies, and both a
 - **`@devdigest/shared`** (`src/vendor/shared`) — the Zod contracts, hand-copied from the
   authored package in `server/src/vendor/shared`. The copies are not byte-identical everywhere
   (some files are deliberately trimmed), so copy the lines you changed rather than whole files,
-  then run `pnpm typecheck` here.
+  then run `pnpm typecheck` here. The exception is the PR Brief contracts: `contracts/brief.ts` and
+  `contracts/review-api.ts` are kept byte-identical to the server's files, and the server's hermetic
+  `test/contracts-sync.test.ts` fails when they differ, so re-copy those two files whole.
 
 ## Layout: scrolling and floating UI
 
