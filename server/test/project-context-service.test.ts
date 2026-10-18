@@ -4,7 +4,8 @@
  * filesystem, no network.
  * Spec: `server/specs/L05-project-context.md` (R-SRV-1, R-SRV-5, R-SRV-8, R-SRV-9, R-SRV-11,
  * R-SRV-13–R-SRV-15, R-SRV-17, R-SRV-35–R-SRV-37; `forRun`: R-SRV-22–R-SRV-27); plan:
- * `specs/plans/L05-project-context.md` (phases 5 and 6).
+ * `specs/plans/L05-project-context.md` (phases 5 and 6). `forWorkspace`: `server/specs/L05-pr-brief.md`
+ * R-SRV-24 (AC-66); plan: `specs/plans/L05-pr-brief.md` (phase 2).
  */
 import { describe, it, expect } from 'vitest';
 import { MockCloneFiles, type MockCloneFilesOptions } from '../src/adapters/mocks.js';
@@ -22,6 +23,7 @@ import type {
   ProjectFiles,
   RunAttachments,
   UsedByCounts,
+  WorkspaceAgentAttachments,
 } from '../src/modules/project-context/ports.js';
 import { ProjectContextService } from '../src/modules/project-context/service.js';
 
@@ -55,6 +57,9 @@ class FakeStore implements ProjectContextStore {
   usedByCalls: Array<{ workspaceId: string; path: string }> = [];
   /** The enabled, linked skills of the run, in link order (what `runAttachments` returns). */
   runSkills: RunAttachments['skills'] = [];
+  /** What `workspaceAttachments` returns: the enabled agents of the workspace, as stored. */
+  workspaceAgents: WorkspaceAgentAttachments[] = [];
+  workspaceCalls: string[] = [];
   writes = 0;
 
   constructor(private repo: ContextRepo | undefined) {}
@@ -88,6 +93,14 @@ class FakeStore implements ProjectContextStore {
   }
   async runAttachments(): Promise<RunAttachments> {
     return { agentPaths: [...this.agent], skills: this.runSkills.map((s) => ({ ...s, paths: [...s.paths] })) };
+  }
+  async workspaceAttachments(workspaceId: string): Promise<WorkspaceAgentAttachments[]> {
+    this.workspaceCalls.push(workspaceId);
+    return this.workspaceAgents.map((a) => ({
+      agentName: a.agentName,
+      agentPaths: [...a.agentPaths],
+      skills: a.skills.map((s) => ({ ...s, paths: [...s.paths] })),
+    }));
   }
 }
 
@@ -666,5 +679,154 @@ describe('ProjectContextService.forRun', () => {
       ['docs/b.md', 'skill', 'sk', 'over_cap'],
       ['docs/c.md', 'skill', 'sk', 'not_found'],
     ]);
+  });
+});
+
+// ------------------------------------------------------------------ forWorkspace
+
+describe('ProjectContextService.forWorkspace (R-SRV-24, AC-66)', () => {
+  const REPO = { owner: 'acme', name: 'api', clonePath: '/clones/acme/api' };
+  const forWorkspace = (service: ProjectContextService, repo = REPO) =>
+    service.forWorkspace({ workspaceId: WS, repo });
+
+  it('reads the enabled agents in name order, whatever order the store returns them in', async () => {
+    const { service, store, mock } = build({
+      files: { 'docs/a.md': 'alpha', 'docs/b.md': 'bravo', 'docs/c.md': 'charlie' },
+    });
+    store.workspaceAgents = [
+      { agentName: 'zeta', agentPaths: ['docs/c.md'], skills: [] },
+      { agentName: 'alpha', agentPaths: ['docs/b.md', 'docs/a.md'], skills: [] },
+    ];
+    const out = await forWorkspace(service);
+
+    expect(out.documents).toEqual([
+      { path: 'docs/b.md', text: 'bravo' },
+      { path: 'docs/a.md', text: 'alpha' },
+      { path: 'docs/c.md', text: 'charlie' },
+    ]);
+    expect(out).toMatchObject({ attached: 3, notCloned: false, skipped: [] });
+    expect(store.workspaceCalls).toEqual([WS]);
+    expect(mock.reads).toEqual(['docs/b.md', 'docs/a.md', 'docs/c.md']);
+  });
+
+  it('keeps a path attached to both agents once, at its first position, and reads it once', async () => {
+    const { service, store, mock } = build({
+      files: { 'docs/a.md': 'a', 'docs/b.md': 'b', 'docs/c.md': 'c' },
+    });
+    store.workspaceAgents = [
+      { agentName: 'second', agentPaths: ['docs/c.md', 'docs/a.md'], skills: [] },
+      { agentName: 'first', agentPaths: ['docs/a.md', 'docs/b.md'], skills: [] },
+    ];
+    const out = await forWorkspace(service);
+
+    expect(out.documents.map((d) => d.path)).toEqual(['docs/a.md', 'docs/b.md', 'docs/c.md']);
+    expect(out.attached).toBe(3);
+    expect(mock.reads).toEqual(['docs/a.md', 'docs/b.md', 'docs/c.md']);
+  });
+
+  it("puts a skill's paths after its own agent's paths, before the next agent", async () => {
+    const { service, store } = build({
+      files: {
+        'docs/own.md': 'own',
+        'docs/skill.md': 'skill',
+        'docs/other.md': 'other',
+      },
+    });
+    store.workspaceAgents = [
+      { agentName: 'b-agent', agentPaths: ['docs/other.md'], skills: [] },
+      { agentName: 'a-agent', agentPaths: ['docs/own.md'], skills: [{ name: 'sk', paths: ['docs/skill.md'] }] },
+    ];
+    const out = await forWorkspace(service);
+
+    expect(out.documents.map((d) => d.path)).toEqual(['docs/own.md', 'docs/skill.md', 'docs/other.md']);
+  });
+
+  it('skips every path as not_cloned, with no port call, when the repository has no clone path', async () => {
+    const { service, store, mock } = build({ files: { 'docs/a.md': 'x', 'docs/b.md': 'y' } });
+    store.workspaceAgents = [
+      { agentName: 'a', agentPaths: ['docs/a.md'], skills: [{ name: 'sk', paths: ['docs/b.md'] }] },
+    ];
+    const out = await forWorkspace(service, { ...REPO, clonePath: null });
+
+    expect(out).toEqual({
+      attached: 2,
+      notCloned: true,
+      documents: [],
+      skipped: [
+        { path: 'docs/a.md', reason: 'not_cloned' },
+        { path: 'docs/b.md', reason: 'not_cloned' },
+      ],
+    });
+    expect(mock.reads).toEqual([]);
+  });
+
+  it('skips a missing file as not_found and still loads the rest', async () => {
+    const { service, store } = build({ files: { 'docs/a.md': 'alpha', 'docs/c.md': 'charlie' } });
+    store.workspaceAgents = [{ agentName: 'a', agentPaths: ['docs/a.md', 'docs/gone.md', 'docs/c.md'], skills: [] }];
+    const out = await forWorkspace(service);
+
+    expect(out.skipped).toEqual([{ path: 'docs/gone.md', reason: 'not_found' }]);
+    expect(out.documents.map((d) => d.path)).toEqual(['docs/a.md', 'docs/c.md']);
+    expect(out).toMatchObject({ attached: 3, notCloned: false });
+  });
+
+  it('uses the per-document rules of forRun: byte limit, unreadable, too_large, empty, and a missing clone', async () => {
+    const seen: number[] = [];
+    const filesPort: ProjectFiles = {
+      list: async () => ({ kind: 'entries', entries: [] }),
+      read: async (_repo, path, opts) => {
+        seen.push(opts.maxBytes);
+        if (path === 'docs/a-bad.md') return { kind: 'miss', miss: 'unreadable' };
+        if (path === 'docs/b-big.md') return { kind: 'miss', miss: 'too_large' };
+        if (path === 'docs/c-blank.md') return { kind: 'text', text: ' \n\t ' };
+        if (path === 'docs/d-ok.md') return { kind: 'text', text: 'fine' };
+        return { kind: 'not_cloned' };
+      },
+    };
+    const { service, store } = build({ filesPort });
+    store.workspaceAgents = [
+      {
+        agentName: 'a',
+        agentPaths: ['docs/a-bad.md', 'docs/b-big.md', 'docs/c-blank.md', 'docs/d-ok.md', 'docs/e-gone.md', 'docs/f.md'],
+        skills: [],
+      },
+    ];
+    const out = await forWorkspace(service);
+
+    expect(out.skipped).toEqual([
+      { path: 'docs/a-bad.md', reason: 'unreadable' },
+      { path: 'docs/b-big.md', reason: 'too_large' },
+      { path: 'docs/c-blank.md', reason: 'empty' },
+      { path: 'docs/e-gone.md', reason: 'not_cloned' },
+      { path: 'docs/f.md', reason: 'not_cloned' },
+    ]);
+    expect(out.documents).toEqual([{ path: 'docs/d-ok.md', text: 'fine' }]);
+    expect(out.notCloned).toBe(true);
+    // the port was asked for each path up to the first not_cloned, every time with the byte limit
+    expect(seen).toEqual(Array(5).fill(MAX_CONTEXT_DOC_BYTES));
+  });
+
+  it('answers attached 0, nothing read, when no enabled agent attaches anything', async () => {
+    const { service, store, mock } = build({ files: { 'docs/a.md': 'x' } });
+    store.workspaceAgents = [{ agentName: 'idle', agentPaths: [], skills: [{ name: 'sk', paths: [] }] }];
+
+    expect(await forWorkspace(service)).toEqual({ attached: 0, notCloned: false, documents: [], skipped: [] });
+    expect(mock.reads).toEqual([]);
+  });
+
+  it('applies no run cap: every document is returned however many tokens they add up to', async () => {
+    const { service, store } = build({
+      files: {
+        'docs/a.md': words(10_000),
+        'docs/b.md': words(7_000),
+        'docs/c.md': 'tiny',
+      },
+    });
+    store.workspaceAgents = [{ agentName: 'a', agentPaths: ['docs/a.md', 'docs/b.md', 'docs/c.md'], skills: [] }];
+    const out = await forWorkspace(service);
+
+    // 17,004 words: past CONTEXT_RUN_CAP_TOKENS (16,000), which forRun would cut at the second document
+    expect(out.documents.map((d) => d.path)).toEqual(['docs/a.md', 'docs/b.md', 'docs/c.md']);
+    expect(out.skipped).toEqual([]);
   });
 });

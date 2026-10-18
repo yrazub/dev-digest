@@ -62,9 +62,20 @@ export interface ProjectContextStore {
    * linked to the agent in `agent_skills.order` with its paths in order (R-SRV-22).
    */
   runAttachments(agentId: string): Promise<RunAttachments>;
+  /**
+   * What the enabled agents of a workspace attach (R-SRV-24): per agent its paths and its
+   * enabled linked skills with their paths, each in stored order.
+   */
+  workspaceAttachments(workspaceId: string): Promise<WorkspaceAgentAttachments[]>;
 }
 
 export interface RunAttachments {
+  agentPaths: string[];
+  skills: { name: string; paths: string[] }[];
+}
+
+export interface WorkspaceAgentAttachments {
+  agentName: string;
   agentPaths: string[];
   skills: { name: string; paths: string[] }[];
 }

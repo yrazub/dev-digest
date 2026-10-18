@@ -7,6 +7,7 @@ import type {
   ProjectContextUnitOfWork,
   RunAttachments,
   UsedByCounts,
+  WorkspaceAgentAttachments,
 } from './ports.js';
 
 /**
@@ -113,6 +114,22 @@ export class ProjectContextRepository implements ProjectContextStore {
         paths: rows.filter((r) => r.skillId === s.id).map((r) => r.path),
       })),
     };
+  }
+
+  /** R-SRV-24: the enabled agents of the workspace, each with what `runAttachments` returns. */
+  async workspaceAttachments(workspaceId: string): Promise<WorkspaceAgentAttachments[]> {
+    const agents = await this.db
+      .select({ id: t.agents.id, name: t.agents.name })
+      .from(t.agents)
+      .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.enabled, true)))
+      .orderBy(asc(t.agents.name), asc(t.agents.id));
+
+    const out: WorkspaceAgentAttachments[] = [];
+    for (const agent of agents) {
+      const { agentPaths, skills } = await this.runAttachments(agent.id);
+      out.push({ agentName: agent.name, agentPaths, skills });
+    }
+    return out;
   }
 
   /** R-SRV-15: agents directly, other agents through an enabled skill, skills. */

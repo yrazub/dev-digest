@@ -2,7 +2,7 @@
  * Pure Project Context rules (`modules/project-context/domain.ts`) and the search-root
  * setting (`platform/config.ts`). No doubles: values in, values out.
  * Spec: `server/specs/L05-project-context.md` (R-SRV-2, R-SRV-6, R-SRV-7, R-SRV-10,
- * R-SRV-22, R-SRV-27).
+ * R-SRV-22, R-SRV-27; `mergeWorkspace`: `server/specs/L05-pr-brief.md` R-SRV-24).
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -15,6 +15,7 @@ import {
   isDocumentPath,
   kindOf,
   mergeEffective,
+  mergeWorkspace,
   selectDocuments,
 } from '../src/modules/project-context/domain.js';
 import { MAX_CONTEXT_DOCS } from '../src/modules/project-context/constants.js';
@@ -272,5 +273,58 @@ describe('applyRunCap (R-SRV-27, AC-73)', () => {
     const { inserted, overCap } = applyRunCap(input, 16_000);
     expect(inserted).toEqual(input);
     expect(overCap).toEqual([]);
+  });
+});
+
+describe('mergeWorkspace (R-SRV-24, AC-66)', () => {
+  const agent = (agentName: string, agentPaths: string[], skills: { name: string; paths: string[] }[] = []) => ({
+    agentName,
+    agentPaths,
+    skills,
+  });
+
+  it('orders the agents by name in code-unit order, whatever order they come in', () => {
+    const merged = mergeWorkspace([
+      agent('beta', ['docs/beta.md']),
+      agent('Zulu', ['docs/zulu.md']),
+      agent('alpha', ['docs/alpha.md']),
+    ]);
+    // code-unit order: an upper-case name sorts before every lower-case one
+    expect(merged).toEqual(['docs/zulu.md', 'docs/alpha.md', 'docs/beta.md']);
+  });
+
+  it('puts each agent paths first, then its skills in the given order, before the next agent', () => {
+    const merged = mergeWorkspace([
+      agent('b', ['docs/b.md']),
+      agent('a', ['docs/a2.md', 'docs/a1.md'], [
+        { name: 's1', paths: ['docs/s1.md'] },
+        { name: 's2', paths: ['docs/s2.md'] },
+      ]),
+    ]);
+    expect(merged).toEqual(['docs/a2.md', 'docs/a1.md', 'docs/s1.md', 'docs/s2.md', 'docs/b.md']);
+  });
+
+  it('keeps a path once, at its first position across agents and skills', () => {
+    const merged = mergeWorkspace([
+      agent('b', ['docs/shared.md', 'docs/b.md']),
+      agent('a', ['docs/a.md'], [{ name: 's', paths: ['docs/shared.md', 'docs/s.md', 'docs/a.md'] }]),
+    ]);
+    expect(merged).toEqual(['docs/a.md', 'docs/shared.md', 'docs/s.md', 'docs/b.md']);
+  });
+
+  it('answers an empty list for no agents and for agents that attach nothing', () => {
+    expect(mergeWorkspace([])).toEqual([]);
+    expect(mergeWorkspace([agent('a', []), agent('b', [], [{ name: 's', paths: [] }])])).toEqual([]);
+  });
+
+  it('does not change its input', () => {
+    const input = [agent('b', ['docs/b.md']), agent('a', ['docs/a.md'])];
+    mergeWorkspace(input);
+    expect(input.map((a) => a.agentName)).toEqual(['b', 'a']);
+  });
+
+  it('keeps the incoming order for agents that share a name', () => {
+    const merged = mergeWorkspace([agent('same', ['docs/one.md']), agent('same', ['docs/two.md'])]);
+    expect(merged).toEqual(['docs/one.md', 'docs/two.md']);
   });
 });
