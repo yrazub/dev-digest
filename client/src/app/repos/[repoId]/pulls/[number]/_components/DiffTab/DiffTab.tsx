@@ -52,13 +52,15 @@ export function DiffTab({ prId, pr, repoFullName, canComment }: DiffTabProps) {
   const lineParam = search.get("line");
   const found = React.useMemo(() => jumpTarget(pr.files, file, lineParam), [pr.files, file, lineParam]);
   const jumpKey = found ? `${found.path}:${found.line ?? ""}` : null;
-  const jumpedKey = React.useRef<string | null>(null);
+  // State, not derived: it records the navigation whose scroll the target card has already
+  // performed (in its effect), a fact no prop, state or context holds. Being state, setting it
+  // re-renders every child with `pending: false`, so a remounted group does not scroll again.
+  const [jumpedKey, setJumpedKey] = React.useState<string | null>(null);
   const handleJumped = React.useCallback(() => {
-    jumpedKey.current = jumpKey;
+    setJumpedKey(jumpKey);
   }, [jumpKey]);
-  // The ref holds the navigation already jumped to; it never drives a render of its own.
   const target: DiffJumpTarget | undefined = found
-    ? { ...found, pending: jumpedKey.current !== jumpKey }
+    ? { ...found, pending: jumpedKey !== jumpKey }
     : undefined;
 
   const joined = React.useMemo(

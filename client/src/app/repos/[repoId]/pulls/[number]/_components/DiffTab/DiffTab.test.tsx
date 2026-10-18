@@ -831,4 +831,27 @@ describe("DiffTab — the jump into Files changed", () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(2);
     expect(within(scrollIntoView.mock.contexts[1] as HTMLElement).getByText("const c = 4;")).toBeInTheDocument();
   });
+
+  it("does not scroll again when the group holding the target is collapsed and reopened", async () => {
+    const user = userEvent.setup();
+    jumpTo(CONFIG, 2);
+    renderTab();
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(headerAt(0)).toHaveAttribute("aria-expanded", "true");
+
+    // collapse the core group: the target file card leaves the DOM
+    await user.click(headerAt(0));
+    expect(headerAt(0)).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(CONFIG)).not.toBeInTheDocument();
+
+    // reopen it: the card mounts again, but the jump was already performed
+    await user.click(headerAt(0));
+    expect(headerAt(0)).toHaveAttribute("aria-expanded", "true");
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    // the target stays marked, without a new pulse
+    expect(markedCard()).toContainElement(screen.getByText(CONFIG));
+    const line = markedLine();
+    expect(line).not.toBeNull();
+    expect(isPulsing(line as HTMLElement)).toBe(false);
+  });
 });
