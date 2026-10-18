@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { BriefInput, PrBriefResponse } from "@devdigest/shared";
 import { ApiError } from "@/lib/api";
-import { briefViewMode, generateErrorKind, inputsLine, shortSha } from "./helpers";
+import { briefViewMode, elidePath, generateErrorKind, inputsLine, shortSha } from "./helpers";
 
 const BRIEF = { brief: { summary: "x" } } as unknown as PrBriefResponse;
 const NONE: PrBriefResponse = { brief: null };
@@ -67,5 +67,29 @@ describe("generateErrorKind", () => {
     expect(generateErrorKind(new ApiError("boom", 502, "bad_gateway"))).toBe("other");
     expect(generateErrorKind(new ApiError("bad", 400))).toBe("other");
     expect(generateErrorKind(new Error("brief_unavailable"))).toBe("other");
+  });
+});
+
+describe("elidePath", () => {
+  it("keeps a path of 56 characters whole", () => {
+    const file = "a".repeat(56);
+    expect(elidePath(file)).toBe(file);
+  });
+
+  it("cuts a path of 57 characters to first 20 + ellipsis + last 35", () => {
+    const file = `${"h".repeat(20)}${"m".repeat(2)}${"t".repeat(35)}`;
+    expect(file).toHaveLength(57);
+    expect(elidePath(file)).toBe(`${"h".repeat(20)}…${"t".repeat(35)}`);
+    expect(elidePath(file)).toHaveLength(56);
+  });
+
+  it("cuts a path of 70 characters the same way, dropping the middle", () => {
+    const file = `${"h".repeat(20)}${"m".repeat(15)}${"t".repeat(35)}`;
+    expect(file).toHaveLength(70);
+    expect(elidePath(file)).toBe(`${"h".repeat(20)}…${"t".repeat(35)}`);
+  });
+
+  it("keeps a short path whole", () => {
+    expect(elidePath("src/config.ts")).toBe("src/config.ts");
   });
 });

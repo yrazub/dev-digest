@@ -11,6 +11,7 @@ vi.mock("../PrBriefSection", () => ({
     repoId: string;
     repoFullName: string | null;
     poll: boolean;
+    onOpenFocus: (file: string, line: number) => void;
   }) => {
     sectionProps(props);
     return <section aria-label="PR Brief section" />;
@@ -25,7 +26,8 @@ afterEach(() => {
 });
 
 describe("OverviewTab", () => {
-  it("renders the PR Brief section before Description and hands it prId, headSha, repoId, repoFullName and poll", () => {
+  it("renders the PR Brief section before Description and hands it prId, headSha, repoId, repoFullName, poll and onOpenFocus", () => {
+    const onOpenFocus = vi.fn();
     render(
       <OverviewTab
         prBody="Fixes the charge flow"
@@ -34,6 +36,7 @@ describe("OverviewTab", () => {
         repoFullName="acme/api"
         headSha="head1"
         poll={true}
+        onOpenFocus={onOpenFocus}
       />,
     );
 
@@ -47,6 +50,7 @@ describe("OverviewTab", () => {
       repoId: "r1",
       repoFullName: "acme/api",
       poll: true,
+      onOpenFocus,
     });
   });
 
@@ -59,6 +63,7 @@ describe("OverviewTab", () => {
         repoFullName="acme/api"
         headSha="head1"
         poll={false}
+        onOpenFocus={vi.fn()}
       />,
     );
 

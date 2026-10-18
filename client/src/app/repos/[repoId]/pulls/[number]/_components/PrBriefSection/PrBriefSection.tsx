@@ -13,6 +13,8 @@ import { useGenerateBrief, usePrBrief } from "@/lib/hooks/brief";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { BlastRadiusCard } from "../BlastRadiusCard";
 import { IntentCard } from "../IntentCard";
+import { ReviewFocus } from "./_components/ReviewFocus";
+import { RiskAreas } from "./_components/RiskAreas";
 import { briefViewMode, generateErrorKind, inputsLine, shortSha } from "./helpers";
 import { s } from "./styles";
 
@@ -22,9 +24,18 @@ interface PrBriefSectionProps {
   repoId: string;
   repoFullName: string | null;
   poll: boolean;
+  /** Opens Files changed at a Review focus item's file and line. */
+  onOpenFocus: (file: string, line: number) => void;
 }
 
-export function PrBriefSection({ prId, headSha, repoId, repoFullName, poll }: PrBriefSectionProps) {
+export function PrBriefSection({
+  prId,
+  headSha,
+  repoId,
+  repoFullName,
+  poll,
+  onOpenFocus,
+}: PrBriefSectionProps) {
   const t = useTranslations("brief");
   const narrow = useMediaQuery("(max-width: 899px)");
   const { data, isLoading, isError, refetch } = usePrBrief(prId, headSha);
@@ -59,11 +70,21 @@ export function PrBriefSection({ prId, headSha, repoId, repoFullName, poll }: Pr
         )}
 
         <div style={s.grid(narrow)}>
-          <IntentCard prId={prId} poll={poll} hideRiskTags footer={null} />
+          <IntentCard
+            prId={prId}
+            poll={poll}
+            hideRiskTags
+            footer={brief ? <RiskAreas risks={brief.risks.risks} /> : null}
+          />
           <BlastRadiusCard prId={prId} repoId={repoId} repoFullName={repoFullName} headSha={headSha} />
         </div>
 
-        {mode === "brief" && brief && <BriefFooter brief={brief} />}
+        {mode === "brief" && brief && (
+          <>
+            <ReviewFocus items={brief.review_focus} onOpen={onOpenFocus} />
+            <BriefFooter brief={brief} />
+          </>
+        )}
       </div>
     </section>
   );

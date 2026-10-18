@@ -12,9 +12,10 @@ interface OverviewTabProps {
   repoFullName: string | null;
   headSha: string | null;
   poll: boolean;
+  onOpenFocus: (file: string, line: number) => void;
 }
 
-export function OverviewTab({ prBody, prId, repoId, repoFullName, headSha, poll }: OverviewTabProps) {
+export function OverviewTab({ prBody, prId, repoId, repoFullName, headSha, poll, onOpenFocus }: OverviewTabProps) {
   return (
     <>
       {prId && (
@@ -24,6 +25,7 @@ export function OverviewTab({ prBody, prId, repoId, repoFullName, headSha, poll 
           repoId={repoId}
           repoFullName={repoFullName}
           poll={poll}
+          onOpenFocus={onOpenFocus}
         />
       )}
       {prBody && (

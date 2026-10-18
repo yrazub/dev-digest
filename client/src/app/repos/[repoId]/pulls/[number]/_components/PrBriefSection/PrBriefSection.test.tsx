@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
-import type { BriefInput, PrBriefRecord, PrBriefResponse } from "@devdigest/shared";
+import type { BriefInput, PrBriefRecord, PrBriefResponse, ReviewFocusItem, Risk } from "@devdigest/shared";
 import { ApiError } from "@/lib/api";
 import messages from "../../../../../../../../messages/en/brief.json";
 
@@ -31,9 +31,10 @@ vi.mock("@/lib/hooks/brief", () => ({
 
 // The two cards have tests of their own; here they only record the props they got.
 vi.mock("../IntentCard", () => ({
-  IntentCard: (props: unknown) => {
+  // It renders the `footer` slot too: that is where the Risk areas block goes.
+  IntentCard: (props: { footer?: React.ReactNode }) => {
     mocks.intentProps(props);
-    return <section aria-label="Intent card" />;
+    return <section aria-label="Intent card">{props.footer}</section>;
   },
 }));
 vi.mock("../BlastRadiusCard", () => ({
@@ -43,6 +44,7 @@ vi.mock("../BlastRadiusCard", () => ({
   },
 }));
 
+import React from "react";
 import { PrBriefSection } from "./PrBriefSection";
 
 const BRIEF: PrBriefRecord = {
@@ -91,14 +93,21 @@ function stubViewport(narrow: boolean) {
   );
 }
 
-function renderSection(props: { poll?: boolean } = {}) {
+function renderSection(props: { poll?: boolean; onOpenFocus?: (file: string, line: number) => void } = {}) {
   return render(
     <NextIntlClientProvider
       locale="en"
       messages={{ brief: messages }}
       now={new Date("2026-10-18T12:00:00.000Z")}
     >
-      <PrBriefSection prId="pr1" headSha="head1" repoId="r1" repoFullName="acme/api" poll={props.poll ?? false} />
+      <PrBriefSection
+        prId="pr1"
+        headSha="head1"
+        repoId="r1"
+        repoFullName="acme/api"
+        poll={props.poll ?? false}
+        onOpenFocus={props.onOpenFocus ?? vi.fn()}
+      />
     </NextIntlClientProvider>,
   );
 }
@@ -371,5 +380,185 @@ describe("PrBriefSection", () => {
     expect(screen.getByText("The model timed out")).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(screen.getByText(BRIEF.summary)).toBeInTheDocument();
+  });
+});
+
+const risk = (overrides: Partial<Risk> = {}): Risk => ({
+  kind: "security",
+  severity: "high",
+  title: "Token compared without a constant-time check",
+  explanation: "The comparison leaks timing.",
+  file_refs: ["src/auth.ts:12"],
+  ...overrides,
+});
+
+const focus = (file: string, line: number, reason: string): ReviewFocusItem => ({ file, line, reason });
+
+const FILE_56 = `src/${"a".repeat(49)}.ts`; // 4 + 49 + 3
+const FILE_57 = `src/${"a".repeat(50)}.ts`;
+const FILE_70 = `src/${"b".repeat(33)}/${"c".repeat(29)}.ts`; // 4 + 33 + 1 + 29 + 3
+
+describe("PrBriefSection - Risk areas", () => {
+  it("lists every risk with its title and file references as plain text inside the Intent card", () => {
+    showBrief({
+      risks: {
+        risks: [
+          risk(),
+          risk({ kind: "db_migration", severity: "medium", title: "Column dropped", file_refs: ["db/001.sql:3", "db/002.sql:9"] }),
+          risk({ kind: "perf", severity: "low", title: "N+1 query", file_refs: [] }),
+        ],
+      },
+    });
+    renderSection();
+
+    const intent = screen.getByRole("region", { name: "Intent card" });
+    expect(within(intent).getByText("Risk areas")).toBeInTheDocument();
+    for (const text of [
+      "Token compared without a constant-time check",
+      "src/auth.ts:12",
+      "Column dropped",
+      "db/001.sql:3",
+      "db/002.sql:9",
+      "N+1 query",
+    ]) {
+      expect(within(intent).getByText(text)).toBeInTheDocument();
+    }
+    expect(within(intent).getByText("src/auth.ts:12")).toHaveClass("mono");
+    // references are not links or buttons
+    expect(within(intent).queryByRole("link")).not.toBeInTheDocument();
+    expect(within(intent).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(intent).queryByText("No notable risks flagged.")).not.toBeInTheDocument();
+    // the Intent card gets the block as its footer slot
+    expect(mocks.intentProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ hideRiskTags: true, footer: expect.anything() }),
+    );
+  });
+
+  it("shows the no-risks text when the brief has none", () => {
+    showBrief({ risks: { risks: [] } });
+    renderSection();
+
+    const intent = screen.getByRole("region", { name: "Intent card" });
+    expect(within(intent).getByText("Risk areas")).toBeInTheDocument();
+    expect(within(intent).getByText("No notable risks flagged.")).toBeInTheDocument();
+  });
+
+  it("renders model-written risk text as text, not markup", () => {
+    showBrief({
+      risks: {
+        risks: [risk({ title: "<img src=x onerror=alert(1)> **bold**", file_refs: ["<script>x</script>.ts:1"] })],
+      },
+    });
+    renderSection();
+
+    const intent = screen.getByRole("region", { name: "Intent card" });
+    expect(within(intent).getByText("<img src=x onerror=alert(1)> **bold**")).toBeInTheDocument();
+    expect(within(intent).getByText("<script>x</script>.ts:1")).toBeInTheDocument();
+    expect(intent.querySelector("img, script, strong")).toBeNull();
+  });
+});
+
+describe("PrBriefSection - Review focus", () => {
+  it("lists the items in array order as named buttons, with a count, below the grid and above the footer", () => {
+    showBrief({
+      review_focus: [
+        focus("src/z-last.ts", 40, "Reads the token"),
+        focus("src/a-first.ts", 7, "Changes the retry loop"),
+        focus("src/m-middle.ts", 1, "New config key"),
+      ],
+    });
+    renderSection();
+
+    const panel = screen.getByRole("region", { name: "Review focus — read these first" });
+    expect(within(panel).getByText("3")).toBeInTheDocument();
+    const rows = within(panel).getAllByRole("button");
+    expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual([
+      "Open src/z-last.ts:40 in Files changed",
+      "Open src/a-first.ts:7 in Files changed",
+      "Open src/m-middle.ts:1 in Files changed",
+    ]);
+    rows.forEach((row) => expect(row).toHaveAttribute("type", "button"));
+    expect(rows[0]).toHaveTextContent("src/z-last.ts:40");
+    expect(rows[0]).toHaveTextContent("— Reads the token");
+    expect(rows[1]).toHaveTextContent("src/a-first.ts:7");
+
+    const blast = screen.getByRole("region", { name: "Blast card" });
+    const footer = screen.getByText("gpt-4.1-mini");
+    expect(blast.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(panel.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows the empty text and a zero count when there are no items", () => {
+    showBrief({ review_focus: [] });
+    renderSection();
+
+    const panel = screen.getByRole("region", { name: "Review focus — read these first" });
+    expect(within(panel).getByText("No review focus items.")).toBeInTheDocument();
+    expect(within(panel).getByText("0")).toBeInTheDocument();
+    expect(within(panel).queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("shows a path of 56 characters whole and a path of 57 as first 20 + ellipsis + last 35, both with the full title", () => {
+    showBrief({ review_focus: [focus(FILE_56, 3, "edge one"), focus(FILE_57, 4, "edge two")] });
+    renderSection();
+
+    const whole = screen.getByRole("button", { name: `Open ${FILE_56}:3 in Files changed` });
+    expect(FILE_56).toHaveLength(56);
+    expect(whole).toHaveTextContent(`${FILE_56}:3`);
+    expect(whole).not.toHaveTextContent("…");
+    expect(whole).toHaveAttribute("title", `${FILE_56}:3`);
+
+    const cut = screen.getByRole("button", { name: `Open ${FILE_57}:4 in Files changed` });
+    expect(FILE_57).toHaveLength(57);
+    expect(cut).toHaveTextContent(`${FILE_57.slice(0, 20)}…${FILE_57.slice(-35)}:4`);
+    expect(cut).toHaveAttribute("title", `${FILE_57}:4`);
+  });
+
+  it("elides a 70-character path, keeps a 40-character one whole, and always titles the full file:line", () => {
+    const short = `src/${"s".repeat(33)}.ts`;
+    expect(FILE_70).toHaveLength(70);
+    expect(short).toHaveLength(40);
+    showBrief({ review_focus: [focus(FILE_70, 12, "long"), focus(short, 5, "short")] });
+    renderSection();
+
+    const long = screen.getByRole("button", { name: `Open ${FILE_70}:12 in Files changed` });
+    expect(long).toHaveTextContent(`${FILE_70.slice(0, 20)}…${FILE_70.slice(-35)}:12`);
+    expect(long).not.toHaveTextContent(FILE_70);
+    expect(long).toHaveAttribute("title", `${FILE_70}:12`);
+
+    const whole = screen.getByRole("button", { name: `Open ${short}:5 in Files changed` });
+    expect(whole).toHaveTextContent(`${short}:5`);
+    expect(whole).toHaveAttribute("title", `${short}:5`);
+  });
+
+  it("calls onOpenFocus with the full file and the line of the clicked row, and with nothing else", async () => {
+    const user = userEvent.setup();
+    const onOpenFocus = vi.fn();
+    showBrief({ review_focus: [focus("src/a.ts", 7, "one"), focus(FILE_70, 12, "two")] });
+    renderSection({ onOpenFocus });
+
+    await user.click(screen.getByRole("button", { name: `Open ${FILE_70}:12 in Files changed` }));
+    expect(onOpenFocus).toHaveBeenCalledTimes(1);
+    expect(onOpenFocus).toHaveBeenCalledWith(FILE_70, 12);
+
+    await user.click(screen.getByRole("button", { name: "Open src/a.ts:7 in Files changed" }));
+    expect(onOpenFocus).toHaveBeenLastCalledWith("src/a.ts", 7);
+    expect(mocks.generate.mutate).not.toHaveBeenCalled();
+  });
+
+  it("renders the reason as text, not markup", () => {
+    showBrief({ review_focus: [focus("src/a.ts", 1, "<b>bold</b> <img src=x>")] });
+    renderSection();
+
+    const row = screen.getByRole("button", { name: "Open src/a.ts:1 in Files changed" });
+    expect(row).toHaveTextContent("— <b>bold</b> <img src=x>");
+    expect(row.querySelector("b, img")).toBeNull();
+  });
+
+  it("shows neither Risk areas nor Review focus while there is no brief", () => {
+    mocks.query.data = { brief: null };
+    renderSection();
+    expect(screen.queryByRole("region", { name: "Review focus — read these first" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Risk areas")).not.toBeInTheDocument();
   });
 });

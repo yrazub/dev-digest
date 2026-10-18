@@ -1,5 +1,6 @@
 import type { BriefInput, PrBriefResponse } from "@devdigest/shared";
 import { ApiError } from "@/lib/api";
+import { PATH_HEAD, PATH_MAX, PATH_TAIL } from "./constants";
 
 export type BriefViewMode = "loading" | "error" | "empty" | "brief";
 
@@ -33,4 +34,10 @@ export function shortSha(sha: string): string {
 /** `brief_unavailable` is the server's 400 for a missing provider key. */
 export function generateErrorKind(err: unknown): "no_api_key" | "other" {
   return err instanceof ApiError && err.code === "brief_unavailable" ? "no_api_key" : "other";
+}
+
+/** A path as the Review focus row shows it: whole up to 56 characters, else first 20 + "…" + last 35. */
+export function elidePath(file: string): string {
+  if (file.length <= PATH_MAX) return file;
+  return `${file.slice(0, PATH_HEAD)}…${file.slice(-PATH_TAIL)}`;
 }
