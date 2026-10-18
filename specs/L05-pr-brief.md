@@ -104,7 +104,7 @@ documents. "The PR Brief section" is the section headed "PR Brief" on the Overvi
 | AC-16 | P2 | The Intent card on the Agent runs tab shall show the intent's risk-area tags as it did before this feature. | US-2 | unit (client) |
 | AC-17 | P2 | WHILE the viewport is narrower than 900 px, the PR Brief section shall show the Intent column above the Blast radius column. | US-2 | unit (client) |
 | AC-18 | P2 | The Overview tab shall show the Description section below the PR Brief section. | US-2 | unit (client) |
-| AC-19 | P2 | IF a Review focus path does not fit its row, THEN the Review focus block shall shorten the path in the middle and show the full path in a tooltip. | US-2 | unit (client) |
+| AC-19 | P2 | The Review focus block shall show a path longer than 56 characters as its head and tail around "…" within 56 characters, with the full `<file>:<line>` as the row's tooltip whether the path is shortened or not. | US-2 | unit (client) |
 | AC-20 | P2 | The PR Brief section shall take every user-facing label from the client's localized `brief` strings, with none written into the component. | US-2 | unit (client) |
 | AC-21 | P1 | WHEN the user reloads the page of a pull request with a stored brief, the PR Brief section shall show that brief without requesting a new one. | US-4 | unit (client) |
 | AC-22 | P1 | WHEN the user presses the Regenerate button in the PR Brief section header, the PR Brief section shall request a new brief and show it when it arrives. | US-4 | unit (client) |
@@ -221,7 +221,7 @@ spec.
 | EC-29 | A stale brief points at a file that the PR no longer changes | Files changed opens without scrolling and without a message | AC-39 |
 | EC-30 | A reload with `file` and `line` in the URL; a manual tab change | The jump repeats once; a manual tab change clears the parameters | AC-40, AC-41 |
 | EC-31 | Files changed is in Original order | The jump still works | AC-42 |
-| EC-32 | A very long file path in Review focus | Middle-shortened, full path in a tooltip | AC-19 |
+| EC-32 | A very long file path in Review focus | Over 56 characters: head and tail around "…"; the row's tooltip always holds the full `<file>:<line>` | AC-19 |
 | EC-33 | A narrow window | The two columns stack | AC-17 |
 | EC-34 | The description, issue or a document says "ignore your instructions" | Fenced as untrusted data; output validated | NFR-5 |
 | EC-35 | Model output contains HTML or markdown | Rendered as text | NFR-5 |
