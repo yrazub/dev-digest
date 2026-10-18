@@ -13,7 +13,16 @@ import { CONFIDENCE_STYLE, RISK_ICON } from "./constants";
 import { sourceLabel, unreadReferences, type Translate } from "./helpers";
 import { s } from "./styles";
 
-export function IntentCard({ prId, poll }: { prId: string | null; poll: boolean }) {
+interface IntentCardProps {
+  prId: string | null;
+  poll: boolean;
+  /** Suppress the risk-area tag row (the Overview tab shows the brief's risks instead). */
+  hideRiskTags?: boolean;
+  /** Rendered after the card body in every state, under a divider. */
+  footer?: React.ReactNode;
+}
+
+export function IntentCard({ prId, poll, hideRiskTags = false, footer }: IntentCardProps) {
   const t = useTranslations("brief");
   const { data, isLoading, isError, refetch } = usePrIntent(prId, { poll });
   const regenerate = useRegenerateIntent(prId);
@@ -31,7 +40,7 @@ export function IntentCard({ prId, poll }: { prId: string | null; poll: boolean 
             <Skeleton height={44} />
           </div>
         ) : record ? (
-          <IntentBody record={record} onRerun={rerun} />
+          <IntentBody record={record} onRerun={rerun} hideRiskTags={hideRiskTags} />
         ) : isError ? (
           // Not the empty state: an intent may exist, so the card must not invite a new derivation.
           <div style={s.empty}>
@@ -55,12 +64,26 @@ export function IntentCard({ prId, poll }: { prId: string | null; poll: boolean 
             </div>
           </div>
         )}
+        {footer != null && (
+          <>
+            <div style={s.footerDivider} />
+            {footer}
+          </>
+        )}
       </Card>
     </section>
   );
 }
 
-function IntentBody({ record, onRerun }: { record: PrIntentRecord; onRerun: () => void }) {
+function IntentBody({
+  record,
+  onRerun,
+  hideRiskTags,
+}: {
+  record: PrIntentRecord;
+  onRerun: () => void;
+  hideRiskTags: boolean;
+}) {
   const t = useTranslations("brief");
   const format = useFormatter();
   const conf = CONFIDENCE_STYLE[record.confidence];
@@ -115,7 +138,7 @@ function IntentBody({ record, onRerun }: { record: PrIntentRecord; onRerun: () =
         <ScopeColumn title={t("intent.outOfScope")} items={record.out_of_scope} included={false} />
       </div>
 
-      {record.risk_areas.length > 0 && (
+      {!hideRiskTags && record.risk_areas.length > 0 && (
         <div style={{ ...s.divider, ...s.badgeRow }}>
           <span style={s.rowLabel}>{t("intent.riskAreas")}</span>
           {record.risk_areas.map((area, i) => (

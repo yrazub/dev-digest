@@ -140,7 +140,7 @@ export default function PRDetailPage() {
       />
 
       <div style={{ padding: "24px 32px 44px", display: "flex", flexDirection: "column", gap: 24, maxWidth: 1080, margin: "0 auto" }}>
-        {prId && (tab === "overview" || tab === "findings") && (
+        {prId && tab === "findings" && (
           <IntentCard prId={prId} poll={reviewRunning} />
         )}
 
@@ -151,6 +151,7 @@ export default function PRDetailPage() {
             repoId={repoId}
             repoFullName={repoFullName}
             headSha={pr.head_sha}
+            poll={reviewRunning}
           />
         )}
 

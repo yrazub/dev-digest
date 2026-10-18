@@ -2,7 +2,7 @@
 
 import React from "react";
 import { SectionLabel } from "@devdigest/ui";
-import { BlastRadiusCard } from "../BlastRadiusCard";
+import { PrBriefSection } from "../PrBriefSection";
 import { s } from "./styles";
 
 interface OverviewTabProps {
@@ -11,12 +11,21 @@ interface OverviewTabProps {
   repoId: string;
   repoFullName: string | null;
   headSha: string | null;
+  poll: boolean;
 }
 
-export function OverviewTab({ prBody, prId, repoId, repoFullName, headSha }: OverviewTabProps) {
+export function OverviewTab({ prBody, prId, repoId, repoFullName, headSha, poll }: OverviewTabProps) {
   return (
     <>
-      {prId && <BlastRadiusCard prId={prId} repoId={repoId} repoFullName={repoFullName} headSha={headSha} />}
+      {prId && (
+        <PrBriefSection
+          prId={prId}
+          headSha={headSha}
+          repoId={repoId}
+          repoFullName={repoFullName}
+          poll={poll}
+        />
+      )}
       {prBody && (
         <section>
           <SectionLabel icon="MessageSquare">Description</SectionLabel>

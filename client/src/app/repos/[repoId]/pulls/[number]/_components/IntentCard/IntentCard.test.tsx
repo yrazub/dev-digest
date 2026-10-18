@@ -49,11 +49,11 @@ function show(overrides: Partial<PrIntentRecord> = {}) {
   mocks.state = { data: { intent: { ...RECORD, ...overrides } }, isLoading: false, isError: false, refetch: vi.fn() };
 }
 
-function renderCard() {
+function renderCard(props: Partial<React.ComponentProps<typeof IntentCard>> = {}) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ brief: messages }}>
       <div data-theme="dark">
-        <IntentCard prId="pr1" poll={false} />
+        <IntentCard prId="pr1" poll={false} {...props} />
       </div>
     </NextIntlClientProvider>,
   );
@@ -293,5 +293,66 @@ describe("IntentCard", () => {
     renderCard();
     expect(screen.getByText(/Add rate limiting to the public API/)).toBeInTheDocument();
     expect(screen.queryByText("The intent could not be loaded.")).not.toBeInTheDocument();
+  });
+
+  it("keeps the risk-area tag row by default and drops only that row when hideRiskTags is set", () => {
+    show();
+    renderCard();
+    expect(screen.getByText("Risk areas")).toBeInTheDocument();
+    expect(screen.getByText("Bypass through forwarded headers")).toBeInTheDocument();
+    cleanup();
+
+    show();
+    renderCard({ hideRiskTags: true });
+    const card = screen.getByRole("region", { name: "Intent" });
+    expect(within(card).queryByText("Risk areas")).not.toBeInTheDocument();
+    expect(within(card).queryByText("Bypass through forwarded headers")).not.toBeInTheDocument();
+    // everything else on the card stays
+    expect(within(card).getByText("“Add rate limiting to the public API”")).toBeInTheDocument();
+    expect(within(card).getByText("Per-IP request limit")).toBeInTheDocument();
+    expect(within(card).getByText("Derived from")).toBeInTheDocument();
+  });
+
+  it("renders no footer when none is given, and none for a null footer", () => {
+    show();
+    renderCard({ footer: null });
+    expect(screen.queryByText("Footer content")).not.toBeInTheDocument();
+    const card = screen.getByRole("region", { name: "Intent" });
+    // the divider belongs to the footer: without one the card ends at its body
+    expect(card.querySelectorAll("[style*='height: 1px']")).toHaveLength(0);
+  });
+
+  it("renders the footer after the body in the record, empty, error and loading states", () => {
+    const footer = <p>Footer content</p>;
+
+    show();
+    renderCard({ footer });
+    let card = screen.getByRole("region", { name: "Intent" });
+    expect(within(card).getByText("Footer content")).toBeInTheDocument();
+    expect(card.querySelectorAll("[style*='height: 1px']")).toHaveLength(1);
+    expect(
+      within(card).getByText("Derived from").compareDocumentPosition(within(card).getByText("Footer content")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    cleanup();
+
+    mocks.state = { data: { intent: null }, isLoading: false, isError: false, refetch: vi.fn() };
+    renderCard({ footer });
+    card = screen.getByRole("region", { name: "Intent" });
+    expect(within(card).getByText("Intent not derived yet")).toBeInTheDocument();
+    expect(within(card).getByText("Footer content")).toBeInTheDocument();
+    cleanup();
+
+    mocks.state = { data: undefined, isLoading: false, isError: true, refetch: vi.fn() };
+    renderCard({ footer });
+    card = screen.getByRole("region", { name: "Intent" });
+    expect(within(card).getByText("The intent could not be loaded.")).toBeInTheDocument();
+    expect(within(card).getByText("Footer content")).toBeInTheDocument();
+    cleanup();
+
+    mocks.state = { data: undefined, isLoading: true, isError: false, refetch: vi.fn() };
+    renderCard({ footer });
+    card = screen.getByRole("region", { name: "Intent" });
+    expect(within(card).getByText("Footer content")).toBeInTheDocument();
   });
 });
