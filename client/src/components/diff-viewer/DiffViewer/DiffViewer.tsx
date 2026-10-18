@@ -10,6 +10,7 @@ import { useTranslations } from "next-intl";
 import type { PrFile } from "@/lib/types";
 import { type DiffCommentApi } from "../comments";
 import { type DiffFindingApi } from "../findings";
+import { type DiffJumpTarget } from "../helpers";
 import { s } from "../styles";
 import { FileCard } from "../FileCard";
 
@@ -18,12 +19,18 @@ export function DiffViewer({
   commenting,
   findings,
   defaultOpen,
+  target,
+  onJumped,
 }: {
   files: PrFile[];
   commenting?: DiffCommentApi;
   findings?: DiffFindingApi;
   /** Initial open state of every file card; when absent each card decides by size. */
   defaultOpen?: boolean;
+  /** The file (and line) a navigation points at; the card of that file opens and scrolls to it. */
+  target?: DiffJumpTarget;
+  /** Called by the target card once it has scrolled, so the jump is not repeated. */
+  onJumped?: () => void;
 }) {
   const t = useTranslations("shell");
   if (!files || files.length === 0) {
@@ -32,7 +39,15 @@ export function DiffViewer({
   return (
     <div style={s.list}>
       {files.map((f) => (
-        <FileCard key={f.path} file={f} commenting={commenting} findings={findings} defaultOpen={defaultOpen} />
+        <FileCard
+          key={f.path}
+          file={f}
+          commenting={commenting}
+          findings={findings}
+          defaultOpen={defaultOpen}
+          jump={target?.path === f.path ? { line: target.line, pending: target.pending } : undefined}
+          onJumped={onJumped}
+        />
       ))}
     </div>
   );

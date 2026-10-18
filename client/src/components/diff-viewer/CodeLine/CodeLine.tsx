@@ -9,7 +9,7 @@ import type { FindingRecord } from "@devdigest/shared";
 import { commentTargetFor, type CommentThread, type DiffCommentApi, cs } from "../comments";
 import { isCounted, mostSevere, sortBySeverity, type DiffFindingApi } from "../findings";
 import { type Line } from "../helpers";
-import { s, lineRowFor, lineSignFor } from "../styles";
+import { s, lineRowFor, lineSignFor, jumpedRow } from "../styles";
 import { CommentThreadView } from "../CommentThreadView";
 import { InlineComposer } from "../InlineComposer";
 import { LineFindingTag } from "../LineFindingTag";
@@ -23,6 +23,8 @@ export function CodeLine({
   commenting,
   lineFindings = NO_FINDINGS,
   findings,
+  jumpMark,
+  ref,
 }: {
   ln: Line;
   path: string;
@@ -31,6 +33,10 @@ export function CodeLine({
   /** Findings anchored to this line, dismissed ones included. */
   lineFindings?: FindingRecord[];
   findings?: DiffFindingApi;
+  /** Set on the line a navigation points at; `pulse` is true while the line is highlighted. */
+  jumpMark?: { pulse: boolean };
+  /** The row element, for scrolling it into view. */
+  ref?: React.Ref<HTMLDivElement>;
 }) {
   const [hover, setHover] = React.useState(false);
   const [composing, setComposing] = React.useState(false);
@@ -55,7 +61,11 @@ export function CodeLine({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <div style={lineRowFor(ln.kind, severity ? SEV[severity].c : undefined)}>
+      <div
+        ref={ref}
+        data-jump-target={jumpMark ? "line" : undefined}
+        style={jumpedRow(lineRowFor(ln.kind, severity ? SEV[severity].c : undefined), jumpMark)}
+      >
         <span className="mono tnum" style={{ ...s.lineNo, position: "relative" }}>
           {showAdd && target && (
             <button

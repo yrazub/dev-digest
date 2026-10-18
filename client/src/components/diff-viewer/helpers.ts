@@ -8,6 +8,17 @@ export interface Line {
   newNo?: number;
 }
 
+/**
+ * The file (and line) a navigation points at. `pending` is true until the file
+ * card has scrolled to it, so the jump happens once per navigation.
+ */
+export interface DiffJumpTarget {
+  path: string;
+  /** New-side line number, or null when the URL named only the file. */
+  line: number | null;
+  pending: boolean;
+}
+
 /** Parse unified-diff patch text into renderable lines with old/new line numbers. */
 export function parsePatch(patch: string | null | undefined): Line[] {
   if (!patch) return [];

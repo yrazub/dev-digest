@@ -103,3 +103,18 @@ export function groupFindingMark(
   const severity = mostSevere(inGroup);
   return severity === null ? null : { files: new Set(inGroup.map((f) => f.file)).size, severity };
 }
+
+/**
+ * The file and line a Files changed navigation points at (`?file=&line=`).
+ * Null when `file` is not one of the PR's paths; `line` is kept only when it is
+ * a whole number of 1 or more, otherwise the target is the file alone.
+ */
+export function jumpTarget(
+  files: PrFile[],
+  file: string | null,
+  line: string | null,
+): { path: string; line: number | null } | null {
+  if (file === null || !files.some((f) => f.path === file)) return null;
+  const n = line !== null && /^\d+$/.test(line) ? Number(line) : null;
+  return { path: file, line: n !== null && Number.isSafeInteger(n) && n >= 1 ? n : null };
+}

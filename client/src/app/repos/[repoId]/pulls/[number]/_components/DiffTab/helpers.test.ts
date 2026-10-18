@@ -6,6 +6,7 @@ import {
   findingsOfLatestReviews,
   groupFindingMark,
   joinGroups,
+  jumpTarget,
   type DiffBodyMode,
 } from "./helpers";
 
@@ -249,5 +250,36 @@ describe("groupFindingMark", () => {
         finding("elsewhere", { file: "src/other.ts" }),
       ]),
     ).toBeNull();
+  });
+});
+
+// Client spec R-WEB-33, R-WEB-38, R-WEB-39: the jump resolves against the PR's own files; a bad
+// `line` leaves the file alone as the target (the header is scrolled), an unknown file gives none.
+describe("jumpTarget", () => {
+  const files = [prFile("src/config.ts"), prFile("src/api/users.ts")];
+
+  it("gives the path and the line for a file of the PR with a whole-number line", () => {
+    expect(jumpTarget(files, "src/config.ts", "12")).toEqual({ path: "src/config.ts", line: 12 });
+    expect(jumpTarget(files, "src/api/users.ts", "1")).toEqual({ path: "src/api/users.ts", line: 1 });
+  });
+
+  it("gives null for a path that is not one of the PR's files, or for no file at all", () => {
+    expect(jumpTarget(files, "src/not-in-pr.ts", "12")).toBeNull();
+    expect(jumpTarget(files, null, "12")).toBeNull();
+    expect(jumpTarget([], "src/config.ts", "12")).toBeNull();
+  });
+
+  it.each([
+    ["abc", "not a number"],
+    ["0", "zero"],
+    ["-3", "negative"],
+    ["1.5", "not whole"],
+    ["", "empty"],
+  ])("keeps the file but drops the line %j (%s)", (line) => {
+    expect(jumpTarget(files, "src/config.ts", line)).toEqual({ path: "src/config.ts", line: null });
+  });
+
+  it("keeps the file alone when there is no line parameter", () => {
+    expect(jumpTarget(files, "src/config.ts", null)).toEqual({ path: "src/config.ts", line: null });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup, within } from "@testing-library/react";
+import { render, screen, cleanup, within, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type {
@@ -642,5 +642,193 @@ describe("DiffTab — a review arriving in the same mounted tab (C4)", () => {
     expect(within(headerAt(0)).getByRole("img", { name: "1 file with findings" })).toBeInTheDocument();
     expect(screen.getByText("Fresh finding")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Hide comments \(1\)/ })).toBeInTheDocument();
+  });
+});
+
+// ---- Phase 8: the jump into Files changed (`?file=&line=`) ----
+
+// jsdom has no layout, so `scrollIntoView` is a stub that records the element it was called on
+// (`mock.contexts`). The pulse is the line's `var(--accent-bg)` background, read off its style.
+describe("DiffTab — the jump into Files changed", () => {
+  const scrollIntoView = vi.fn();
+  const JUMP_PULSE_MS = 1700;
+
+  beforeEach(() => {
+    scrollIntoView.mockClear();
+    Element.prototype.scrollIntoView = scrollIntoView;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+
+  const jumpTo = (file: string, line?: number | string, extra = "") => {
+    const sp = new URLSearchParams(extra);
+    sp.set("tab", "diff");
+    sp.set("file", file);
+    if (line !== undefined) sp.set("line", String(line));
+    hookData.search = sp;
+  };
+  /** The one row marked as the target line, or null. */
+  const markedLine = () => document.querySelector<HTMLElement>('[data-jump-target="line"]');
+  const markedCard = () => document.querySelector<HTMLElement>('[data-jump-target="file"]');
+  const scrolledElement = () => scrollIntoView.mock.contexts[0] as HTMLElement;
+  const isPulsing = (row: HTMLElement) => (row.getAttribute("style") ?? "").includes("--accent-bg");
+
+  const LARGE: PrFile = { path: CONFIG, additions: 150, deletions: 100, patch: PATCH };
+  const LARGE_PR: PrDetail = { ...PR, files: [LARGE, PR.files[1] as PrFile] };
+  const NO_PATCH_PR: PrDetail = {
+    ...GROUPED_PR,
+    files: GROUPED_PR.files.map((f) => (f.path === RATELIMIT_TEST ? file(RATELIMIT_TEST, null) : f)),
+  };
+
+  it("opens a collapsed Boilerplate group and its collapsed card, scrolls the line into view and marks the card", () => {
+    hookData.smartDiff = { data: fullResponse(), isError: false };
+    jumpTo(LOCK, 2);
+    renderTab(GROUPED_PR);
+
+    expect(headerAt(4)).toHaveAttribute("aria-expanded", "true");
+    expect(headerAt(3)).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText(LOCK_LINE)).toBeInTheDocument();
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
+    expect(scrolledElement()).toBe(markedLine());
+    expect(within(scrolledElement()).getByText(LOCK_LINE)).toBeInTheDocument();
+    expect(markedCard()).toContainElement(screen.getByText(LOCK));
+    expect(document.querySelectorAll("[data-jump-target]")).toHaveLength(2);
+  });
+
+  it("opens a large card that the size rule collapses, and leaves it collapsed without a jump", () => {
+    hookData.smartDiff = { data: smartResponse([["core", [CONFIG, USERS]]]), isError: false };
+    renderTab(LARGE_PR);
+    // only the small USERS card shows its patch; the large CONFIG card is collapsed
+    expect(screen.getByText(CONFIG)).toBeInTheDocument();
+    expect(screen.getAllByText("const b = 3;")).toHaveLength(1);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    cleanup();
+
+    jumpTo(CONFIG, 2);
+    renderTab(LARGE_PR);
+    expect(screen.getAllByText("const b = 3;")).toHaveLength(2);
+    expect(within(markedCard() as HTMLElement).getByText("const b = 3;")).toBeInTheDocument();
+    expect(scrolledElement()).toBe(markedLine());
+    expect(within(scrolledElement()).getByText("const b = 3;")).toBeInTheDocument();
+  });
+
+  it("marks the line with the pulse, which ends after 1,700 ms while the line stays the target", () => {
+    vi.useFakeTimers();
+    jumpTo(CONFIG, 1);
+    renderTab();
+
+    const row = markedLine() as HTMLElement;
+    expect(row).not.toBeNull();
+    expect(within(row).getByText("const a = 1;")).toBeInTheDocument();
+    expect(isPulsing(row)).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(JUMP_PULSE_MS - 1);
+    });
+    expect(isPulsing(markedLine() as HTMLElement)).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(isPulsing(markedLine() as HTMLElement)).toBe(false);
+    expect(markedLine()).toBe(row);
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
+  it("scrolls the header and marks no line when the line is outside the rendered hunk", () => {
+    jumpTo(CONFIG, 40);
+    renderTab();
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrolledElement()).toContainElement(screen.getByText(CONFIG));
+    expect(scrolledElement()).not.toHaveAttribute("data-jump-target");
+    expect(markedLine()).toBeNull();
+    expect(markedCard()).toContainElement(screen.getByText(CONFIG));
+  });
+
+  it("scrolls the header and marks no line for a file with no patch", () => {
+    hookData.smartDiff = { data: fullResponse(), isError: false };
+    jumpTo(RATELIMIT_TEST, 5);
+    renderTab(NO_PATCH_PR);
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrolledElement()).toContainElement(screen.getByText(RATELIMIT_TEST));
+    expect(markedLine()).toBeNull();
+    expect(markedCard()).toContainElement(screen.getByText(RATELIMIT_TEST));
+  });
+
+  it("scrolls the header when the URL names only the file, or a line that is not a positive whole number", () => {
+    jumpTo(CONFIG);
+    const first = renderTab();
+    expect(scrolledElement()).toContainElement(screen.getByText(CONFIG));
+    expect(markedLine()).toBeNull();
+    first.unmount();
+    scrollIntoView.mockClear();
+
+    jumpTo(CONFIG, "abc");
+    renderTab();
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrolledElement()).toContainElement(screen.getByText(CONFIG));
+    expect(markedLine()).toBeNull();
+  });
+
+  it("does nothing for a file that is not in the PR: no scroll, no mark, no message", () => {
+    hookData.smartDiff = { data: fullResponse(), isError: false };
+    jumpTo("src/not-in-pr.ts", 3);
+    renderTab(GROUPED_PR);
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(document.querySelector("[data-jump-target]")).toBeNull();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    // groups render exactly as without a jump: Docs and Boilerplate stay collapsed
+    expect(headerAt(3)).toHaveAttribute("aria-expanded", "false");
+    expect(headerAt(4)).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("jumps in Original order, in the flat list", () => {
+    hookData.smartDiff = { data: fullResponse(), isError: false };
+    jumpTo(README, 2, "order=original");
+    renderTab(GROUPED_PR);
+
+    expect(queryGroupHeaders()).toHaveLength(0);
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrolledElement()).toBe(markedLine());
+    expect(markedCard()).toContainElement(screen.getByText(README));
+    expect(within(scrolledElement()).getByText("const b = 3;")).toBeInTheDocument();
+  });
+
+  it("jumps in the smart order to a file the grouping does not mention, below the groups", () => {
+    const stray = "src/stray.ts";
+    hookData.smartDiff = { data: fullResponse(), isError: false };
+    jumpTo(stray, 1);
+    renderTab({ ...GROUPED_PR, files: [...GROUPED_PR.files, file(stray)], files_count: 7 });
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrolledElement()).toBe(markedLine());
+    expect(markedCard()).toContainElement(screen.getByText(stray));
+  });
+
+  it("does not scroll again on a re-render of the same URL, and jumps again for a new navigation", () => {
+    jumpTo(CONFIG, 2);
+    const view = renderTab();
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+
+    // a refreshed reviews query re-renders the tab with the same URL
+    hookData.reviews = [review("r", "a1", "2026-10-03T10:00:00Z", [finding({ id: "fresh", title: "Fresh finding" })])];
+    view.rerender(tabTree(PR));
+    view.rerender(tabTree({ ...PR }));
+    expect(screen.getByText("Fresh finding")).toBeInTheDocument();
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+
+    // another Review focus row: a new navigation, so the tab jumps to its line
+    jumpTo(CONFIG, 3);
+    view.rerender(tabTree(PR));
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(within(scrollIntoView.mock.contexts[1] as HTMLElement).getByText("const c = 4;")).toBeInTheDocument();
   });
 });

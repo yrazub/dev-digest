@@ -4,7 +4,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SectionLabel, Button, Skeleton } from "@devdigest/ui";
-import { DiffViewer, type DiffCommentApi, type DiffFindingApi } from "@/components/diff-viewer";
+import { DiffViewer, type DiffCommentApi, type DiffFindingApi, type DiffJumpTarget } from "@/components/diff-viewer";
 import { usePrComments, useCreatePrComment, usePrReviews } from "@/lib/hooks/reviews";
 import { useSmartDiff } from "@/lib/hooks/smart-diff";
 import { notify } from "@/lib/toast";
@@ -13,7 +13,7 @@ import { InlineFinding } from "./_components/InlineFinding";
 import { OrderSwitch, type FilesOrder } from "./_components/OrderSwitch";
 import { RoleGroup } from "./_components/RoleGroup";
 import { SKELETON_ROW_KEYS } from "./constants";
-import { countedInDiff, diffBodyMode, findingsOfLatestReviews, joinGroups } from "./helpers";
+import { countedInDiff, diffBodyMode, findingsOfLatestReviews, joinGroups, jumpTarget } from "./helpers";
 import { s } from "./styles";
 
 interface DiffTabProps {
@@ -46,6 +46,20 @@ export function DiffTab({ prId, pr, repoFullName, canComment }: DiffTabProps) {
     const qs = sp.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname);
   };
+
+  // The jump (`?file=&line=`): resolved against the PR's files, performed once per navigation.
+  const file = search.get("file");
+  const lineParam = search.get("line");
+  const found = React.useMemo(() => jumpTarget(pr.files, file, lineParam), [pr.files, file, lineParam]);
+  const jumpKey = found ? `${found.path}:${found.line ?? ""}` : null;
+  const jumpedKey = React.useRef<string | null>(null);
+  const handleJumped = React.useCallback(() => {
+    jumpedKey.current = jumpKey;
+  }, [jumpKey]);
+  // The ref holds the navigation already jumped to; it never drives a render of its own.
+  const target: DiffJumpTarget | undefined = found
+    ? { ...found, pending: jumpedKey.current !== jumpKey }
+    : undefined;
 
   const joined = React.useMemo(
     () => (smartDiff.data ? joinGroups(smartDiff.data.groups, pr.files) : null),
@@ -134,7 +148,15 @@ export function DiffTab({ prId, pr, repoFullName, canComment }: DiffTabProps) {
           ))}
         </div>
       ) : null}
-      {mode === "flat" || mode === "unavailable" ? <DiffViewer files={pr.files} commenting={commenting} findings={findings} /> : null}
+      {mode === "flat" || mode === "unavailable" ? (
+        <DiffViewer
+          files={pr.files}
+          commenting={commenting}
+          findings={findings}
+          target={target}
+          onJumped={handleJumped}
+        />
+      ) : null}
       {mode === "groups" ? (
         <div style={s.groups}>
           {groups.map((g) => (
@@ -144,10 +166,18 @@ export function DiffTab({ prId, pr, repoFullName, canComment }: DiffTabProps) {
               files={g.files}
               commenting={commenting}
               findings={findings}
+              target={target}
+              onJumped={handleJumped}
             />
           ))}
           {joined && joined.ungrouped.length > 0 ? (
-            <DiffViewer files={joined.ungrouped} commenting={commenting} findings={findings} />
+            <DiffViewer
+              files={joined.ungrouped}
+              commenting={commenting}
+              findings={findings}
+              target={target}
+              onJumped={handleJumped}
+            />
           ) : null}
         </div>
       ) : null}
