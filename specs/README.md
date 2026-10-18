@@ -39,6 +39,7 @@ it keep their earlier shape.
 | [`L05-project-context.md`](L05-project-context.md) | approved |
 | [`plans/L05-project-context.md`](plans/L05-project-context.md) | approved |
 | [`L05-pr-brief.md`](L05-pr-brief.md) | approved |
+| [`plans/L05-pr-brief.md`](plans/L05-pr-brief.md) | approved |
 
 The lesson roadmap (L01–L08) is in the root [`README.md`](../README.md).
 When you add a spec, add a row above.
