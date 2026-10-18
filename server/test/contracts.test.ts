@@ -42,6 +42,10 @@ import {
   ProjectContextFile,
   SkillContext,
   AgentContext,
+  PrBrief,
+  ReviewFocusItem,
+  BriefInputReason,
+  PrBriefRecord,
 } from '@devdigest/shared';
 
 /**
@@ -902,6 +906,161 @@ describe('L05 project context contracts', () => {
     it('specs_loaded[].origin rejects an unknown origin and a negative token count', () => {
       expect(PromptAssembly.safeParse({ ...base, specs_loaded: [{ ...loaded, origin: 'repo' }] }).success).toBe(false);
       expect(PromptAssembly.safeParse({ ...base, specs_loaded: [{ ...loaded, tokens: -1 }] }).success).toBe(false);
+    });
+  });
+});
+
+describe('L05 PR brief contracts', () => {
+  const brief = {
+    summary: 'Adds a rate limit to the webhook route.',
+    intent: { summary: 'Rate-limit webhooks', in_scope: ['webhooks'], out_of_scope: [] },
+    blast: {
+      changed_symbols: [{ name: 'rateLimit', file: 'src/rate-limit.ts', kind: 'function' }],
+      downstream: [],
+      summary: '1 symbol changed.',
+    },
+    risks: {
+      risks: [
+        {
+          kind: 'perf',
+          title: 'Hot path',
+          explanation: 'Runs on every request.',
+          severity: 'medium' as const,
+          file_refs: ['src/rate-limit.ts:12'],
+        },
+      ],
+    },
+    review_focus: [{ file: 'src/rate-limit.ts', line: 12, reason: 'The window is reset here.' }],
+    history: { history: [] },
+  };
+  const stored = {
+    ...brief,
+    pr_id: '11111111-1111-1111-1111-111111111111',
+    head_sha: 'a1b2c3d4e5f6',
+    generated_at: '2026-10-18T00:00:00.000Z',
+    provider: 'anthropic',
+    model: 'claude-sonnet-4-5',
+    tokens_in: 1200,
+    tokens_out: 300,
+    cost_usd: 0.0123,
+    input_tokens: 1100,
+    input_budget_tokens: 8000,
+    inputs: [
+      { kind: 'intent', status: 'used', reason: null, omitted: null },
+      { kind: 'blast_radius', status: 'trimmed', reason: 'over_budget', omitted: 3 },
+      { kind: 'spec_documents', status: 'missing', reason: 'none_attached', omitted: null },
+    ],
+    dropped: { risks: 0, review_focus: 1 },
+  };
+  const record = { ...stored, stale: false };
+
+  describe('PrBrief', () => {
+    it('parses a full brief', () => {
+      const parsed = PrBrief.parse(brief);
+      expect(parsed.review_focus).toEqual(brief.review_focus);
+      expect(parsed.history).toEqual({ history: [] });
+    });
+
+    it('parses with intent: null and blast: null (the model was given no such input)', () => {
+      const parsed = PrBrief.parse({ ...brief, intent: null, blast: null });
+      expect(parsed.intent).toBeNull();
+      expect(parsed.blast).toBeNull();
+    });
+
+    it.each(['summary', 'intent', 'blast', 'risks', 'review_focus', 'history'])('requires `%s`', (key) => {
+      const { [key]: _omitted, ...rest } = brief as Record<string, unknown>;
+      expect(PrBrief.safeParse(rest).success).toBe(false);
+    });
+  });
+
+  describe('ReviewFocusItem', () => {
+    const item = { file: 'src/a.ts', line: 1, reason: 'why' };
+
+    it('parses the first line of a file', () => {
+      expect(ReviewFocusItem.parse(item)).toEqual(item);
+    });
+
+    it('rejects line: 0', () => {
+      expect(ReviewFocusItem.safeParse({ ...item, line: 0 }).success).toBe(false);
+    });
+
+    it('rejects a negative or fractional line', () => {
+      expect(ReviewFocusItem.safeParse({ ...item, line: -3 }).success).toBe(false);
+      expect(ReviewFocusItem.safeParse({ ...item, line: 2.5 }).success).toBe(false);
+    });
+
+    it('rejects an empty file', () => {
+      expect(ReviewFocusItem.safeParse({ ...item, file: '' }).success).toBe(false);
+    });
+  });
+
+  describe('PrBriefRecord', () => {
+    it('parses a full record', () => {
+      const parsed = PrBriefRecord.parse(record);
+      expect(parsed.stale).toBe(false);
+      expect(parsed.inputs).toHaveLength(3);
+      expect(parsed.dropped).toEqual({ risks: 0, review_focus: 1 });
+    });
+
+    it('omit({ stale: true }) parses the stored form, which has no `stale`', () => {
+      const parsed = PrBriefRecord.omit({ stale: true }).parse(stored);
+      expect('stale' in parsed).toBe(false);
+      expect(PrBriefRecord.safeParse(stored).success).toBe(false);
+    });
+
+    it('keeps null token counts and cost (unknown, never 0)', () => {
+      const parsed = PrBriefRecord.parse({
+        ...record,
+        tokens_in: null,
+        tokens_out: null,
+        cost_usd: null,
+        input_tokens: null,
+      });
+      expect([parsed.tokens_in, parsed.tokens_out, parsed.cost_usd, parsed.input_tokens]).toEqual([
+        null,
+        null,
+        null,
+        null,
+      ]);
+    });
+
+    it('rejects a zero input budget', () => {
+      expect(PrBriefRecord.safeParse({ ...record, input_budget_tokens: 0 }).success).toBe(false);
+    });
+
+    it.each([
+      ['an unknown input kind', { inputs: [{ kind: 'diff', status: 'used', reason: null, omitted: null }] }],
+      ['an unknown input status', { inputs: [{ kind: 'intent', status: 'skipped', reason: null, omitted: null }] }],
+      ['an unknown input reason', { inputs: [{ kind: 'intent', status: 'missing', reason: 'timeout', omitted: null }] }],
+      ['a negative omitted count', { inputs: [{ kind: 'intent', status: 'trimmed', reason: 'over_budget', omitted: -1 }] }],
+      ['a negative dropped count', { dropped: { risks: -1, review_focus: 0 } }],
+    ])('rejects %s', (_name, override) => {
+      expect(PrBriefRecord.safeParse({ ...record, ...override }).success).toBe(false);
+    });
+  });
+
+  describe('BriefInputReason', () => {
+    it('holds the 17 values of the spec', () => {
+      expect(BriefInputReason.options).toEqual([
+        'not_derived',
+        'stale',
+        'flag_off',
+        'index_failed',
+        'index_partial',
+        'repo_too_large',
+        'no_data',
+        'pr_files_missing',
+        'empty',
+        'none_linked',
+        'no_token',
+        'not_found',
+        'fetch_failed',
+        'none_attached',
+        'not_cloned',
+        'all_skipped',
+        'over_budget',
+      ]);
+      expect(BriefInputReason.options).toHaveLength(17);
     });
   });
 });
