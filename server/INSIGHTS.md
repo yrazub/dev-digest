@@ -6,6 +6,12 @@ Traps we have already hit in the server. Append-only. See the root
 
 ---
 
+## What Works
+
+- **2026-10-18** — Trim-order tests stay exact with round, far-apart fixture weights (document 1000, finding 100, caller 10, file 1, the fake tokenizer counting `text.length`): each budget then pins exactly one cut step of `fitToBudget` (`src/modules/brief/domain.ts:227`). To pin one item instead, make the fake tokenizer depend on its text — `count: (text) => (text.includes(FAR_FILE) ? INPUT_BUDGET_TOKENS + 1000 : 100)` drops exactly the far caller with no filler (`test/brief-service.test.ts:747`).
+- **2026-10-18** — Timeouts and concurrency of a service that calls the model are tested with a `MockLLMProvider` subclass whose `completeStructured` runs a script the test controls (`class ScriptedLLM extends MockLLMProvider`, `test/brief-service.test.ts:164`): a gate promise holds the call, a started promise tells the test it is in flight. Over HTTP, send the second request after `started` resolves and wait about 200 ms before releasing the gate.
+- **2026-10-18** — `app.container` is public on the built app, so an `.it` test can call a service through the real repository with a `MockCloneFiles` override and no route (`app.container.projectContext.forWorkspace`, `test/project-context.it.test.ts:572`).
+
 ## Codebase Patterns
 
 - **2026-09-20** — `src/vendor/shared` is the **authored** `@devdigest/shared`: both
@@ -75,6 +81,7 @@ Traps we have already hit in the server. Append-only. See the root
   also counts a method added to the port later (`new Proxy` in `test/smart-diff.it.test.ts:33`).
 - **2026-10-10** — `test/mcp-stdio.it.test.ts` drives the `devdigest-mcp` package over stdio with a JSON-RPC client written in the test helper, so the MCP SDK stays out of this package. Its write tests (`describe('run_agent_on_pr (the one write tool)'`, `:260`) must stay after the test that asserts the global `agent_runs` count is unchanged (`left the database as it found it`, `:253`); moving them earlier breaks it. **See also:** `../mcp/INSIGHTS.md`.
 - **2026-10-10** — `tsconfig.json` includes `src/**` only (`:28`), so `pnpm typecheck` never checks `test/**`; a type error in a test file or helper shows up only when vitest runs it.
+  **2026-10-18:** a fake drifts the same way: `class FakeStore implements ProjectContextStore` (`test/project-context-service.test.ts:53`) is checked only by the IDE, so a method added to the port later breaks nothing in CI — update the fake in the same change. To type-check tests on demand without editing configs, add a temporary `tsconfig` in `server/` that `extends ./tsconfig.json` and includes `src/**` plus the test files; a standalone `tsc` without the path aliases reports false `@devdigest/shared` errors.
 
 
 - **2026-10-11** — `MAX_CALLERS_PER_SYMBOL` is not applied per symbol: `tryPersistentBlast` ends with
@@ -100,15 +107,22 @@ Traps we have already hit in the server. Append-only. See the root
   `routes.ts` assigns `container.repoIntel` to it, which is the compile-time tie; the caller limit
   arrives through `container.repoIntelLimits` (`src/platform/container.ts`), not an import of
   `repo-intel/constants`.
+  **Superseded 2026-10-18:** `container.repoIntelLimits` is removed and `blast/routes.ts` no longer assigns the facade. `container.blast` (`src/platform/container.ts:153`) passes `source: this.repoIntel` and `callerLimit: MAX_CALLERS_PER_SYMBOL`, so the compile-time tie now sits in the container. The structural-port rule still holds; see the 2026-10-18 `container.blast` entry in this section.
 - **2026-10-11** — a count that readers could derive from two arrays of a response belongs in the
   response. `symbols_without_callers` was first computed as `changed_symbols.length -
   downstream.length` in the client and in `mcp`, which miscounts when two same-named changed
   symbols share one group; it is now `totals.symbols_without_callers`, counted by name in
   `toBlastRadius` (`src/modules/blast/domain.ts`). **See also:** `../mcp/INSIGHTS.md`.
 - **2026-10-17** — The global rate-limit plugin is registered only when `config.nodeEnv !== 'test'` (`src/app.ts:99`), so a 429 test must call `buildApp` with `NODE_ENV: 'production'`. Point `DATABASE_URL` at `postgres://x:x@127.0.0.1:1/none` so the boot-time run reaper never reaches a real database, and probe with `GET /repos/not-a-uuid/context`: it has no own `config.rateLimit` and answers 422 before any database access (`test/app-rate-limit.test.ts:33`).
+  **2026-10-18:** a per-route `config.rateLimit` is proven the same way with `API_RATE_LIMIT_MAX: '10000'`, so the global limit never answers: `POST /pulls/not-a-uuid/brief` answers 422 ten times and 429 on the 11th (`test/brief-rate-limit.test.ts:20`, `:28`).
 - **2026-10-17** — `FsCloneFiles` treats only `ENOENT`, `ENOTDIR` and `ELOOP` as a miss (`src/adapters/clone-files/index.ts:50`): a symlink loop reads as `not_found`, every other read error propagates. That is the seam for the NFR-6 "project context unavailable" run test — override `cloneFiles` with a read that throws another code (e.g. `EACCES`) and `forRun` rejects while the run continues. `chmod 000` fixtures prove nothing as root or on win32, so gate them on `process.getuid?.() !== 0` (`test/clone-files.test.ts:15`, `canDenyRead`).
 - **2026-10-18** — server callers of `wrapUntrusted` (`@devdigest/reviewer-core`, which writes the label raw into `source="…"`): `intent` runs every label through `safeLabel` (`src/modules/intent/prompt.ts:78`, `:97`), but `conventions` passes the sampled file's path as the label (`src/modules/conventions/prompt.ts:38`, `wrapUntrusted(f.path, …)`), so a repository path containing `"` or `>` can break that fence. Not fixed. New prompt code uses constant labels and carries any path inside the content or behind `safeLabel` — the L05 PR Brief plan's `BRIEF_FENCE_LABELS` (`../specs/plans/L05-pr-brief.md:178`). **See also:** `../reviewer-core/INSIGHTS.md`.
 - **2026-10-18** — a `reviews` row and its findings exist before the run is finished: `RunExecutor` calls `insertReview` and `insertFindings` (`src/modules/reviews/run-executor.ts:282-292`) before `completeAgentRun(runId, { status: 'done' })` (`:307-308`), and a throw in between leaves the run `failed` with its review row in place. So "the latest completed review" is the newest `kind = 'review'` row whose `agent_runs.status = 'done'` (join on `reviews.run_id`), not simply the newest `reviews` row.
+- **2026-10-18** — A service two modules read (`blast`: its own route and `brief`) is built once as a lazy getter in the composition root, `container.blast` (`src/platform/container.ts:153`, `_blast ??=`), and each consumer declares a structural port for it. A module never builds another module's service.
+- **2026-10-18** — The brief's missing/trimmed note is derived after budgeting: `fitToBudget` measures only the facts, and `trimsOf(original, facts)` (`src/modules/brief/domain.ts:306`) recovers what was cut from the difference. A new cut step in `fitToBudget` needs a matching field in `trimsOf`, or the prompt note and the input statuses under-report it.
+- **2026-10-18** — `pull_requests.additions`, `deletions` and `files_count` default to 0 (`src/db/schema/pulls.ts:22`, `:24`) until stats are filled in, so a test-inserted PR has zero totals; `diffTotals` sums the stored files when all three are 0 (`src/modules/brief/domain.ts:351`).
+- **2026-10-18** — The default workspace holds the seeded enabled agents, so an `.it` assertion of the form "the workspace has exactly these agents" needs a freshly inserted workspace (`newWorkspace()`, `test/project-context.it.test.ts:478`).
+- **2026-10-18** — The seeded PR #482 brief is a fixture contract for e2e flow 14 (`../e2e/specs/seed-fixtures.md`). `} satisfies Omit<PrBriefRecord, 'stale'>` makes `pnpm typecheck` catch contract drift, and `onConflictDoNothing()` on the `pr_id` primary key (`src/db/seed.ts:465-466`) lets a test edit the row and re-seed to prove no overwrite — undo the edit in `finally`, since the `.it` files share one database (`test/brief-seed.it.test.ts`).
 
 ## Tool & Library Notes
 
@@ -157,6 +171,7 @@ Traps we have already hit in the server. Append-only. See the root
   for load failures only. Planned as R-SRV-40/41 in `specs/plans/L05-project-context.md`,
   phase 3; not fixed at the time of writing (`src/adapters/tokenizer/index.ts:30-39`, `count`).
 - **2026-10-17** — An `EnvSchema` key that `.env.example` ships empty (`LOG_LEVEL=`, `API_RATE_LIMIT_MAX=`) needs `z.preprocess((v) => (v === '' ? undefined : v), …)` around it: a bare `z.coerce.number()` turns `''` into `0`, which fails `.min(1)` and stops `loadConfig` at boot (`src/platform/config.ts:40`, `:50`).
+- **2026-10-18** — To smoke-test pure server code, run a `.mts` script with `pnpm exec tsx <file>` from `server/` (the same `tsx` as `"dev": "tsx watch src/server.ts"`, `package.json:7`), which resolves the `@devdigest/*` aliases. `vitest run --root /` on a scratchpad file fails with `EPERM` on `scandir …/OOPJit`.
 
 ## Decisions
 
@@ -196,6 +211,7 @@ Traps we have already hit in the server. Append-only. See the root
   `_shared/file-role/` to that rule's `from`. Anything added to that folder stays free of I/O,
   Fastify and `src/db` by convention. `reviewer-core` cannot import it (`core-stays-pure`), so if
   the L08 prompt filter is built inside the engine, the classifier moves to `@devdigest/shared`.
+- **2026-10-18** — PR brief risk file references are validated against the full blast map from `blast.forPull`, not the caller-trimmed map sent to the model (`blastFiles: blastFilesOf(blast)`, `src/modules/brief/service.ts:273`); the stored `blast` stays the map as sent (`sentBlast(blast, fit.trims.callers)`, `:303`). Rejected: validating against the sent map, which dropped true risks about callers the token budget cut. Chosen by the user for plan item P4.F3.
 
 
 ## Recurring Errors & Fixes
@@ -289,6 +305,12 @@ orphan containers (random names, image `pgvector/pgvector:pg16`, not `devdigest-
 to be removed by the user.
 **Evidence:** `test/helpers/` Testcontainers start-up used by every `*.it.test.ts`; in this
 session the serial lane gave `Test Files 19 passed (19)` right after a full run that skipped 19.
+### A failed brief generation logs an unhandled promise rejection, although the route answered the error
+**Date:** 2026-10-18
+**Cause:** the in-flight map was cleaned with `promise.finally(() => map.delete(id))`. `.finally()` returns a new promise that nobody awaits; when generation rejects, that derived promise rejects too, unhandled.
+**Fix / rule:** delete the entry in a `finally` inside an async wrapper, and store and return that wrapper's promise — `const started = (async () => { try { … } finally { this.inFlight.delete(prId); } })()`.
+**Evidence:** `src/modules/brief/service.ts:133-143` (`inFlight`).
+
 
 ## Open Questions
 
@@ -309,6 +331,7 @@ session the serial lane gave `Test Files 19 passed (19)` right after a full run 
 - **2026-10-05** — the casts that pre-date the intent work still stand: `row.trace as RunTrace` (`src/modules/reviews/repository/run.repo.ts:194`) and the `severity` / `category` / `kind` casts in `src/modules/_shared/finding-dto.ts`. They break the same `zod-parse-at-boundary` rule the intent repository now follows; converting them was kept out of the L03 change.
 - **2026-10-10** — `test/mcp-stdio.it.test.ts` (18 tests) has never executed: the Docker daemon was unresponsive for the whole L04 session, and the file skips through `dockerAvailable()` (`:30`) like the other integration files. Unverified against the real API: the five seeded agent names and their order, `line: 12` and the title of the Stripe finding for PR #482, the three seeded conventions and their evidence lines, that the grounding gate keeps exactly one of the fixture's two findings, that the run bus replays at least one event to a late SSE subscriber, and that an inserted PR stays visible after `GET /repos/:id/pulls` syncs against `MockGitHubClient({ pulls: [] })`. Settle it with `pnpm exec vitest run test/mcp-stdio.it.test.ts --no-file-parallelism` and read the summary for `skipped`.
   **Resolved 2026-10-10:** after Docker was restarted the file ran and passed on its first execution — `✓ test/mcp-stdio.it.test.ts (18 tests)`; the whole integration lane: `Test Files 17 passed (17)` · `Tests 115 passed (115)`, nothing skipped. Every assertion listed above held.
+- **2026-10-18** — `test/contracts-sync.test.ts` byte-checks the client copies of `brief.ts` and `review-api.ts`, but `server-unit.yml` filters on `server/**` and `reviewer-core/**` only (`../.github/workflows/server-unit.yml:19-27`), so a PR that edits only `client/src/vendor/shared/**` does not run it. Left as is (L05 plan Q13); adding that path to the filter would close it.
 
 
 ## Session Notes
@@ -346,3 +369,4 @@ session the serial lane gave `Test Files 19 passed (19)` right after a full run 
   the tokenizer special-token fallback recorded above. **See also:** `../INSIGHTS.md`.
 - **2026-10-17** — L05 Project Context built (13 phases; phases 12–13 were review fixes): the configurable `API_RATE_LIMIT_MAX`, the clone-file miss codes and the rate-limit test recipe recorded above. **See also:** `../e2e/INSIGHTS.md` (the 429s that motivated the setting).
 - **2026-10-18** — L05 PR Brief planned, no code (`specs/plans/L05-pr-brief.md`): the `wrapUntrusted` label callers and the review-before-run-done order recorded above. **See also:** `../INSIGHTS.md`.
+- **2026-10-18** — L05 PR Brief built (11 phases; 10–11 were review fixes): the `brief` module and `GET`/`POST /pulls/:id/brief`, `container.blast`, `forWorkspace`, the seeded brief; `container.repoIntelLimits` removed afterwards. Entries above.

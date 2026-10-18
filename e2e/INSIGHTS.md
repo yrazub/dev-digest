@@ -24,6 +24,7 @@ Traps we have already hit in the browser suite. Append-only. See the root
   case-insensitive substring unless `--exact` is passed (`agent-browser find --help`), so
   `--name "Boilerplate"` finds the group header button whose full name is the label, the hint and
   the file count (`specs/11-pr-smart-diff.flow.json`). Pick a substring no other button shares.
+  **2026-10-18:** for an absence check the substring match is a trap — `Generate brief` also matches `Regenerate brief`. Flow 14 anchors a regex on each button's text instead: `![...document.querySelectorAll('button')].some((b) => /^\s*Generate brief\s*$/i.test(b.innerText))` (`specs/14-pr-brief.flow.json:16`).
 - **2026-10-07** — a `SectionLabel` is uppercased by CSS. Flow `11` asserts it with
   `wait --fn "document.body.innerText.toLowerCase().includes('…')"` (`specs/11-pr-smart-diff.flow.json:14`),
   which passed in the hermetic run. Whether `wait --text` with the authored casing would also
@@ -41,6 +42,7 @@ Traps we have already hit in the browser suite. Append-only. See the root
   `pnpm db:seed` does not reset anything, and after dropping and re-seeding the schema the running
   API answered `GET /repos` with `[]` until it was restarted. Rerun on a fresh stack
   (`../scripts/e2e.sh` starts an ephemeral Postgres each time).
+- **2026-10-18** — A negative `wait --fn "!…includes(…)"` passes at once on a page that has not rendered yet, so on its own it proves nothing. Put it after a positive `wait --text` from the same component: flow 10 waits for the seeded in-scope item, then asserts the risk tag is absent (`specs/10-pr-intent.flow.json:11-12`).
 
 
 ## Recurring Errors & Fixes
@@ -121,6 +123,7 @@ changes landed in one commit, so which one mattered was not separated. The insta
 the version — read it first when the CI errors differ from the local wording.
 **Evidence:** `../.github/workflows/e2e-web.yml:116-120` (pin, `AGENT_BROWSER_BIN`, version print).
 **2026-10-17:** locally, `agent-browser` on `PATH` turned out to be a dangling symlink into a deleted scratch folder. `AGENT_BROWSER_BIN` (read at `run.ts:43`) set to the global install's `lib/node_modules/agent-browser/bin/agent-browser-<platform>` binary ran the suite.
+**2026-10-18:** recurred. The first hermetic run went 0/14 with `spawn agent-browser ENOENT` on every first step; the same `AGENT_BROWSER_BIN` (0.38.1) gave 14/14. The `PATH` symlink still points into the deleted folder; reinstalling with `npm i -g agent-browser@0.39.0` (the CI pin) would end it.
 
 ### A flow's "persisted after reload" check fails: the reloaded page shows the old value
 **Date:** 2026-10-11
@@ -155,3 +158,4 @@ screen proves the optimistic update, not the save.
 - **2026-10-11** — fixed the PR #16 `e2e web` failure: pinned agent-browser and its path in the workflow, added the `find` retry and failure output to the runner, and made `08`/`09` wait for the save before reloading.
 - **2026-10-11** — added `12-pr-blast-radius` (the seeded Blast radius block and the Graph round trip); hermetic run 12/12 from a separate worktree.
 - **2026-10-17** — added `13-project-context`; the 429s that led to `API_RATE_LIMIT_MAX`, and flow 08's toast-before-URL reorder; hermetic run 13/13.
+- **2026-10-18** — added `14-pr-brief` (the seeded brief and the Review focus jump) and moved flow 10's risk-tag check to Agent runs; hermetic run 14/14 once `AGENT_BROWSER_BIN` was set.

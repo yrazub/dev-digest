@@ -107,6 +107,7 @@ be obvious to anyone reading the code, it does not belong here.
   umbrella and module specs share one name.
   **2026-10-17:** the reopen route is now step 2 of "Feature workflow" (`.claude/agents/README.md:96-98`).
 - **2026-10-18** — a review of the finished implementation plan by a model of another family (the L05 homework's "cross-model review"), done before `/execute-plan`, found four real gaps that spec-creator, implementation-planner's own review pass and the main session had all missed: findings taken from an unfinished review run, the completion log written before the validation that produces its counts, a rate-limit test that asserted only an exported constant, and an unescaped `wrapUntrusted` label. Each was checked against the code before it was accepted, and all four went into the plan as an `amend` pass with no fix phase, because nothing was built yet (`specs/plans/L05-pr-brief.md:7`, `:178`, `:209`, `:249-252`, commit "amend the L05 PR Brief plan after a cross-model review"). Run it on every plan of a multi-package feature, and check each claim before amending.
+- **2026-10-18** — A plan's "Expected to change: none" should count typecheck-only breaks. A new required prop (`onOpenFocus: (file: string, line: number) => void`, `client/src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/OverviewTab.tsx:15`) fails the client's `pnpm typecheck` at test call sites while `pnpm test` stays green, because vitest does not type-check; that is where the L05 PR Brief phase 7 deviation came from. **See also:** `client/INSIGHTS.md` (client `typecheck` covers test files).
 
 ## Tool & Library Notes
 
@@ -244,6 +245,8 @@ be obvious to anyone reading the code, it does not belong here.
   `specs/plans/`), drop the banner and undo the escape (`sed 's/<\\total_tokens>/<total_tokens>/g'`),
   then check that no `<\` is left. Evidence: `specs/plans/L05-project-context.md:217`, the
   `ProjectContextView` row, footer `"<documents.length> files · <total_tokens> tokens total"`.
+- **2026-10-18** — The `chrome-devtools` MCP runs with `--autoConnect` (`.mcp.json:8`) and drives the user's own Chrome window, so `resize_page` does not change `innerWidth`. For a narrow-width check use `emulate` with viewport `<w>x<h>x1`, and reset it with an empty viewport before closing the tab.
+- **2026-10-18** — BSD `sed` on macOS reads the argument after `-i` as the backup suffix, so `sed -i 's/a/b/' file` fails with `unterminated substitute pattern`. Use `sed -i '' …`, `perl -pi -e`, or the Edit tool. No line in the repo shows it.
 
 ## Decisions
 
@@ -524,3 +527,4 @@ the editor tool.
 - **2026-10-17** — L05 follow-up: design gaps found by the user after push → phase 14 (N6/N2b/N2c styling, style-collision warning), final checks re-run, e2e 13/13. Deferred: `SafeMarkdown` has no `img` rule (`![x](javascript:…)` renders `<img src="">`).
 - **2026-10-17** — the deferred `SafeMarkdown` image follow-up is closed: no `<img>` is rendered at all, only the alt text (a remote image would call out from the viewer's browser; `javascript:` gave `src=""`). See `client/src/components/safe-markdown/SafeMarkdown.tsx` (`img` renderer).
 - **2026-10-18** — L05 PR Brief specified and planned, no code: specs approved (AC-19 reworded once after the planner's review), plan amended after a cross-model review; `/execute-plan` to run with `--per-chat 5` (phases 1–5 are server-only, no screenshots). **See also:** `server/INSIGHTS.md`, `reviewer-core/INSIGHTS.md`.
+- **2026-10-18** — L05 PR Brief built with `/execute-plan` (11 phases, two of them review fixes); final checks: plan-verifier and architecture-reviewer pass (round 3), docs, hermetic e2e 14/14. Entries in `server/`, `client/` and `e2e/` INSIGHTS.
