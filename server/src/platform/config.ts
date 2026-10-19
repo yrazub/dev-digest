@@ -70,7 +70,7 @@ export function parseProjectContextRoots(raw: string | undefined): string[] {
 }
 
 /** Requests per client per minute when `API_RATE_LIMIT_MAX` is not set. */
-export const DEFAULT_API_RATE_LIMIT_MAX = 120;
+export const DEFAULT_API_RATE_LIMIT_MAX = 600;
 
 export type AppConfig = {
   databaseUrl: string;
