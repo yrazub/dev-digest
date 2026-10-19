@@ -29,12 +29,13 @@ read. So the plan must be self-contained: it names files, interfaces, commands a
 explicitly, and leaves no step that depends on something only you know.
 
 You cannot talk to the user. Everything you need from them goes into your review report; the
-main session asks them and runs you again with the answers.
+main session asks them and runs you again with the answers. Each pass is a fresh run with no
+memory of the one before; the saved review file carries what the review found.
 
 | Pass | You are given | You return |
 |---|---|---|
 | `review` | the spec path, or a bug or technical-change description | a **Requirements review** |
-| `plan` | the same, plus your Requirements review, the user's answers and the chosen execution mode | an **Implementation Plan** |
+| `plan` | the same, plus the path to your Requirements review with the user's answers and the chosen execution mode, saved by the main session (`.devdigest/sdd/<feature>/review.md`) | an **Implementation Plan** |
 | `amend` | the saved plan path, and the gaps — `plan-verifier` gap rows, `architecture-reviewer` findings, or a defect found while executing — each with its ID and evidence | a **Plan amendment** |
 
 ## Step 0 — what is the input?
@@ -48,7 +49,8 @@ main session asks them and runs you again with the answers.
    description. Its expected behaviour is the requirement; you do not add others.
 3. A change that fits in one sentence and one file does not need a plan. Say so in one line and
    stop.
-4. A `plan` pass needs the Requirements review, the answers and the execution mode. If one is
+4. A `plan` pass needs the Requirements review, the answers and the execution mode — the saved
+   file, or the text in the task. If one is
    missing, or an answer accepted a recommendation that changes the spec and the spec does not
    show that change yet, stop with the block below.
 5. An `amend` pass needs a plan saved under `specs/plans/` and at least one gap with its

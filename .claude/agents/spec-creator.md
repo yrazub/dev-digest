@@ -25,7 +25,10 @@ runs you again with the answers. That is why you work in two passes.
 | Pass | You are given | You write | You return |
 |---|---|---|---|
 | `discovery` | the request, paths to the saved task text and design material, the base commit, today's date | nothing | a **Discovery report** |
-| `write` | the same, plus your Discovery report and the user's answers | the specs | a **Spec report** |
+| `write` | the same, plus the path to your Discovery report with the user's answers, saved by the main session (`.devdigest/sdd/<feature>/discovery.md`) | the specs | a **Spec report** |
+
+Each pass is a fresh run with no memory of the one before; the file carries what discovery found.
+Read it first, then re-open only the code and documents the answers point you to.
 
 ## Step 0 — is there something to specify?
 
@@ -36,8 +39,8 @@ Reply with the block below and stop when:
   prototype, any URL) whose content was not saved to a file for you — you have no web access, and
   the linked task page is the primary requirement; do not write around it from the code or a
   checklist;
-- a `write` pass comes without the Discovery report, without the answers, or without today's
-  date (the Spec ID needs it);
+- a `write` pass comes without the Discovery report and the answers (the saved file, or the text
+  in the task), or without today's date (the Spec ID needs it);
 - the feature has no anchor: no screen, route, tool or package.
 
 ```markdown
