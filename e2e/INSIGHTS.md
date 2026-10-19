@@ -125,6 +125,8 @@ the version — read it first when the CI errors differ from the local wording.
 **Evidence:** `../.github/workflows/e2e-web.yml:116-120` (pin, `AGENT_BROWSER_BIN`, version print).
 **2026-10-17:** locally, `agent-browser` on `PATH` turned out to be a dangling symlink into a deleted scratch folder. `AGENT_BROWSER_BIN` (read at `run.ts:43`) set to the global install's `lib/node_modules/agent-browser/bin/agent-browser-<platform>` binary ran the suite.
 **2026-10-18:** recurred. The first hermetic run went 0/14 with `spawn agent-browser ENOENT` on every first step; the same `AGENT_BROWSER_BIN` (0.38.1) gave 14/14. The `PATH` symlink still points into the deleted folder; reinstalling with `npm i -g agent-browser@0.39.0` (the CI pin) would end it.
+**2026-10-19:** closed. The global install was reinstalled at 0.39.0, which replaced the dangling `PATH` symlink, and `scripts/e2e.sh` now resolves the binary before booting the stack — `AGENT_BROWSER_BIN`, else `agent-browser` if `--version` runs, else the global install's `agent-browser-<os>-<arch>` — and exits 1 when none runs (`resolve_agent_browser`, `../scripts/e2e.sh:58`). Checked with the dangling link (fell back, 0.38.1), a bad `AGENT_BROWSER_BIN` and an empty `PATH` (both exit 1).
+**See also:** root `INSIGHTS.md`, Decisions, 2026-10-19.
 
 ### A flow's "persisted after reload" check fails: the reloaded page shows the old value
 **Date:** 2026-10-11
@@ -160,3 +162,4 @@ screen proves the optimistic update, not the save.
 - **2026-10-11** — added `12-pr-blast-radius` (the seeded Blast radius block and the Graph round trip); hermetic run 12/12 from a separate worktree.
 - **2026-10-17** — added `13-project-context`; the 429s that led to `API_RATE_LIMIT_MAX`, and flow 08's toast-before-URL reorder; hermetic run 13/13.
 - **2026-10-18** — added `14-pr-brief` (the seeded brief and the Review focus jump) and moved flow 10's risk-tag check to Agent runs; hermetic run 14/14 once `AGENT_BROWSER_BIN` was set.
+- **2026-10-19** — `scripts/e2e.sh` resolves agent-browser and stops when it does not run; global agent-browser reinstalled at 0.39.0.
