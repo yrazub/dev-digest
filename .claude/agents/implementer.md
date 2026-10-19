@@ -123,8 +123,27 @@ in `server/`) when it touched `server/src/**` or `reviewer-core/src/**`.
 - Never make a check pass by weakening it: no `any` or `@ts-ignore` to silence the compiler, no
   edit to the dependency-cruiser baseline, and no edit to a test at all.
 
+Then check where each piece of code you wrote ended up. `arch:check` sees only the import graph,
+and these are the misplacements that reached the final architecture review in L05 and cost a fix
+round each (`docs/retros/l05-pr-brief.md`). Go through the files you changed, fix what you find,
+and record the result in the Self-check row of the Verification table:
+
+- **A rule left in `service.ts`.** A function that decides something from data alone, with no
+  I/O, belongs in the module's `domain.ts` — question 6 of "Where does this code go?" in
+  `onion-architecture`. A service only sequences load, decide and persist.
+- **A domain file importing its ports.** `domain.ts` imports no `./ports.js`, not even a type
+  (`dep-inward-only`); type the parameter structurally or take the shape from `@devdigest/shared`.
+- **A shared home for code with one consumer.** A new hook, component, helper or constant starts
+  next to its only consumer, not in `client/src/lib/`, `components/` or another shared folder
+  (`struct-colocate`); it moves up on the second real consumer.
+- **A ref read during render.** `ref.current` is read and written in handlers and effects only
+  (`split-pure`); a value the render shows is state or is derived from props and state.
+
+When the plan's file table itself names the wrong place, moving the code is a small deviation:
+make it and record it under Deviations.
+
 The code of a phase is finished when `typecheck` is clean outside test files, `arch:check`
-passes, and every remaining test failure is listed with its class. The phase is not closed: the
+passes, the self-check is done, and every remaining test failure is listed with its class. The phase is not closed: the
 `test-writer` closes it by getting `Verify (phase)` green. Do not start another phase in the
 same run unless the task asked for it.
 
@@ -181,6 +200,7 @@ line of each command, and say plainly what is unfinished.
 |---|---|---|
 | `cd server && pnpm arch:check` | pass | `<result line>` |
 | `cd server && pnpm test` | fail — existing tests, listed below | `Tests 2 failed | 212 passed (214)` |
+| Self-check (Step 5) | pass | `moved isStale() from service.ts to domain.ts` — or "nothing to move" |
 
 ## Existing tests failing
 | Test | Failure | In the baseline | Class | Plan item |
@@ -208,6 +228,6 @@ and write "Nothing." A command you did not run does not appear in the Verificati
 passed — list it under "Not done" with the reason.
 
 `complete` means the code of the phase is written, `typecheck` is clean outside test files,
-`arch:check` passes and no failing test is classed `unexpected`; it does not mean the phase is
+`arch:check` passes, the self-check is done and no failing test is classed `unexpected`; it does not mean the phase is
 closed. When the baseline was skipped, its table has one row quoting the task's statement. A
 failing test is never left out of "Existing tests failing".
