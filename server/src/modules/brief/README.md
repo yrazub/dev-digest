@@ -124,8 +124,12 @@ is the map as sent, without the dropped callers, while the validation below uses
 
 [`prompt.ts`](prompt.ts) builds exactly two messages. The system message is trusted: it says what a
 brief is, that every risk cites a listed path, that review focus names changed files with a line
-inside a listed range, that missing inputs must not be guessed, and that everything in an
-`<untrusted>` block is data. The user message holds the sections in this order: title; the list of
+inside a listed range, that missing inputs must not be guessed, that everything in an `<untrusted>` block is data, and
+the output limits: at most 6 risks citing at most 3 paths each, at most 6 review-focus items, one
+short sentence per explanation and reason, a summary of at most 600 characters. The same limits are
+in the `BriefModelOutput` field descriptions, as text only: the schema has no `.max()`, so an answer
+over a limit is capped, not rejected. The call allows `OUTPUT_MAX_TOKENS` (4,000) output tokens;
+at 2,000, a 100-file PR was cut off with `output_truncated`. The user message holds the sections in this order: title; the list of
 missing and trimmed inputs (written by code, outside any fence); intent; changed files; blast
 radius; findings; description; linked issue; one block per document.
 
@@ -150,7 +154,8 @@ keeps only what the pull request backs:
   the first line of the nearest range, the earlier one on a tie. A file with no stored patch, or
   only deletion hunks, keeps the model's line.
 - `dropped` records how many risks and focus items were removed, before the caps. `capBrief` then
-  keeps the first risks and focus items up to their caps and cuts the summary at a word boundary.
+  keeps the first 6 risks, the first 3 references of each, and the first 6 focus items, and cuts the
+  summary to 600 characters at a word boundary. Cutting references is a cap, not a drop.
 
 ## The stored record
 

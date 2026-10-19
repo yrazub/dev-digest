@@ -1,6 +1,6 @@
 # Spec: PR Why + Risk Brief (L05 homework — PR Brief)
 Spec ID: SPEC-2026-10-17-pr-brief
-Status: approved
+Status: implemented
 Supersedes: —
 
 ## Problem and user

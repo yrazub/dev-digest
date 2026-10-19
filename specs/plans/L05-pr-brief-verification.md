@@ -5,6 +5,11 @@
 > AC-84) depended on the hermetic e2e run, which the agent was told not to start. It ran next, on
 > the same HEAD: `cd e2e && npm run e2e:hermetic` → **14/14 flows passed**, flows 10 and 14
 > included. No requirement is left open.
+>
+> **Added after this report (2026-10-19):** phase 12, the output-cap fix from a live run on PR #20
+> (`output_truncated`), with its spec amendment (AC-52, EC-17, NFR-1, NFR-4, R-SRV-11, R-SRV-19,
+> R-SRV-43). Its own verification ran green — server `typecheck` and `arch:check` clean, 970 unit and
+> 205 integration tests passed. A fourth plan-verifier round on it was skipped at the user's request.
 
 # Verification report: PR Why + Risk Brief (L05)
 

@@ -1,5 +1,5 @@
 # PR Why + Risk Brief — client
-Spec ID: SPEC-2026-10-17-pr-brief · Umbrella: [`specs/L05-pr-brief.md`](../../specs/L05-pr-brief.md) · Status: approved
+Spec ID: SPEC-2026-10-17-pr-brief · Umbrella: [`specs/L05-pr-brief.md`](../../specs/L05-pr-brief.md) · Status: implemented
 
 ## Scope
 Covers AC-1–AC-42 of the umbrella, and the client side of AC-83 and AC-84. The deferred umbrella

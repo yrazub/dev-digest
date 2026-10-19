@@ -1,5 +1,5 @@
 # PR Why + Risk Brief — server
-Spec ID: SPEC-2026-10-17-pr-brief · Umbrella: [`specs/L05-pr-brief.md`](../../specs/L05-pr-brief.md) · Status: approved
+Spec ID: SPEC-2026-10-17-pr-brief · Umbrella: [`specs/L05-pr-brief.md`](../../specs/L05-pr-brief.md) · Status: implemented
 
 ## Scope
 Covers AC-11–AC-14 (the stored records the client shows) and AC-43–AC-84 of the umbrella (AC-83
