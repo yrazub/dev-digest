@@ -17,5 +17,6 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | [`L04-blast-radius.md`](L04-blast-radius.md) | `/repos/:repoId/pulls/:number` | implemented |
 | [`L05-project-context.md`](L05-project-context.md) | `/repos/:repoId/context` · `/agents/:id?tab=context` · `/skills/:id?tab=context` · `/repos/:repoId/pulls/:number` (run trace) | approved |
 | [`architecture-refactor.md`](architecture-refactor.md) | all (C1: `src/lib/hooks`) | draft |
+| [`tool-call-duration.md`](tool-call-duration.md) | `/repos/:repoId/pulls/:number` (run trace drawer) | implemented |
 
 Browser-level acceptance for a finished screen belongs in [`../e2e/specs`](../../e2e/specs).
