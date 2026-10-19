@@ -310,6 +310,12 @@ session the serial lane gave `Test Files 19 passed (19)` right after a full run 
 **Cause:** the in-flight map was cleaned with `promise.finally(() => map.delete(id))`. `.finally()` returns a new promise that nobody awaits; when generation rejects, that derived promise rejects too, unhandled.
 **Fix / rule:** delete the entry in a `finally` inside an async wrapper, and store and return that wrapper's promise — `const started = (async () => { try { … } finally { this.inFlight.delete(prId); } })()`.
 **Evidence:** `src/modules/brief/service.ts:133-143` (`inFlight`).
+### Regenerate on a large PR fails with `Brief generation failed (output_truncated)`, though the first brief worked
+**Date:** 2026-10-19
+**Cause:** the brief call allowed 2,000 output tokens and never told the model its output limits: the caps (6 risks / 6 focus items / 600 chars) were applied only after the answer arrived. On a 100-file PR the first answer used 1,573 tokens; the next one, at the same temperature 0, ran past 2,000, came back with `finish_reason: length` and threw `OutputTruncatedError`, which is not repaired or retried. A small PR (~300 output tokens) never shows it.
+**Fix / rule:** a structured call whose output grows with the input states its limits to the model, in the system message and in the schema's `.describe()` texts (as text, not `.max()`: a hard bound turns an over-long answer into a schema failure instead of a cap), keeps the server-side cap, and sizes `maxTokens` with headroom over the largest answer observed (now `OUTPUT_MAX_TOKENS = 4000`). Read `tokens_out` of a stored record to see how close a run came.
+**Evidence:** `src/modules/brief/constants.ts` (`OUTPUT_MAX_TOKENS`), `src/modules/brief/prompt.ts` (the "Limits" bullet of `SYSTEM_PROMPT`), `../reviewer-core/src/llm/openrouter.ts:153` (`finish_reason === 'length'` → `OutputTruncatedError`). **See also:** `../reviewer-core/INSIGHTS.md` (the review call's `maxTokens`).
+
 
 
 ## Open Questions
@@ -370,3 +376,4 @@ session the serial lane gave `Test Files 19 passed (19)` right after a full run 
 - **2026-10-17** — L05 Project Context built (13 phases; phases 12–13 were review fixes): the configurable `API_RATE_LIMIT_MAX`, the clone-file miss codes and the rate-limit test recipe recorded above. **See also:** `../e2e/INSIGHTS.md` (the 429s that motivated the setting).
 - **2026-10-18** — L05 PR Brief planned, no code (`specs/plans/L05-pr-brief.md`): the `wrapUntrusted` label callers and the review-before-run-done order recorded above. **See also:** `../INSIGHTS.md`.
 - **2026-10-18** — L05 PR Brief built (11 phases; 10–11 were review fixes): the `brief` module and `GET`/`POST /pulls/:id/brief`, `container.blast`, `forWorkspace`, the seeded brief; `container.repoIntelLimits` removed afterwards. Entries above.
+- **2026-10-19** — L05 PR Brief phase 12 after a live `output_truncated` on PR #20: output cap 4,000, the output limits stated to the model, 3 file refs per risk; spec amended in place (reopened as draft, re-approved).
