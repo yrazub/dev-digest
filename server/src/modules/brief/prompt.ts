@@ -1,5 +1,6 @@
 import { wrapUntrusted } from '@devdigest/reviewer-core';
 import type { BriefInput, ChatMessage } from '@devdigest/shared';
+import { MAX_FILE_REFS_PER_RISK, MAX_REVIEW_FOCUS, MAX_RISKS, SUMMARY_MAX_CHARS } from './constants.js';
 import { formatRanges, type BriefFacts } from './domain.js';
 
 /**
@@ -38,7 +39,8 @@ How to write it:
 - You see paths, roles, line counts and line ranges, not the changed lines themselves. Base a risk on what the listed material supports.
 - Inputs named in the missing or trimmed list were not given or were cut. Do not guess what they say.
 - State only what the material shows. Do not hedge with "likely", "might" or "probably".
-- Write plain text: short phrases, no Markdown and no backticks.`;
+- Write plain text: short phrases, no Markdown and no backticks.
+- Limits: at most ${MAX_RISKS} risks, each citing at most ${MAX_FILE_REFS_PER_RISK} paths; at most ${MAX_REVIEW_FOCUS} review-focus items; each risk explanation and each focus reason is one short sentence; the summary is at most ${SUMMARY_MAX_CHARS} characters.`;
 
 function oneLine(text: string): string {
   return text.replace(/[\r\n]+/g, ' ');

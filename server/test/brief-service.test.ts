@@ -384,7 +384,7 @@ describe('BriefService.generate — one model call, stored with the head SHA', (
       model: 'gpt-4.1',
       schemaName: BRIEF_SCHEMA_NAME,
       temperature: 0,
-      maxTokens: 2000,
+      maxTokens: 4000,
       maxRetries: 1,
       timeoutMs: 60_000,
       reasoning: false,

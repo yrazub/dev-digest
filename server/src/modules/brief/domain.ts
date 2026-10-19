@@ -18,6 +18,7 @@ import { capWords } from '../_shared/text/plain-text.js';
 import {
   DESCRIPTION_CUT_TOKENS,
   ISSUE_BODY_CUT_TOKENS,
+  MAX_FILE_REFS_PER_RISK,
   MAX_REVIEW_FINDINGS,
   MAX_REVIEW_FOCUS,
   MAX_RISKS,
@@ -32,27 +33,43 @@ import {
 
 // ---------------------------------------------------------------- model output
 
-/** The model's own answer (module-local, not a contract); `PrBriefDraft` is its schema name. */
+/**
+ * The model's own answer (module-local, not a contract); `PrBriefDraft` is its schema name.
+ * The output limits are stated in the `.describe()` texts only, which reach the provider as the
+ * JSON schema. There is no `.max()`: a bound would turn an answer with 7 risks into a schema
+ * failure instead of a cap, and `capBrief` is the server-side guarantee.
+ */
 export const BriefModelOutput = z.object({
-  summary: z.string().min(1).describe('One or two plain sentences: what the change does and why it matters.'),
-  risks: z.array(
-    z.object({
-      kind: z.enum(['security', 'db_migration', 'breaking_api', 'perf', 'deps', 'config', 'other']),
-      title: z.string().describe('A short label.'),
-      explanation: z.string().describe('One sentence.'),
-      severity: RiskSeverity,
-      file_refs: z
-        .array(z.string())
-        .describe('Listed paths only, as `path`, `path:line` or `path:start-end`. At least one.'),
-    }),
-  ),
-  review_focus: z.array(
-    z.object({
-      file: z.string().describe('A changed file, as listed.'),
-      line: z.number().int().min(1).describe("A line inside that file's listed ranges."),
-      reason: z.string().describe('Why a reviewer should look here.'),
-    }),
-  ),
+  summary: z
+    .string()
+    .min(1)
+    .describe(
+      `One or two plain sentences, at most ${SUMMARY_MAX_CHARS} characters: what the change does and why it matters.`,
+    ),
+  risks: z
+    .array(
+      z.object({
+        kind: z.enum(['security', 'db_migration', 'breaking_api', 'perf', 'deps', 'config', 'other']),
+        title: z.string().describe('A short label.'),
+        explanation: z.string().describe('One short sentence.'),
+        severity: RiskSeverity,
+        file_refs: z
+          .array(z.string())
+          .describe(
+            `At most ${MAX_FILE_REFS_PER_RISK} listed paths, as \`path\`, \`path:line\` or \`path:start-end\`. At least one.`,
+          ),
+      }),
+    )
+    .describe(`At most ${MAX_RISKS} risks.`),
+  review_focus: z
+    .array(
+      z.object({
+        file: z.string().describe('A changed file, as listed.'),
+        line: z.number().int().min(1).describe("A line inside that file's listed ranges."),
+        reason: z.string().describe('One short sentence: why a reviewer should look here.'),
+      }),
+    )
+    .describe(`At most ${MAX_REVIEW_FOCUS} places to read, in reading order.`),
 });
 export type BriefModelOutput = z.infer<typeof BriefModelOutput>;
 
@@ -500,7 +517,11 @@ export function validateDraft(
   return { risks, review_focus: reviewFocus, dropped: { risks: droppedRisks, review_focus: droppedFocus } };
 }
 
-/** R-SRV-11: the first 6 risks, the first 6 focus items, the summary cut at a word boundary. */
+/**
+ * R-SRV-11: the first 6 risks, each with its first 3 (validated) `file_refs` in model order, the
+ * first 6 focus items, and the summary cut at a word boundary. Cutting references is a cap, not a
+ * drop. The inputs are not mutated.
+ */
 export function capBrief(
   summary: string,
   risks: Risk[],
@@ -508,7 +529,9 @@ export function capBrief(
 ): { summary: string; risks: Risk[]; review_focus: ReviewFocusItem[] } {
   return {
     summary: capWords(summary, SUMMARY_MAX_CHARS),
-    risks: risks.slice(0, MAX_RISKS),
+    risks: risks
+      .slice(0, MAX_RISKS)
+      .map((risk) => ({ ...risk, file_refs: risk.file_refs.slice(0, MAX_FILE_REFS_PER_RISK) })),
     review_focus: reviewFocus.slice(0, MAX_REVIEW_FOCUS),
   };
 }

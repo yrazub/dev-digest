@@ -720,6 +720,61 @@ describe('capBrief', () => {
     expect(out.review_focus).toHaveLength(2);
   });
 
+  describe('file references per risk (R-SRV-11, EC-17)', () => {
+    const withRefs = (title: string, file_refs: string[]): Risk => ({
+      kind: 'other',
+      title,
+      explanation: 'e',
+      severity: 'low',
+      file_refs,
+    });
+    const refs = (n: number) => Array.from({ length: n }, (_, i) => `a.ts:${i + 1}`);
+
+    it('keeps the first 6 of 7 risks and the first 3 refs of a risk with 5, and the first 6 of 7 focus items', () => {
+      const input = [
+        withRefs('r0', refs(1)),
+        withRefs('r1', refs(5)),
+        withRefs('r2', refs(3)),
+        withRefs('r3', refs(1)),
+        withRefs('r4', refs(3)),
+        withRefs('r5', refs(2)),
+        withRefs('r6', refs(1)),
+      ];
+      const out = capBrief('short', input, focus(7));
+      expect(out.risks.map((r) => r.title)).toEqual(['r0', 'r1', 'r2', 'r3', 'r4', 'r5']);
+      expect(out.risks[1]?.file_refs).toEqual(['a.ts:1', 'a.ts:2', 'a.ts:3']);
+      expect(out.risks.map((r) => r.file_refs.length)).toEqual([1, 3, 3, 1, 3, 2]);
+      expect(out.risks[0]?.file_refs).toEqual(['a.ts:1']);
+      expect(out.review_focus).toHaveLength(6);
+    });
+
+    it('does not mutate the arrays it is given', () => {
+      const input = [withRefs('r0', refs(5)), withRefs('r1', refs(1))];
+      const inputFocus = focus(7);
+      capBrief('short', input, inputFocus);
+      expect(input[0]?.file_refs).toEqual(refs(5));
+      expect(input).toHaveLength(2);
+      expect(inputFocus).toHaveLength(7);
+    });
+
+    it('cuts after validation: two invalid refs ahead of five valid ones leave the first 3 valid refs, with nothing dropped', () => {
+      const ctx = { changedFiles: new Map([['a.ts', null as LineRange[] | null]]), blastFiles: new Set<string>() };
+      const draft: BriefModelOutput = {
+        summary: 'does a thing',
+        risks: [
+          { ...withRefs('mixed', ['nope.ts:1', 'also/nope.ts', ...refs(3)]) },
+          { ...withRefs('valid', refs(5)) },
+        ],
+        review_focus: [],
+      };
+      const validated = validateDraft(draft, ctx);
+      const out = capBrief(draft.summary, validated.risks, validated.review_focus);
+      expect(out.risks[0]?.file_refs).toEqual(['a.ts:1', 'a.ts:2', 'a.ts:3']);
+      expect(out.risks[1]?.file_refs).toEqual(['a.ts:1', 'a.ts:2', 'a.ts:3']);
+      expect(validated.dropped).toEqual({ risks: 0, review_focus: 0 });
+    });
+  });
+
   it('leaves a summary of up to 600 characters as it is', () => {
     const exactly = 'x'.repeat(600);
     expect(capBrief(exactly, [], []).summary).toBe(exactly);

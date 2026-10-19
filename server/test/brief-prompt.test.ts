@@ -7,7 +7,10 @@
 import { describe, it, expect } from 'vitest';
 import type { BriefInput } from '@devdigest/shared';
 import { BRIEF_FENCE_LABELS, buildBriefMessages } from '../src/modules/brief/prompt.js';
+import { BriefModelOutput } from '../src/modules/brief/domain.js';
 import type { BriefFacts } from '../src/modules/brief/domain.js';
+import { BRIEF_SCHEMA_NAME } from '../src/modules/brief/constants.js';
+import { toJsonSchema } from '../src/platform/structured.js';
 
 const NO_NOTES = { missing: [] as BriefInput[], trimmed: [] as BriefInput[] };
 
@@ -79,6 +82,19 @@ describe('buildBriefMessages', () => {
     expect(content).not.toContain('TITLE-TEXT');
     expect(content).not.toContain('DESCRIPTION-TEXT');
     expect(buildBriefMessages(facts({ title: 'other', documents: [] }), NO_NOTES)[0]?.content).toBe(content);
+  });
+
+  it('states the output limits in the system message (R-SRV-43)', () => {
+    const content = buildBriefMessages(facts(), NO_NOTES)[0]?.content ?? '';
+    for (const limit of [
+      /at most 6 risks/i,
+      /at most 3 paths/i,
+      /at most 6 review-focus items/i,
+      /one short sentence/i,
+      /at most 600 characters/i,
+    ]) {
+      expect(content).toMatch(limit);
+    }
   });
 
   it('writes the sections of R-SRV-14 in order', () => {
@@ -267,5 +283,45 @@ describe('buildBriefMessages', () => {
       expect(doc?.content.split('\n')[0]).toMatch(/^path: docs\/we"ird>name/);
       expect(hostile()[0]?.content).not.toContain(needle);
     });
+  });
+});
+
+describe('BriefModelOutput output limits (R-SRV-43)', () => {
+  const shape = BriefModelOutput.shape;
+  const riskShape = shape.risks.element.shape;
+  const focusShape = shape.review_focus.element.shape;
+
+  it('states each limit in the field descriptions', () => {
+    expect(shape.summary.description).toMatch(/600 characters/i);
+    expect(shape.risks.description).toMatch(/at most 6/i);
+    expect(riskShape.file_refs.description).toMatch(/at most 3/i);
+    expect(shape.review_focus.description).toMatch(/at most 6/i);
+    expect(riskShape.explanation.description).toMatch(/one short sentence/i);
+    expect(focusShape.reason.description).toMatch(/one short sentence/i);
+  });
+
+  it('reaches the provider as JSON schema text, with no maxItems and no maxLength', () => {
+    const json = JSON.stringify(toJsonSchema(BriefModelOutput, BRIEF_SCHEMA_NAME).schema);
+    expect(json).toContain('At most 3 listed paths');
+    expect(json).not.toContain('maxItems');
+    expect(json).not.toContain('maxLength');
+  });
+
+  it('accepts an answer over the limits: 7 risks, one with 5 file_refs, and 7 focus items', () => {
+    const risk = (refs: string[], i: number) => ({
+      kind: 'other' as const,
+      title: `risk ${i}`,
+      explanation: 'e',
+      severity: 'low' as const,
+      file_refs: refs,
+    });
+    const answer = {
+      summary: 's',
+      risks: Array.from({ length: 7 }, (_, i) =>
+        risk(i === 1 ? ['a.ts:1', 'a.ts:2', 'a.ts:3', 'a.ts:4', 'a.ts:5'] : ['a.ts:1'], i),
+      ),
+      review_focus: Array.from({ length: 7 }, (_, i) => ({ file: 'a.ts', line: i + 1, reason: 'r' })),
+    };
+    expect(BriefModelOutput.safeParse(answer).success).toBe(true);
   });
 });

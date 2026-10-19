@@ -220,6 +220,63 @@ d('L05 brief routes (Testcontainers pg)', () => {
     expect(row!.json).toEqual(stored);
   });
 
+  it('caps an over-long answer: 6 risks, 3 refs on a risk with 5, 6 focus items, and a 4000-token call (R-SRV-11, R-SRV-19, R-SRV-43)', async () => {
+    const risk = (n: number, refs: string[]) => ({
+      kind: 'other',
+      title: `risk ${n}`,
+      explanation: 'One short sentence.',
+      severity: 'low',
+      file_refs: refs,
+    });
+    const overLong = {
+      summary: DRAFT.summary,
+      risks: Array.from({ length: 7 }, (_, n) =>
+        risk(n, n === 2 ? [10, 11, 12, 13, 14].map((l) => `src/config.ts:${l}`) : [`src/config.ts:${10 + n}`]),
+      ),
+      review_focus: Array.from({ length: 7 }, (_, n) => ({
+        file: 'src/config.ts',
+        line: 10 + (n % 4),
+        reason: `focus ${n}`,
+      })),
+    };
+    const llm = new MockLLMProvider('openai', { structuredBySchema: { PrBriefDraft: overLong } });
+    const { app } = await appWith({ llm });
+    const pr = await newPr();
+
+    const res = await post(app, pr.id);
+    expect(res.statusCode).toBe(200);
+    const { brief } = res.json();
+    expect(brief.risks.risks.map((r: { title: string }) => r.title)).toEqual([
+      'risk 0',
+      'risk 1',
+      'risk 2',
+      'risk 3',
+      'risk 4',
+      'risk 5',
+    ]);
+    expect(brief.risks.risks[2].file_refs).toEqual(['src/config.ts:10', 'src/config.ts:11', 'src/config.ts:12']);
+    expect(brief.risks.risks[0].file_refs).toEqual(['src/config.ts:10']);
+    expect(brief.review_focus.map((f: { reason: string }) => f.reason)).toEqual([
+      'focus 0',
+      'focus 1',
+      'focus 2',
+      'focus 3',
+      'focus 4',
+      'focus 5',
+    ]);
+    expect(brief.dropped).toEqual({ risks: 0, review_focus: 0 });
+
+    const [row] = await rowsFor(pr.id);
+    const stored = row!.json as typeof brief;
+    expect(stored.risks.risks).toHaveLength(6);
+    expect(stored.risks.risks[2].file_refs).toHaveLength(3);
+    expect(stored.review_focus).toHaveLength(6);
+
+    const calls = completeCalls(llm);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ maxTokens: 4000 });
+  });
+
   it('GET after POST answers the stored brief and calls neither the model nor GitHub', async () => {
     const llm = counting(new MockLLMProvider('openai', { structuredBySchema: { PrBriefDraft: DRAFT } }));
     const github = counting(new MockGitHubClient());

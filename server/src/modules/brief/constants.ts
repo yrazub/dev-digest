@@ -6,7 +6,7 @@
 /** Tokens (`cl100k_base`, system and user message together) the model call may carry. */
 export const INPUT_BUDGET_TOKENS = 8000;
 /** `maxTokens` of the one structured call. */
-export const OUTPUT_MAX_TOKENS = 2000;
+export const OUTPUT_MAX_TOKENS = 4000;
 export const CALL_TIMEOUT_MS = 60_000;
 /** `maxRetries` of the structured call: one repair attempt. */
 export const MAX_REPAIR_RETRIES = 1;
@@ -15,6 +15,8 @@ export const MAX_REVIEW_FINDINGS = 20;
 export const ISSUE_BODY_CUT_TOKENS = 1000;
 export const DESCRIPTION_CUT_TOKENS = 1500;
 export const MAX_RISKS = 6;
+/** File references kept per risk, after validation. */
+export const MAX_FILE_REFS_PER_RISK = 3;
 export const MAX_REVIEW_FOCUS = 6;
 export const SUMMARY_MAX_CHARS = 600;
 export const BRIEF_SCHEMA_NAME = 'PrBriefDraft';
