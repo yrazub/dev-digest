@@ -48,7 +48,7 @@ request's files and blast-radius map, and stores the result with the head SHA in
 | R-SRV-8 | The brief module shall keep a review-focus item only when its `file`, with one leading `./` removed, equals a changed-file path of the pull request. | AC-49 |
 | R-SRV-9 | IF a kept review-focus item's `line` lies outside every new-side hunk range of a changed file whose `patch` is stored, THEN the brief module shall set `line` to the first line of the range nearest to it (the earlier range on a tie). | AC-50 |
 | R-SRV-10 | The brief module shall store in `dropped.risks` and `dropped.review_focus` the number of risks and review-focus items removed by R-SRV-7 and R-SRV-8. | AC-51, AC-13 |
-| R-SRV-11 | After validation, the brief module shall keep the first 6 risks and the first 6 review-focus items in model order and cut the summary to at most 600 characters at a word boundary. | AC-52 |
+| R-SRV-11 | After validation, the brief module shall keep the first 6 risks, the first 3 file references of each kept risk and the first 6 review-focus items in model order and cut the summary to at most 600 characters at a word boundary. | AC-52 |
 | R-SRV-12 | The brief module shall store in `inputs` one `BriefInput` per `BriefInputKind`, in the order of the enum, with its `status`, `reason` and `omitted` count. | AC-54, AC-11, AC-12 |
 | R-SRV-13 | WHEN the pull request has no stored intent, or its blast map holds no symbol, the brief module shall still make the model call, with `intent` or `blast` set to `null` in the stored brief. | AC-53 |
 | R-SRV-14 | The brief module shall send the model, in this order: the title; the list of missing and trimmed inputs; the intent's summary, in-scope and out-of-scope lists; the diff totals and, per changed file, its path, role, additions, deletions and new-side hunk ranges; the blast map's summary, totals and callers as `file:line symbol`; at most 20 non-dismissed findings of the pull request's latest completed review, ordered CRITICAL → WARNING → SUGGESTION, each as `file:line severity title`; the description; the linked issue; the spec documents, each under its path. | AC-55 |
@@ -56,7 +56,7 @@ request's files and blast-radius map, and stores the result with the head SHA in
 | R-SRV-16 | The brief module shall count the input with `container.tokenizer.count` over the system and user messages together and shall not call the model with more than 8,000 tokens. | AC-57 |
 | R-SRV-17 | WHEN the counted input exceeds 8,000 tokens, the brief module shall apply these cuts in order, recounting after each, until it fits: drop spec documents whole from the last; drop the latest review's findings from the end of their ordered list; cut the linked issue's body to 1,000 tokens, then drop the issue; cut the description to 1,500 tokens; drop the blast callers, keeping the summary and totals; drop changed files from the end of the list. | AC-58 |
 | R-SRV-18 | The brief module shall never cut the title, the intent or the diff totals. | AC-59 |
-| R-SRV-19 | The brief module shall make one `completeStructured` call per generation with `temperature: 0`, `maxTokens: 2000`, `maxRetries: 1`, `timeoutMs: 60000` and an abort signal. | AC-60 |
+| R-SRV-19 | The brief module shall make one `completeStructured` call per generation with `temperature: 0`, `maxTokens: 4000`, `maxRetries: 1`, `timeoutMs: 60000` and an abort signal. | AC-60 |
 | R-SRV-20 | WHEN a generation calls the model, the brief module shall log at `info` on the request logger `Brief model call →` with `prId`, `provider`, `model`, `inputTokens`, `budgetTokens`, each input's status and the number of review findings sent, and after the call `Brief model call done ←` with `tokensIn`, `tokensOut`, `costUsd`, `attempts`, `ms` and the dropped counts; neither line shall carry pull-request text, document text or model output. | AC-61 |
 | R-SRV-21 | The brief module shall resolve the provider and model with `resolveFeatureModel(db, workspaceId, 'risk_brief')` on every generation. | AC-62 |
 | R-SRV-22 | `@devdigest/shared` shall define `ReviewFocusItem` and the extended `PrBrief` in `contracts/brief.ts`, and `BriefInputKind`, `BriefInputStatus`, `BriefInputReason`, `BriefInput`, `PrBriefRecord` and `PrBriefResponse` in `contracts/review-api.ts`, with the client's copies of both files byte-identical. | AC-63 |
@@ -80,6 +80,7 @@ request's files and blast-radius map, and stores the result with the head SHA in
 | R-SRV-40 | The brief module shall generate a brief for a pull request of any `status`. | AC-82 |
 | R-SRV-41 | `pnpm db:seed` shall insert, in its own idempotent insert outside the block that creates PR #482, the seeded brief of "Seeded brief" below, with `head_sha` equal to the seeded PR's `a1b2c3d4e5f6`, and never overwrite an existing `pr_brief` row. | AC-83, AC-84 |
 | R-SRV-42 | The brief module shall store with each generated brief `generated_at`, `provider`, `model`, `tokens_in`, `tokens_out`, `cost_usd`, `input_tokens` and `input_budget_tokens: 8000`. | AC-14 |
+| R-SRV-43 | The system message of a generation and the field descriptions of the `BriefModelOutput` schema shall state the output limits — at most 6 risks, at most 3 paths per risk, at most 6 review-focus items, one short sentence per risk explanation and per focus reason, a summary of at most 600 characters — as text only, with no schema bound on the number of `risks`, `file_refs` or `review_focus` items. | AC-52, AC-60 |
 
 ## Contracts (`@devdigest/shared`)
 
@@ -177,13 +178,13 @@ Named constants of the module, not environment settings:
 | Name | Value |
 |---|---|
 | input budget | 8,000 tokens (`cl100k_base`, all messages) |
-| output cap (`maxTokens`) | 2,000 tokens |
+| output cap (`maxTokens`) | 4,000 tokens |
 | call timeout | 60,000 ms |
 | repair attempts (`maxRetries`) | 1 |
 | review findings in the input | at most 20, non-dismissed |
 | linked issue body cut | 1,000 tokens |
 | description cut | 1,500 tokens |
-| risks kept / focus items kept | 6 / 6 |
+| risks kept / file refs kept per risk / focus items kept | 6 / 3 / 6 |
 | summary cut | 600 characters, at a word boundary |
 | `POST` rate limit | 10 per minute |
 | spec document read limit | the project-context limit, 102,400 bytes |
@@ -194,6 +195,10 @@ SUGGESTION, each `file:line severity title` (R-SRV-14); over budget they are dro
 right after the spec documents and before the linked issue (R-SRV-17). They are not one of the six
 `BriefInputKind` inputs, so they have no `inputs` entry; the `Brief model call →` line carries
 their count.
+
+Amendment, 2026-10-19 — Regenerate failed with `output_truncated` on a 100-file PR (#20).
+Output cap 2,000 → 4,000 tokens (R-SRV-19); at most 3 file references per risk (R-SRV-11); the
+model is told the output limits (R-SRV-43).
 
 ## Module `src/modules/brief/`
 
@@ -260,9 +265,9 @@ AC-84 assert on; `test-writer` records them in `e2e/specs/seed-fixtures.md`.
 
 | File | Kind | Covers |
 |---|---|---|
-| `test/brief-domain.test.ts` | hermetic | reference parsing with `path`, `path:12`, `path:12-18`, `./path`; risk refs kept for a PR file and a blast caller file, dropped otherwise; a risk with no ref left dropped; focus kept only for PR files (R-SRV-6–R-SRV-8); line moved into the nearest range, ties to the earlier one, kept for a file without a patch (R-SRV-9); dropped counts (R-SRV-10); caps at 6 and 600 characters at a word boundary, with 7+ items (R-SRV-11); input statuses and reasons for every row of the status table (R-SRV-12, R-SRV-25, R-SRV-26, R-SRV-28–R-SRV-30, R-SRV-32); hunk ranges from `@@` headers, including `+c,0` and a missing count (R-SRV-15); review findings capped at 20 from a fixture of 25, dismissed ones left out, ordered CRITICAL → WARNING → SUGGESTION (R-SRV-14); the trim sequence over a fixture that needs every cut, with the findings dropped after the spec documents and before the linked issue, and title, intent and totals never cut (R-SRV-16–R-SRV-18) |
-| `test/brief-prompt.test.ts` | hermetic | message order and sections (R-SRV-14); each untrusted section inside `wrapUntrusted()`; no line of a stored patch other than its range numbers (R-SRV-15) |
-| `test/brief.it.test.ts` | Postgres, mock LLM, mock GitHub | `POST` `200` shape and storage with `head_sha` (R-SRV-1, R-SRV-2, R-SRV-42); `GET` from the cache with the mock's `calls` unchanged (R-SRV-3), `brief: null` (R-SRV-4), `stale` after `head_sha` changes (R-SRV-5); exactly one `completeStructured` call (R-SRV-19); log lines without PR text (R-SRV-20); the `risk_brief` override used (R-SRV-21); schema mismatch `502` with the row unchanged (R-SRV-23); generation with no intent and with an empty blast map (R-SRV-13); intent never derived — the intent store unchanged (R-SRV-27); linked issue read and its misses (R-SRV-31, R-SRV-32); `400`, `502` on a throw and a timeout, `422`, `404` (R-SRV-33–R-SRV-36); two concurrent `POST`s give one model call (R-SRV-37); an unparseable row reads as `null` (R-SRV-39); a merged PR (R-SRV-40); the prompt sent to the mock holds no patch line (R-SRV-15) |
+| `test/brief-domain.test.ts` | hermetic | reference parsing with `path`, `path:12`, `path:12-18`, `./path`; risk refs kept for a PR file and a blast caller file, dropped otherwise; a risk with no ref left dropped; focus kept only for PR files (R-SRV-6–R-SRV-8); line moved into the nearest range, ties to the earlier one, kept for a file without a patch (R-SRV-9); dropped counts (R-SRV-10); caps at 6 and 600 characters at a word boundary, with 7+ items (R-SRV-11); an answer with 7 risks, a risk with 5 refs and 7 focus items capped to 6 / 3 / 6 (R-SRV-11); input statuses and reasons for every row of the status table (R-SRV-12, R-SRV-25, R-SRV-26, R-SRV-28–R-SRV-30, R-SRV-32); hunk ranges from `@@` headers, including `+c,0` and a missing count (R-SRV-15); review findings capped at 20 from a fixture of 25, dismissed ones left out, ordered CRITICAL → WARNING → SUGGESTION (R-SRV-14); the trim sequence over a fixture that needs every cut, with the findings dropped after the spec documents and before the linked issue, and title, intent and totals never cut (R-SRV-16–R-SRV-18) |
+| `test/brief-prompt.test.ts` | hermetic | message order and sections (R-SRV-14); each untrusted section inside `wrapUntrusted()`; no line of a stored patch other than its range numbers (R-SRV-15); the system message states the output limits; the `BriefModelOutput` descriptions carry them, with no count bound on `risks`, `file_refs` or `review_focus` (R-SRV-43) |
+| `test/brief.it.test.ts` | Postgres, mock LLM, mock GitHub | `POST` `200` shape and storage with `head_sha` (R-SRV-1, R-SRV-2, R-SRV-42); `GET` from the cache with the mock's `calls` unchanged (R-SRV-3), `brief: null` (R-SRV-4), `stale` after `head_sha` changes (R-SRV-5); exactly one `completeStructured` call, carrying `maxTokens: 4000` (R-SRV-19); an answer with 7 risks, a risk with 5 refs and 7 focus items is accepted with `200` and stored capped to 6 / 3 / 6 (R-SRV-11, R-SRV-43); log lines without PR text (R-SRV-20); the `risk_brief` override used (R-SRV-21); schema mismatch `502` with the row unchanged (R-SRV-23); generation with no intent and with an empty blast map (R-SRV-13); intent never derived — the intent store unchanged (R-SRV-27); linked issue read and its misses (R-SRV-31, R-SRV-32); `400`, `502` on a throw and a timeout, `422`, `404` (R-SRV-33–R-SRV-36); two concurrent `POST`s give one model call (R-SRV-37); an unparseable row reads as `null` (R-SRV-39); a merged PR (R-SRV-40); the prompt sent to the mock holds no patch line (R-SRV-15) |
 | `test/project-context-service.test.ts` | hermetic | the workspace-level read: two enabled agents and a disabled one, a disabled skill, a path attached twice, name order (R-SRV-24) |
 | `test/contracts.test.ts` | hermetic | the new contracts; `PrBrief` with `intent: null` and `blast: null`; `ReviewFocusItem.line` rejecting 0 (R-SRV-22) |
 | a contract-sync check (placement decided by the planner) | hermetic | `client/src/vendor/shared/contracts/brief.ts` and `review-api.ts` byte-identical to the server's (R-SRV-22) |

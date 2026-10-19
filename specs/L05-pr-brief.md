@@ -137,7 +137,7 @@ documents. "The PR Brief section" is the section headed "PR Brief" on the Overvi
 | AC-49 | P1 | The API shall keep in a generated brief only the review-focus items whose file is a changed file of the pull request. | US-5 | unit (server) |
 | AC-50 | P2 | IF a review-focus item's line lies outside every new-side hunk of a file whose diff is stored, THEN the API shall move the line to the start of the nearest new-side hunk of that file. | US-3, US-5 | unit (server) |
 | AC-51 | P2 | The API shall record in each generated brief the number of risks and the number of review-focus items that validation dropped. | US-5 | unit (server) |
-| AC-52 | P2 | The API shall store at most 6 risks, at most 6 review-focus items and a summary of at most 600 characters per brief. | US-2, US-6 | unit (server) |
+| AC-52 | P2 | The API shall store at most 6 risks, at most 3 file references per risk, at most 6 review-focus items and a summary of at most 600 characters per brief. | US-2, US-6 | unit (server) |
 | AC-53 | P1 | WHEN the pull request has no derived intent, no blast-radius map, or neither, the API shall still generate a brief. | US-2, US-5 | integration (server) |
 | AC-54 | P1 | The API shall record in each generated brief, for each of the six inputs, whether it was used, trimmed or missing, with the reason. | US-5 | unit (server) |
 | AC-55 | P2 | The API shall build the model input from the pull request's title, its stored intent, the blast-radius summary with its caller files, the diff totals, each changed file with its additions, deletions, role and new-side hunk ranges, the description, the linked issue, the attached spec documents, and at most 20 non-dismissed findings of the latest completed review, ordered CRITICAL → WARNING → SUGGESTION, each as `file:line severity title`. | US-2, US-6 | integration (server) |
@@ -206,7 +206,7 @@ spec.
 | EC-14 | A Review focus line lies outside the file's changed ranges | Moved to the start of the nearest new-side hunk | AC-50 |
 | EC-15 | A focus file has no stored patch (binary, too large) | Line kept as given; the jump scrolls to the file header | AC-50, AC-38 |
 | EC-16 | Validation drops every risk or every focus item | Empty-list texts and the dropped counts | AC-9, AC-10, AC-13 |
-| EC-17 | The model returns more than 6 risks or focus items, or a long summary | Cut to 6 and 600 characters | AC-52 |
+| EC-17 | The model returns more than 6 risks or focus items, or a long summary | Cut to 6 / 3 refs per risk / 600 characters | AC-52 |
 | EC-18 | The model's JSON does not match the schema | One repair attempt, then `502`; the stored brief is unchanged | AC-60, AC-64 |
 | EC-19 | No API key for the `risk_brief` provider | `400 brief_unavailable`; message naming the provider with a Settings link | AC-75, AC-26 |
 | EC-20 | Model error or a call over 60 s | `502`; the previous brief stays shown | AC-76, AC-27 |
@@ -234,15 +234,15 @@ spec.
 
 ## Non-functional requirements
 - NFR-1 — LLM budget: model input at most 8,000 tokens per generation, counted with `cl100k_base`
-  over every message; output at most 2,000 tokens; temperature 0; one structured model call
-  with at most one repair attempt, so at most 2 provider requests and at most 20,000 tokens
-  (2 × (8,000 + 2,000)) per generation. `GET /pulls/:id/brief` makes 0 model calls and 0 GitHub
+  over every message; output at most 4,000 tokens; temperature 0; one structured model call
+  with at most one repair attempt, so at most 2 provider requests and at most 24,000 tokens
+  (2 × (8,000 + 4,000)) per generation. `GET /pulls/:id/brief` makes 0 model calls and 0 GitHub
   calls.
 - NFR-2 — Latency: the model call is aborted after 60 s. Collecting the inputs before the call
   makes at most one GitHub request (the linked issue).
 - NFR-3 — Reliability: a failed generation never changes or deletes the stored brief; at most one
   generation per pull request runs at a time in a server process.
-- NFR-4 — Limits: at most 6 risks and 6 review-focus items; summary at most 600 characters;
+- NFR-4 — Limits: at most 6 risks, 3 file references per risk and 6 review-focus items; summary at most 600 characters;
   at most 20 review findings in the input;
   linked-issue body at most 1,000 tokens; description at most 1,500 tokens when trimming applies;
   each spec document at most 100 KB (the project-context read limit); `POST` at most 10 requests
@@ -280,6 +280,9 @@ spec.
   linked issue (former OQ-1; AC-55, AC-58); the criteria derived in discovery rather than from a
   task criterion — AC-3, AC-9, AC-10, AC-12–AC-20, AC-23–AC-31, AC-35–AC-42, AC-50–AC-52, AC-55,
   AC-58, AC-59, AC-66–AC-84 — stay P2 (former OQ-2).
+- Amendment, 2026-10-19 — Regenerate failed with `output_truncated` on a 100-file PR (#20).
+  Output cap 2,000 → 4,000 tokens (NFR-1); at most 3 file references per risk (AC-52, EC-17,
+  NFR-4); the model is told the output limits (server R-SRV-43).
 
 **Data flow**
 | Data | Produced by | Contract | Consumed by | When unavailable |
