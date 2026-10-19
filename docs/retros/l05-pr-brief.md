@@ -88,7 +88,7 @@ user's answers, the write pass) and cost $38 alone.
 
 ## Recommendations (actionable)
 
-**Status 2026-10-19:** 1–5 applied on `chore/workflow-retro-fixes` (root `INSIGHTS.md`, Decisions, 2026-10-19); 6 is open.
+**Status 2026-10-19:** 1–5 applied on `chore/workflow-retro-fixes` (root `INSIGHTS.md`, Decisions, 2026-10-19); 6 dropped — a one-time slip, not a workflow gap.
 
 1. **`implementer` brief** — add a "layer and colocation self-check" step before it reports
    `complete`: no pure rule in `service.ts`, no `./ports.js` import in `domain.ts`, a hook with one
