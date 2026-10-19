@@ -52,8 +52,30 @@ warn() { printf '\033[1;33m! %s\033[0m\n' "$*"; }
 # --- prerequisites -----------------------------------------------------------
 command -v docker >/dev/null || { echo "docker not found"; exit 1; }
 command -v pnpm   >/dev/null || { echo "pnpm not found (npm i -g pnpm)"; exit 1; }
-command -v agent-browser >/dev/null || \
-  warn "agent-browser not found — install once: npm i -g agent-browser && agent-browser install"
+# The runner spawns $AGENT_BROWSER_BIN (default `agent-browser`). Resolve it to a binary that
+# runs before booting anything: a dangling `agent-browser` symlink on PATH failed every flow
+# with ENOENT, twice, behind a mere warning (e2e/INSIGHTS.md, 2026-10-17/18).
+resolve_agent_browser() {
+  if [ -n "${AGENT_BROWSER_BIN:-}" ]; then
+    "$AGENT_BROWSER_BIN" --version >/dev/null 2>&1 && return 0
+    echo "AGENT_BROWSER_BIN=$AGENT_BROWSER_BIN does not run"; return 1
+  fi
+  if agent-browser --version >/dev/null 2>&1; then AGENT_BROWSER_BIN=agent-browser; return 0; fi
+  local os arch bin
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(uname -m)"
+  case "$arch" in x86_64) arch=x64 ;; aarch64) arch=arm64 ;; esac
+  bin="$(npm root -g 2>/dev/null)/agent-browser/bin/agent-browser-${os}-${arch}"
+  if "$bin" --version >/dev/null 2>&1; then
+    warn "agent-browser on PATH does not run; using the global install's binary $bin"
+    AGENT_BROWSER_BIN="$bin"; return 0
+  fi
+  echo "agent-browser not found or broken — install once: npm i -g agent-browser@0.39.0 && agent-browser install"
+  return 1
+}
+resolve_agent_browser || exit 1
+export AGENT_BROWSER_BIN
+log "agent-browser: $AGENT_BROWSER_BIN ($("$AGENT_BROWSER_BIN" --version))"
 
 # --- teardown trap (installed before we start anything) ----------------------
 SERVER_PID=""
