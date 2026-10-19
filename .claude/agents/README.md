@@ -136,7 +136,11 @@ spans packages; `architecture-reviewer` is optional. Then continue at step 9 bel
       regressions", "Suspected product bugs" and "Needs a production change" go back to
       `implementer` for the same phase, then `test-writer` runs again. Read "Existing tests
       edited" every time it is not empty: each row must quote a plan or spec item.
-   5. Commit the closed phase, code and tests together.
+   5. On the last phase that touches `server/` or `reviewer-core/`, and on the last that touches
+      `client/`, run `architecture-reviewer` in `change` mode on that area's code before the
+      commit. A CRITICAL or WARNING finding goes back to `implementer` for the same phase, then
+      `test-writer`, then the check again. Phases added by an amendment skip this.
+   6. Commit the closed phase, code and tests together.
 7. After the last phase, run `plan-verifier` with the plan path, the deviations the
    implementer declared (it rates a declared deviation `satisfied`, an undeclared one `partial`)
    and the base ref when the branch is not cut from `origin/main`, and `architecture-reviewer`

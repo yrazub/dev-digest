@@ -2,8 +2,8 @@
 name: execute-plan
 description: "Executes an approved Implementation Plan from specs/plans/ with the project agents — implementer and test-writer phase by phase, then plan-verifier and architecture-reviewer, doc-writer, the hermetic e2e run, engineering-insights and /pr-self-review — keeping the progress in a state file (.devdigest/sdd/<feature>/state.json) so a fresh chat resumes where the last one stopped. Runs steps 6–11 of the Feature workflow in .claude/agents/README.md, in multi-agent or single-agent mode as the plan says. Use when the user runs /execute-plan <plan>, or asks to build, execute, continue or resume an approved plan. Does not write specs or plans, and never pushes."
 metadata:
-  version: "1.0.0"
-  updated: "2026-10-16"
+  version: "1.1.0"
+  updated: "2026-10-19"
 ---
 
 # Execute a plan
@@ -72,6 +72,16 @@ start the stack if it is down, use one browser tab with scaled screenshots or re
 full accessibility tree in the chat), and close the tab after. A mismatch with the design goes back
 to `implementer` for the same phase.
 
+**architecture check** — on the last phase of the plan that touches `server/` or `reviewer-core/`,
+and on the last one that touches `client/`, `NEXT` asks for `architecture-reviewer` once the
+phase is green and before its commit; `committed` is refused until it is recorded. Give it mode
+`change`, the file list and a patch of that area against the base, as `NEXT` says. A CRITICAL or
+WARNING finding goes back to `implementer` for the same phase — it may touch a file of an earlier
+phase and records that as a deviation — then `test-writer`, then the check again. Clean →
+`$S gate <plan> <n> pass`. This is where layer and placement mistakes are cheap: in L05 PR Brief
+they surfaced only in the final review and cost two amend rounds (`docs/retros/l05-pr-brief.md`).
+Phases added by an amendment have no such check; the final checks run right after them.
+
 **commit** — stage the files both reports list, commit them together, record the commit:
 
 ```bash
@@ -84,7 +94,8 @@ One short conventional subject line, no body unless it is needed, no `Co-Authore
 **single-agent mode** — `NEXT` says to build the phase yourself: run
 `node .claude/agents/scripts/plan-phase.mjs <plan> <n>`, read that slice only, build the file
 table and the test work order with the skills each row names, run `Verify (phase)`, then record
-`green` and commit as above.
+`green` and commit as above. The architecture check is optional here: ask, and record a declined
+one with `$S gate <plan> <n> skipped`.
 
 ## 3. After the last phase
 
@@ -122,11 +133,14 @@ When `NEXT` says all steps are done, report to the user and ask before any push 
 | `$S start <plan> [--base <ref>] [--per-chat <n>] [--accept-plan-change]` | create or resume; resets the per-chat count |
 | `$S show <plan> [--notes] [--json]` | the summary; `--notes` lists deviations, insight candidates and reviewer notes |
 | `$S phase <plan> <n> <pending\|code-done\|green\|committed\|blocked> [--verify …] [--deviation …] [--commit <sha>] [--reason …]` | record a phase |
+| `$S gate <plan> <n> <pass\|skipped> [--note …]` | record the architecture check of a green phase that owes one |
 | `$S note <plan> <insight\|reviewer> "<text>"` | record a note |
 | `$S final <plan> <verify\|arch\|docs\|e2e\|insights\|self-review> <pending\|pass\|fail\|skipped\|done> [--note …]` | record a final step |
 
 The rules the script enforces: phases close in order; `committed` needs `--commit`, `blocked`
-needs `--reason`; final steps wait for the last phase; a phase committed after the final checks
+needs `--reason`; the last original phase per area (backend, client — read from the file table)
+needs its architecture check recorded before `committed`, and new code for it (`code-done`)
+clears that record; final steps wait for the last phase; a phase committed after the final checks
 started resets them; a plan that changed is refused until accepted, and a phase with recorded
 work cannot disappear from it. Tests:
 `node --test .claude/skills/execute-plan/scripts/test/*.test.mjs`.

@@ -125,6 +125,76 @@ test('the final checks start in a new chat, also after a fix phase; a resumed ch
   assert.match(next(cli('phase', PLAN, '4', 'committed', '--commit', 'c4')), /CHECKPOINT — all phases are committed \(1 in this chat\)/);
 });
 
+// A plan whose file tables touch the backend (phases 1–2), the client (phases 1 and 3) and e2e (phase 4).
+const row = (file) => `| File | Change | Skills | Rules |\n|---|---|---|---|\n${file.map((f) => `| \`${f}\` | x | s | r |`).join('\n')}\n`;
+const areaPlan = (mode = 'multi-agent', extra = '') =>
+  planText(
+    mode,
+    [
+      `### 1 · Contracts\n\n${row(['server/src/vendor/shared/x.ts', 'client/src/vendor/shared/x.ts'])}`,
+      `### 2 · Server\n\n${row(['server/src/modules/a/service.ts', 'reviewer-core/src/b.ts'])}`,
+      `### 3 · Client\n\n${row(['client/src/app/page.tsx'])}`,
+      '### 4 · e2e flow\n\n| Nothing — test-writer only | | | |\n',
+      extra,
+    ].join('\n'),
+  );
+
+test('the last backend phase owes an architecture check before its commit', () => {
+  write(areaPlan());
+  cli('start', PLAN, '--per-chat', '9');
+  assert.equal(next(cli('phase', PLAN, '1', 'green')), `NEXT: Commit phase 1 (code and tests together), then: state.mjs phase ${PLAN} 1 committed --commit <sha>.`);
+  cli('phase', PLAN, '1', 'committed', '--commit', 'c1');
+  assert.match(
+    next(cli('phase', PLAN, '2', 'green')),
+    /^NEXT: Before the commit, run architecture-reviewer, mode change, on the backend code so far — phase 2 .*git diff --name-status origin\/main -- server reviewer-core .*\.devdigest\/sdd\/demo\/.*state\.mjs gate specs\/plans\/demo\.md 2 pass\.$/,
+  );
+  assert.throws(() => cli('phase', PLAN, '2', 'committed', '--commit', 'c2'), /Phase 2 is the last backend phase: record the architecture check first/);
+  const out = cli('gate', PLAN, '2', 'pass');
+  assert.match(out, /2 {2}green .* Server \[arch check backend: pass\]/);
+  assert.match(next(out), /^NEXT: Commit phase 2/);
+  assert.deepEqual(state().phases.map((p) => p.areas), [['backend', 'client'], ['backend'], ['client'], []]);
+});
+
+test('a finding sends the phase back to the implementer, and the check runs again on the new code', () => {
+  write(areaPlan());
+  cli('start', PLAN, '--per-chat', '9');
+  cli('phase', PLAN, '1', 'committed', '--commit', 'c1');
+  cli('phase', PLAN, '2', 'green');
+  cli('gate', PLAN, '2', 'pass');
+  cli('phase', PLAN, '2', 'committed', '--commit', 'c2');
+  assert.match(next(cli('phase', PLAN, '3', 'green')), /on the client code so far — phase 3 .* -- client /);
+  cli('phase', PLAN, '3', 'code-done'); // implementer fixed the findings
+  assert.throws(() => cli('gate', PLAN, '3', 'pass'), /Phase 3 is code-done; the architecture check runs once its tests are green/);
+  assert.match(next(cli('phase', PLAN, '3', 'green')), /^NEXT: Before the commit, run architecture-reviewer/);
+  assert.throws(() => cli('gate', PLAN, '1', 'pass'), /Phase 1 has no architecture check/);
+  assert.throws(() => cli('gate', PLAN, '3', 'fail'), /Gate status must be one of pass, skipped/);
+});
+
+test('phases added by an amendment skip the early check; the final checks cover them', () => {
+  write(areaPlan());
+  cli('start', PLAN, '--per-chat', '9');
+  cli('phase', PLAN, '1', 'committed', '--commit', 'c1');
+  for (const n of ['2', '3']) {
+    cli('phase', PLAN, n, 'green');
+    cli('gate', PLAN, n, 'pass');
+    cli('phase', PLAN, n, 'committed', '--commit', `c${n}`);
+  }
+  cli('phase', PLAN, '4', 'committed', '--commit', 'c4');
+  cli('final', PLAN, 'arch', 'fail');
+  write(areaPlan('multi-agent', `### 5 · Review fixes\n\n${row(['client/src/app/page.tsx'])}`));
+  cli('start', PLAN, '--accept-plan-change');
+  assert.match(next(cli('phase', PLAN, '5', 'green')), /^NEXT: Commit phase 5/);
+  assert.equal(state().phases[4].added, true);
+});
+
+test('single-agent mode: the early check is optional', () => {
+  write(areaPlan('single-agent'));
+  cli('start', PLAN, '--per-chat', '9');
+  cli('phase', PLAN, '1', 'committed', '--commit', 'c1');
+  assert.match(next(cli('phase', PLAN, '2', 'green')), /In single-agent mode it is optional: .*state\.mjs gate … skipped\.$/);
+  assert.match(next(cli('gate', PLAN, '2', 'skipped', '--note', 'user declined')), /^NEXT: Commit phase 2 \(code and tests\)/);
+});
+
 test('a plan without an execution mode line defaults to multi-agent and says so', () => {
   write(planText(null, phases('Only')));
   assert.match(cli('start', PLAN), /mode multi-agent \(not stated in the plan; default\)/);
