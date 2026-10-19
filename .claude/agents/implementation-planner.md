@@ -329,9 +329,10 @@ none". A phase that only adds tests (an e2e flow) has the table row "Nothing —
 and no `Verify (code)` line.
 
 A phase that builds or restyles a screen in `client/` also gets a third line,
-**`Verify (manual, screenshots):`**, which the main session runs once after the phase is green, on
-the user's running stack (it never starts the stack). Name each URL to open, the design screen and
-the client spec's `## Layout` values to compare (padding, column widths, panels, control
-positions), and a `read_console_messages` check for React warnings. One browser tab, scaled
+**`Verify (manual, screenshots):`**, which a short-lived sub-agent runs once after the phase is
+green (`/execute-plan`), on the user's running stack (it never starts the stack). Name each URL to
+open, the design screen and the client spec's `## Layout` values to compare (padding, column
+widths, panels, control positions), and a console check for React warnings — each item one row of
+the sub-agent's report. One browser tab, scaled
 screenshots or region zooms, closed at the end — the user's machine is memory-limited. No
 automated check looks at pixels; this line is the only one that does.

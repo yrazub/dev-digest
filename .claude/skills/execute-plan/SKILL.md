@@ -66,11 +66,26 @@ table, copied as it is (the only part of a report you hand over verbatim). From 
   without one goes to the user.
 - Insight candidates → `$S note … insight`.
 
-**manual check** — if the phase has a `Verify (manual, screenshots)` line, run it yourself before
-the commit, once the test-writer is green. Check memory first (`memory_pressure`), ask the user to
-start the stack if it is down, use one browser tab with scaled screenshots or region zooms (never a
-full accessibility tree in the chat), and close the tab after. A mismatch with the design goes back
-to `implementer` for the same phase.
+**manual check** — if the phase has a `Verify (manual, screenshots)` line, hand it to a
+short-lived `general-purpose` sub-agent once the test-writer is green, before the commit. Images
+stay in the context that looked at them, and every later turn of this chat would re-read them: in
+L05 PR Brief the chat that ran the checks itself cost more than its agents
+(`docs/retros/l05-pr-brief.md`). First check memory (`memory_pressure`) and ask the user to start
+the stack if it is down — neither you nor the sub-agent starts it. Give the sub-agent:
+
+- the plan path and the phase — it reads the line with
+  `node .claude/agents/scripts/plan-phase.mjs <plan> <n>` — and the paths to the design files and
+  the client spec;
+- the browser rules: the `chrome-devtools` MCP, one new tab, closed at the end; screenshots
+  scaled or of a region, never full-page, saved with `filePath` to
+  `.devdigest/sdd/<feature>/screenshots/phase-<n>-<what>.png`; no accessibility-tree dumps; the
+  console messages for React warnings;
+- the report to return, and nothing else: one row per item of the line — what was compared, the
+  value the spec or design gives, the value measured, `match` or `mismatch`, the screenshot path —
+  plus the console warnings.
+
+Read the report, not the screenshots; open one only to show the user a mismatch. A mismatch goes
+back to `implementer` for the same phase, with its rows.
 
 **architecture check** — on the last phase of the plan that touches `server/` or `reviewer-core/`,
 and on the last one that touches `client/`, `NEXT` asks for `architecture-reviewer` once the
