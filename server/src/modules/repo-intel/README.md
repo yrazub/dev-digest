@@ -53,8 +53,9 @@ and a per-agent `repo_intel` flag.
 `getBlastRadius` and `getIndexState` are now wired too: the `blast` module
 ([`../blast/`](../blast), route `GET /pulls/:id/blast`, described in
 [`../../../README.md`](../../../README.md) → "API map") calls each once per request. It does not import
-this module; `container.repoIntel` is assigned to the `blast` module's own `BlastSource` port, and the
-facade's per-symbol caller cap reaches it through `container.repoIntelLimits.callersPerSymbol`.
+this module; `container.blast` (the composition root, which also serves the `brief` module) assigns
+`container.repoIntel` to the `blast` module's own `BlastSource` port and passes the facade's per-symbol
+caller cap, `MAX_CALLERS_PER_SYMBOL`, to the service as `callerLimit`.
 
 - **Two paths.** With `REPO_INTEL_ENABLED` on, paths given and a `repo_index_state` row of status
   `full` or `partial`, the answer is built from Postgres only (`symbols`, resolved `references`,

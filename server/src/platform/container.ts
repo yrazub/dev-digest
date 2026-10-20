@@ -29,6 +29,8 @@ import { IntentRepository } from '../modules/intent/repository.js';
 import { IntentService } from '../modules/intent/service.js';
 import { ProjectContextRepository, drizzleProjectContextUnitOfWork } from '../modules/project-context/repository.js';
 import { ProjectContextService } from '../modules/project-context/service.js';
+import { BlastRepository } from '../modules/blast/repository.js';
+import { BlastService } from '../modules/blast/service.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { MAX_CALLERS_PER_SYMBOL } from '../modules/repo-intel/constants.js';
@@ -84,6 +86,7 @@ export class Container {
   private _agentsRepo?: AgentsRepository;
   private _reviewRepo?: ReviewRepository;
   private _intent?: IntentService;
+  private _blast?: BlastService;
   private _projectContext?: ProjectContextService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
@@ -142,6 +145,20 @@ export class Container {
     }));
   }
 
+  /**
+   * L04 blast service. Built here (not in the blast module) because `brief` reaches it as
+   * `container.blast` and a module never imports another module. Reads `this.repoIntel`, so a
+   * test's `repoIntel` override applies.
+   */
+  get blast(): BlastService {
+    return (this._blast ??= new BlastService({
+      store: new BlastRepository(this.db),
+      source: this.repoIntel,
+      repoIntelEnabled: this.config.repoIntelEnabled,
+      callerLimit: MAX_CALLERS_PER_SYMBOL,
+    }));
+  }
+
   get codeIndex(): CodeIndex {
     if (this.overrides.codeIndex) return this.overrides.codeIndex;
     this._codeIndex ??= new RipgrepCodeIndex(this.git);
@@ -157,11 +174,6 @@ export class Container {
     if (this.overrides.repoIntel) return this.overrides.repoIntel;
     this._repoIntel ??= new RepoIntelService(this);
     return this._repoIntel;
-  }
-
-  /** Read-time limits of the repo-intel facade, for modules that may not import its constants. */
-  get repoIntelLimits(): { callersPerSymbol: number } {
-    return { callersPerSymbol: MAX_CALLERS_PER_SYMBOL };
   }
 
   /** Import-graph builder (dependency-cruiser). T3 indexer pipeline only. */

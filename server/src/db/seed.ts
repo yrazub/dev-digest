@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createDb, type Db } from './client.js';
 import * as t from './schema.js';
 import { eq, and, isNull, inArray } from 'drizzle-orm';
+import type { PrBriefRecord } from '@devdigest/shared';
 import { parseSkillMarkdown } from '../modules/skills/import/parse.js';
 import { INDEXER_VERSION } from '../modules/repo-intel/constants.js';
 import {
@@ -367,6 +368,102 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       model: 'seed',
     })
     .onConflictDoNothing();
+
+  // ---- PR #482's PR Brief (L05) ----
+  // Its own idempotent insert OUTSIDE the `if (!pr)` block, for the same reason as the intent
+  // row. `pr_brief.pr_id` is the primary key, so `onConflictDoNothing()` never overwrites a brief a
+  // generation stored. `GET /pulls/:id/brief` answers it with no model call; `stale` is computed on
+  // read (`head_sha` equals the seeded PR's). `blast` stays null: the live Blast radius block shows
+  // the map. The strings are the fixtures flow 14 asserts on
+  // (`e2e/specs/seed-fixtures.md`).
+  const seededBrief = {
+    pr_id: pr!.id,
+    summary:
+      'Adds a token-bucket rate limiter to the public API to stop abuse from unauthenticated clients. It also commits a live Stripe key in plaintext and adds an N+1 query to the user list.',
+    intent: {
+      summary: 'Add rate limiting to public API endpoints to prevent abuse from unauthenticated clients.',
+      in_scope: [
+        'Token-bucket rate limiter middleware',
+        'Return 429 with Retry-After header',
+        'Apply the limiter to the public webhook routes',
+      ],
+      out_of_scope: [
+        'Per-plan or per-user limits',
+        'Changes to authentication',
+        'An admin dashboard for limits',
+      ],
+    },
+    blast: null,
+    risks: {
+      risks: [
+        {
+          kind: 'security',
+          title: 'Hardcoded Stripe secret key',
+          explanation:
+            'A live Stripe secret key is committed in plaintext in the config file, so anyone with repository access can use it.',
+          severity: 'high',
+          file_refs: ['src/config.ts:12'],
+        },
+        {
+          kind: 'perf',
+          title: 'Redis round-trip on every public request',
+          explanation:
+            'The limiter reads and writes its bucket in Redis on each public request, which adds a network hop to the hot path.',
+          severity: 'low',
+          file_refs: ['src/middleware/ratelimit.ts'],
+        },
+        {
+          kind: 'breaking_api',
+          title: 'Limiter now wraps the server bootstrap',
+          explanation:
+            'The server entry point now installs the limiter before the routes, so every public caller can start receiving 429 responses.',
+          severity: 'medium',
+          file_refs: ['src/server.ts:88'],
+        },
+        {
+          kind: 'deps',
+          title: 'Lockfile changes',
+          explanation:
+            'The lockfile changes with the new dependency, so the resolved versions of other packages may have moved too.',
+          severity: 'low',
+          file_refs: ['package-lock.json'],
+        },
+      ],
+    },
+    review_focus: [
+      { file: 'src/config.ts', line: 12, reason: 'live Stripe key committed in plaintext' },
+      {
+        file: 'src/api/users.ts',
+        line: 46,
+        reason: 'N+1 query: one lookup per user, hit harder under the new limiter',
+      },
+      {
+        file: 'src/middleware/ratelimit.ts',
+        line: 12,
+        reason: "the limiter's entry point: check that the 429 branch sends Retry-After",
+      },
+    ],
+    history: { history: [] },
+    head_sha: 'a1b2c3d4e5f6',
+    generated_at: '2026-10-18T00:00:00.000Z',
+    provider: 'seed',
+    model: 'seed',
+    tokens_in: null,
+    tokens_out: null,
+    cost_usd: null,
+    input_tokens: null,
+    input_budget_tokens: 8000,
+    inputs: [
+      { kind: 'intent', status: 'used', reason: null, omitted: null },
+      { kind: 'blast_radius', status: 'used', reason: null, omitted: null },
+      { kind: 'diff_stats', status: 'used', reason: null, omitted: null },
+      { kind: 'description', status: 'used', reason: null, omitted: null },
+      { kind: 'linked_issue', status: 'missing', reason: 'none_linked', omitted: null },
+      { kind: 'spec_documents', status: 'missing', reason: 'none_attached', omitted: null },
+    ],
+    dropped: { risks: 0, review_focus: 0 },
+  } satisfies Omit<PrBriefRecord, 'stale'>;
+  await db.insert(t.prBrief).values({ prId: pr!.id, json: seededBrief }).onConflictDoNothing();
 
   // ---- PR #482's repo-intel index rows (L04 Blast Radius) ----
   // Outside `if (!pr)` for the same reason as the intent row. `repo_index_state`, `symbols`,

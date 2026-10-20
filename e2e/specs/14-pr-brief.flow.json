@@ -1,0 +1,25 @@
+{
+  "name": "PR detail Overview shows the seeded PR Brief and jumps into Files changed",
+  "description": "From PR #482, confirm the PR Brief section on the default Overview tab renders the seeded pr_brief row that GET /pulls/:id/brief answers: the section label, the summary's opening words, the risk title 'Hardcoded Stripe secret key' with its file reference src/server.ts:88 (the Risk areas live in the Intent card), the Review focus label, and no 'Generate brief' button (AC-83: a brief exists, so the empty state is not drawn). Then the Review focus jump (AC-84): the row 'Open src/config.ts:12 in Files changed' switches to the Files changed tab with ?tab=diff&file=...&line=12, the seeded file src/config.ts is open and the line row carries data-jump-target=\"line\" with the seeded STRIPE_SECRET line in it (the marker persists after the 1,700 ms pulse, so the check does not race it). Read-only: the flow never presses Generate brief or Regenerate brief, so there is no model call and nothing the other flows read changes. The literal strings come from e2e/specs/seed-fixtures.md ('PR #482 has a seeded brief'). SectionLabel text is uppercased by CSS and agent-browser's `wait --text` reads document.body.innerText, so the two label steps lowercase the page text (as flows 11 and 12 do). The absence check looks at button text with an anchored match, because 'Regenerate brief' (the icon button's label) contains 'Generate brief' as a substring. Assumes a freshly-seeded DB where acme/payments-api (PR #482) is the first repo — run locally via the hermetic stack (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["wait", "--text", "Add rate limiting to public API endpoints"], "label": "seeded PR title row is visible" },
+    { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+    { "cmd": ["wait", "--fn", "document.body.innerText.toLowerCase().includes('pr brief')"], "label": "the PR Brief section label renders on the Overview tab" },
+    { "cmd": ["wait", "--text", "Adds a token-bucket rate limiter to the public API"], "label": "the seeded summary's opening words render" },
+    { "cmd": ["wait", "--text", "Hardcoded Stripe secret key"], "label": "the seeded risk title renders in the Risk areas" },
+    { "cmd": ["wait", "--text", "src/server.ts:88"], "label": "a risk's file reference renders" },
+    { "cmd": ["wait", "--fn", "document.body.innerText.toLowerCase().includes('review focus')"], "label": "the Review focus label renders" },
+    { "cmd": ["wait", "--fn", "!document.body.innerText.includes('Brief not available yet.') && ![...document.querySelectorAll('button')].some((b) => /^\\s*Generate brief\\s*$/i.test(b.innerText))"], "label": "no Generate brief button: the seeded brief is shown, not the empty state" },
+    { "cmd": ["wait", "--fn", "!!document.querySelector('button[title=\"src/config.ts:12\"]')"], "label": "the Review focus row for src/config.ts:12 is a button" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Open src/config.ts:12 in Files changed"], "label": "press the Review focus row for src/config.ts:12" },
+    { "cmd": ["wait", "--url", "tab=diff"], "label": "the Files changed tab is active in the URL" },
+    { "cmd": ["wait", "--url", "line=12"], "label": "the target line is in the URL" },
+    { "cmd": ["wait", "--text", "src/config.ts"], "label": "the target file is open" },
+    { "cmd": ["wait", "--fn", "!!document.querySelector('[data-jump-target=\"file\"]')"], "label": "the target file card carries the jump marker" },
+    { "cmd": ["wait", "--fn", "(document.querySelector('[data-jump-target=\"line\"]')?.textContent ?? '').includes('STRIPE_SECRET')"], "label": "the jump target line is the seeded STRIPE_SECRET line" }
+  ]
+}

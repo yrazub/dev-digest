@@ -2,6 +2,7 @@
 
 import React, { useCallback } from "react";
 import { Icon, Avatar, Badge, Button, Tabs } from "@devdigest/ui";
+import { STICKY_OFFSET_VAR } from "@/components/diff-viewer";
 import { RunReviewDropdown } from "../RunReviewDropdown";
 import { s } from "./styles";
 import type { PrDetail } from "@/lib/types";
@@ -36,6 +37,23 @@ export function PrDetailHeader({
     onRunsStarted();
   }, [onRunsStarted]);
 
+  // The header sticks to the top of the scroll container; publish its height so a jump into
+  // Files changed lands below it (read by the diff viewer through STICKY_OFFSET_VAR).
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  React.useLayoutEffect(() => {
+    const el = rootRef.current;
+    const host = el?.parentElement;
+    if (!el || !host) return;
+    const publish = () => host.style.setProperty(STICKY_OFFSET_VAR, `${el.offsetHeight}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      host.style.removeProperty(STICKY_OFFSET_VAR);
+    };
+  }, []);
+
   const statusColor =
     pr.status === "merged"
       ? "var(--ok)"
@@ -44,7 +62,7 @@ export function PrDetailHeader({
         : "var(--warn)";
 
   return (
-    <div style={s.root}>
+    <div ref={rootRef} style={s.root}>
       <div style={s.titleRow}>
         <div style={s.titleCol}>
           <h1 style={s.h1}>

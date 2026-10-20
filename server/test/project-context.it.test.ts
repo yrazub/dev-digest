@@ -6,6 +6,8 @@
  * seed is only read for its default workspace.
  * Spec: `server/specs/L05-project-context.md` (R-SRV-1, R-SRV-5, R-SRV-8, R-SRV-9, R-SRV-11–R-SRV-15,
  * R-SRV-17–R-SRV-20, R-SRV-35–R-SRV-37); plan: `specs/plans/L05-project-context.md` (phase 5).
+ * `workspaceAttachments` / `forWorkspace`: `server/specs/L05-pr-brief.md` R-SRV-24 (AC-66); plan:
+ * `specs/plans/L05-pr-brief.md` (phase 2).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { eq } from 'drizzle-orm';
@@ -24,6 +26,7 @@ import {
   type MockCloneFilesOptions,
 } from '../src/adapters/mocks.js';
 import { MAX_CONTEXT_DOC_BYTES } from '../src/modules/project-context/constants.js';
+import { ProjectContextRepository } from '../src/modules/project-context/repository.js';
 
 const hasDocker = await dockerAvailable();
 const d = hasDocker ? describe : describe.skip;
@@ -465,6 +468,115 @@ d('L05 project context routes (Testcontainers pg)', () => {
         expect((await put(id, ['docs/a.md'])).statusCode).toBe(404);
       }
       expect(await stored(foreign)).toEqual([]);
+    });
+  });
+
+  // ---------------------------------------------------------------- workspaceAttachments (R-SRV-24)
+
+  describe('workspaceAttachments and forWorkspace (R-SRV-24, AC-66)', () => {
+    /** A workspace of its own, so the seeded agents of the default workspace do not mix in. */
+    async function newWorkspace(): Promise<string> {
+      const [row] = await pg.handle.db
+        .insert(t.workspaces)
+        .values({ name: unique('brief-ws') })
+        .returning({ id: t.workspaces.id });
+      return row!.id;
+    }
+    async function namedAgent(workspace: string, name: string, enabled = true): Promise<string> {
+      const [row] = await pg.handle.db
+        .insert(t.agents)
+        .values({ workspaceId: workspace, name, provider: 'openai', model: 'gpt-4o', systemPrompt: 'p', enabled })
+        .returning({ id: t.agents.id });
+      return row!.id;
+    }
+    async function namedSkill(workspace: string, name: string, enabled = true): Promise<string> {
+      const [row] = await pg.handle.db
+        .insert(t.skills)
+        .values({ workspaceId: workspace, name, description: 'd', type: 'custom', source: 'manual', body: 'b', enabled })
+        .returning({ id: t.skills.id });
+      return row!.id;
+    }
+    const linkAt = (agentId: string, skillId: string, order: number) =>
+      pg.handle.db.insert(t.agentSkills).values({ agentId, skillId, order });
+    const store = () => new ProjectContextRepository(pg.handle.db);
+
+    it('returns the enabled agents of the workspace with their paths and enabled linked skills, in stored order', async () => {
+      const ws = await newWorkspace();
+      const agent = await namedAgent(ws, 'reviewer');
+      await attachAgent(agent, 'specs/e.md', 'docs/a.md');
+      const first = await namedSkill(ws, 'first-skill');
+      const second = await namedSkill(ws, 'second-skill');
+      await attachSkill(first, 'docs/d.md', 'docs/b.md');
+      await attachSkill(second, 'docs/c.md');
+      // linked out of name order: the link order decides
+      await linkAt(agent, second, 0);
+      await linkAt(agent, first, 1);
+
+      expect(await store().workspaceAttachments(ws)).toEqual([
+        {
+          agentName: 'reviewer',
+          agentPaths: ['specs/e.md', 'docs/a.md'],
+          skills: [
+            { name: 'second-skill', paths: ['docs/c.md'] },
+            { name: 'first-skill', paths: ['docs/d.md', 'docs/b.md'] },
+          ],
+        },
+      ]);
+    });
+
+    it('leaves out a disabled agent, and the paths of a disabled linked skill', async () => {
+      const ws = await newWorkspace();
+      const enabled = await namedAgent(ws, 'on-agent');
+      const disabled = await namedAgent(ws, 'off-agent', false);
+      await attachAgent(enabled, 'docs/a.md');
+      await attachAgent(disabled, 'docs/b.md');
+      const liveSkill = await namedSkill(ws, 'live-skill');
+      const deadSkill = await namedSkill(ws, 'dead-skill', false);
+      await attachSkill(liveSkill, 'docs/c.md');
+      await attachSkill(deadSkill, 'docs/d.md');
+      await linkAt(enabled, liveSkill, 0);
+      await linkAt(enabled, deadSkill, 1);
+      // a disabled agent's skill is not reached either
+      await linkAt(disabled, liveSkill, 0);
+
+      expect(await store().workspaceAttachments(ws)).toEqual([
+        { agentName: 'on-agent', agentPaths: ['docs/a.md'], skills: [{ name: 'live-skill', paths: ['docs/c.md'] }] },
+      ]);
+    });
+
+    it('is scoped to the workspace and answers an empty list for one with no enabled agent', async () => {
+      const ws = await newWorkspace();
+      const mine = await namedAgent(ws, 'mine');
+      await attachAgent(mine, 'docs/a.md');
+      const foreign = await namedAgent(foreignWorkspaceId, unique('foreign-agent'));
+      await attachAgent(foreign, 'docs/b.md');
+
+      expect((await store().workspaceAttachments(ws)).map((a) => a.agentName)).toEqual(['mine']);
+
+      const empty = await newWorkspace();
+      expect(await store().workspaceAttachments(empty)).toEqual([]);
+    });
+
+    it('feeds container.projectContext.forWorkspace: agents in name order, a shared path once, no run cap', async () => {
+      const ws = await newWorkspace();
+      const zed = await namedAgent(ws, 'zed');
+      const abe = await namedAgent(ws, 'abe');
+      await attachAgent(zed, 'docs/b.md', 'docs/a.md');
+      await attachAgent(abe, 'docs/a.md');
+      const skill = await namedSkill(ws, 'sk');
+      await attachSkill(skill, 'specs/e.md', 'docs/gone.md');
+      await linkAt(abe, skill, 0);
+      const off = await namedAgent(ws, 'aaa-off', false);
+      await attachAgent(off, 'docs/c.md');
+
+      const out = await app.container.projectContext.forWorkspace({
+        workspaceId: ws,
+        repo: { owner: 'acme', name: 'api', clonePath: '/clones/acme/ctx-api' },
+      });
+
+      expect(out.documents.map((d) => d.path)).toEqual(['docs/a.md', 'specs/e.md', 'docs/b.md']);
+      expect(out.skipped).toEqual([{ path: 'docs/gone.md', reason: 'not_found' }]);
+      expect(out).toMatchObject({ attached: 4, notCloned: false });
     });
   });
 

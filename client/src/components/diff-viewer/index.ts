@@ -5,3 +5,5 @@ export { DiffViewer } from "./DiffViewer";
 export type { DiffCommentApi } from "./comments";
 export type { DiffFindingApi } from "./findings";
 export { isCounted, mostSevere } from "./findings";
+export type { DiffJumpTarget } from "./helpers";
+export { STICKY_OFFSET_VAR } from "./constants";

@@ -86,6 +86,33 @@ export function mergeEffective(
 }
 
 /**
+ * The workspace-level document list (R-SRV-24): agents sorted by name in code-unit order,
+ * each agent's effective paths (`mergeEffective`), every path kept once at its first position
+ * across all agents. The sort is stable, so equal names keep the order they came in.
+ */
+export function mergeWorkspace(
+  agents: readonly {
+    agentName: string;
+    agentPaths: readonly string[];
+    skills: readonly { name: string; paths: readonly string[] }[];
+  }[],
+): string[] {
+  const sorted = [...agents].sort((a, b) =>
+    a.agentName < b.agentName ? -1 : a.agentName > b.agentName ? 1 : 0,
+  );
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const agent of sorted) {
+    for (const { path } of mergeEffective(agent.agentPaths, agent.skills)) {
+      if (seen.has(path)) continue;
+      seen.add(path);
+      out.push(path);
+    }
+  }
+  return out;
+}
+
+/**
  * Applies the run's token cap in order: the first document that would push the
  * sum past `cap`, and every later one, goes to `overCap` (R-SRV-27).
  */

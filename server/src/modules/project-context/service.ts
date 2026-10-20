@@ -21,6 +21,7 @@ import {
   isDocumentPath,
   kindOf,
   mergeEffective,
+  mergeWorkspace,
   selectDocuments,
   type DocumentEntry,
   type EffectivePath,
@@ -49,6 +50,15 @@ export interface ProjectContextForRun {
   specs: { path: string; text: string }[];
   loaded: NonNullable<PromptAssembly['specs_loaded']>;
   skipped: NonNullable<PromptAssembly['specs_skipped']>;
+}
+
+/** What the PR brief takes from project context (R-SRV-24): every document, no run cap. */
+export interface ProjectContextForWorkspace {
+  /** Distinct attached paths, read or skipped; `0` means nothing is attached. */
+  attached: number;
+  notCloned: boolean;
+  documents: { path: string; text: string }[];
+  skipped: { path: string; reason: ContextSkipReason }[];
 }
 
 type RunRead =
@@ -235,6 +245,44 @@ export class ProjectContextService {
         text: read.text,
       });
     });
+    return out;
+  }
+
+  /**
+   * R-SRV-24: the union of the documents attached to every enabled agent of the workspace and
+   * to those agents' enabled linked skills, read once each from the clone's working tree. The
+   * per-document rules are `forRun`'s; no run cap applies and no LLM is called.
+   */
+  async forWorkspace(input: {
+    workspaceId: string;
+    repo: { owner: string; name: string; clonePath: string | null };
+  }): Promise<ProjectContextForWorkspace> {
+    const agents = await this.deps.store.workspaceAttachments(input.workspaceId);
+    const paths = mergeWorkspace(agents);
+
+    const out: ProjectContextForWorkspace = {
+      attached: paths.length,
+      notCloned: input.repo.clonePath === null,
+      documents: [],
+      skipped: [],
+    };
+    for (const path of paths) {
+      if (out.notCloned) {
+        out.skipped.push({ path, reason: 'not_cloned' });
+        continue;
+      }
+      const read = await this.deps.files.read(input.repo, path, { maxBytes: MAX_CONTEXT_DOC_BYTES });
+      if (read.kind === 'not_cloned') {
+        out.notCloned = true;
+        out.skipped.push({ path, reason: 'not_cloned' });
+      } else if (read.kind === 'miss') {
+        out.skipped.push({ path, reason: read.miss });
+      } else if (read.text.trim() === '') {
+        out.skipped.push({ path, reason: 'empty' });
+      } else {
+        out.documents.push({ path, text: read.text });
+      }
+    }
     return out;
   }
 

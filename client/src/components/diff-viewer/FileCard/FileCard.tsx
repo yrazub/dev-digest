@@ -8,7 +8,7 @@ import { useTranslations } from "next-intl";
 import { Icon } from "@devdigest/ui";
 import type { FindingRecord } from "@devdigest/shared";
 import type { PrFile } from "@/lib/types";
-import { AUTO_EXPAND_MAX_LINES } from "../constants";
+import { AUTO_EXPAND_MAX_LINES, JUMP_PULSE_MS } from "../constants";
 import { parsePatch, type Line } from "../helpers";
 import {
   buildThreads,
@@ -24,7 +24,7 @@ import {
   partitionFindings,
   type DiffFindingApi,
 } from "../findings";
-import { s, chevronFor } from "../styles";
+import { s, chevronFor, fileCardFor } from "../styles";
 import { CodeLine } from "../CodeLine";
 import { FindingDot } from "../FindingDot";
 import { OutdatedComments } from "../OutdatedComments";
@@ -57,18 +57,51 @@ export function FileCard({
   commenting,
   findings,
   defaultOpen,
+  jump,
+  onJumped,
 }: {
   file: PrFile;
   commenting?: DiffCommentApi;
   findings?: DiffFindingApi;
   /** Initial open state; when absent the AUTO_EXPAND_MAX_LINES rule decides. */
   defaultOpen?: boolean;
+  /** Set when a navigation points at this file: the card starts open and scrolls to `line` (or its header). */
+  jump?: { line: number | null; pending: boolean };
+  /** Called once the card has scrolled, so the parent does not jump again. */
+  onJumped?: () => void;
 }) {
   const t = useTranslations("shell");
   const [open, setOpen] = React.useState(
-    defaultOpen ?? (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
+    jump !== undefined ||
+      (defaultOpen ?? (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES)
   );
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
+  // The rendered line the jump lands on: the one whose new-side number is `jump.line`.
+  const targetIndex = React.useMemo(
+    () => (jump?.line == null ? -1 : lines.findIndex((ln) => ln.kind !== "hunk" && ln.newNo === jump.line)),
+    [lines, jump?.line]
+  );
+  const headerRef = React.useRef<HTMLDivElement>(null);
+  const lineRef = React.useRef<HTMLDivElement>(null);
+  const pulseTimer = React.useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [pulsing, setPulsing] = React.useState(false);
+
+  const pending = jump?.pending === true;
+  // DOM sync for the jump: scroll the target line (or the header when no line is
+  // rendered) into view and start the line pulse. The pulse timer is cleared on
+  // unmount only, so a re-render after the jump does not cut the pulse short.
+  React.useEffect(() => {
+    if (!pending) return;
+    const hasLine = targetIndex >= 0;
+    (hasLine ? lineRef.current : headerRef.current)?.scrollIntoView({ block: "start" });
+    if (hasLine) {
+      setPulsing(true);
+      clearTimeout(pulseTimer.current);
+      pulseTimer.current = setTimeout(() => setPulsing(false), JUMP_PULSE_MS);
+    }
+    onJumped?.();
+  }, [pending, targetIndex, onJumped]);
+  React.useEffect(() => () => clearTimeout(pulseTimer.current), []);
 
   // Group this file's comments into threads, then split into ones we can anchor
   // to a rendered line vs. "outdated" (GitHub dropped the line / it's not here).
@@ -104,8 +137,12 @@ export function FileCard({
     : 0;
 
   return (
-    <div style={s.fileCard}>
-      <div onClick={() => setOpen((o) => !o)} style={s.fileHeader}>
+    <div style={fileCardFor(jump !== undefined)} data-jump-target={jump ? "file" : undefined}>
+      <div
+        ref={headerRef}
+        onClick={() => setOpen((o) => !o)}
+        style={jump ? { ...s.fileHeader, ...s.jumpHeader } : s.fileHeader}
+      >
         <Icon.ChevronRight size={13} style={chevronFor(open)} />
         <Icon.FileText size={14} style={s.fileIcon} />
         <span className="mono" style={s.filePath}>
@@ -140,6 +177,8 @@ export function FileCard({
                 commenting={commenting}
                 lineFindings={findingsForLine(ln, anchoredFindings)}
                 findings={findings}
+                jumpMark={i === targetIndex ? { pulse: pulsing } : undefined}
+                ref={i === targetIndex ? lineRef : undefined}
               />
             ))
           )}

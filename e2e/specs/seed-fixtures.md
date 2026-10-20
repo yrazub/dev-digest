@@ -88,16 +88,56 @@ strings a flow may assert on:
 
 - In scope: `Return 429 with Retry-After header` (the other two items are
   `Token-bucket rate limiter middleware` and `Apply the limiter to the public webhook routes`).
-- Risk area: `Auth surface touched` (kind `security`).
+- Risk area: `Auth surface touched` (kind `security`). Since L05 the Overview tab hides the
+  Intent card's risk-tag row (the PR Brief's Risk areas row takes its place), so flow `10`
+  asserts the tag is **absent** on Overview and present on the Agent runs tab.
 - Confidence: `medium`, rendered as `Medium confidence`.
 - Sources: `title`, `description`, `changed_files`, all `used`; `missing_context` false.
 - The summary equals the seeded PR description. A flow does not assert on it,
   because the description on the page contains the same sentence.
 
 **Contract:** changing any of these strings in `seed.ts` changes what flow `10`
-waits for, so the flow's `wait --text` lines are updated in the same change. The
+waits for (or waits to be absent), so the flow's `wait --text` lines are updated in the same change. The
 row's `source_hash` is null, so `GET /pulls/:id/intent` reports `stale: false`
 and a review run recomputes it.
+
+## PR #482 has a seeded brief
+
+Flow `14-pr-brief` opens PR #482 and waits for the PR Brief on the Overview tab to render the
+`pr_brief` row that `GET /pulls/:id/brief` answers, with no model call. `seed.ts` inserts the
+row in its own `onConflictDoNothing()` statement outside the `if (!pr)` block (`pr_brief.pr_id`
+is the primary key), so an already-seeded dev database gets it on the next `pnpm db:seed` too
+and a stored generation is never overwritten. `stale` is computed on read. The exact seeded
+strings:
+
+- Summary: `Adds a token-bucket rate limiter to the public API to stop abuse from unauthenticated clients. It also commits a live Stripe key in plaintext and adds an N+1 query to the user list.`
+- Risks (kind, title, severity, `file_refs`, explanation):
+  1. `security`, `Hardcoded Stripe secret key`, high, `src/config.ts:12`: `A live Stripe secret key is committed in plaintext in the config file, so anyone with repository access can use it.`
+  2. `perf`, `Redis round-trip on every public request`, low, `src/middleware/ratelimit.ts`: `The limiter reads and writes its bucket in Redis on each public request, which adds a network hop to the hot path.`
+  3. `breaking_api`, `Limiter now wraps the server bootstrap`, medium, `src/server.ts:88`: `The server entry point now installs the limiter before the routes, so every public caller can start receiving 429 responses.`
+  4. `deps`, `Lockfile changes`, low, `package-lock.json`: `The lockfile changes with the new dependency, so the resolved versions of other packages may have moved too.`
+- Review focus (file, line, reason):
+  1. `src/config.ts`, 12, `live Stripe key committed in plaintext`
+  2. `src/api/users.ts`, 46, `N+1 query: one lookup per user, hit harder under the new limiter`
+  3. `src/middleware/ratelimit.ts`, 12, `the limiter's entry point: check that the 429 branch sends Retry-After`
+- Inputs: `intent`, `blast_radius`, `diff_stats` and `description` are `used`; `linked_issue` is
+  `missing` (`none_linked`) and `spec_documents` is `missing` (`none_attached`). `input_budget_tokens`
+  is 8000, `input_tokens` null.
+- Other fields: `blast` is null (the live Blast radius block draws the map), `history` is
+  `{ "history": [] }`, `dropped` is 0 risks and 0 review-focus items, `head_sha` is `a1b2c3d4e5f6`,
+  `generated_at` is `2026-10-18T00:00:00.000Z`, provider and model are `seed`, the token counts and
+  cost are null.
+
+**Contract:** flow `14` asserts on the section label (`pr brief`, lowercased page text), the
+summary's opening words `Adds a token-bucket rate limiter to the public API`, the risk title
+`Hardcoded Stripe secret key`, the file reference `src/server.ts:88`, the Review focus label, the
+absence of a `Generate brief` button, and the Review focus row `src/config.ts:12` (aria-label
+`Open src/config.ts:12 in Files changed`). That row must open Files changed at `src/config.ts`
+(`?tab=diff&line=12`), and the `data-jump-target="line"` row must hold the seeded
+`STRIPE_SECRET` line, so the `src/config.ts` patch must keep that line at new-side line 12
+(see "PR #482 has nine files"). Changing any of these strings, the first focus item, or the
+`src/config.ts` patch changes what flow `14` waits for, so the flow is updated in the same
+change. The flow never presses Generate or Regenerate.
 
 ## PR #482 has a seeded repo-intel index
 

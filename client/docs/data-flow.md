@@ -33,6 +33,7 @@ A key is `[resource, id]`. The ones the PR screens depend on:
 | `["pr-runs", prId]` | `usePrRuns` | `GET /pulls/:id/runs` | polls every 4 s while any run is `running`; invalidated when a live run ends and by deleting a run |
 | `["pr-active-runs", prId]` | `usePrActiveRuns` | `GET /pulls/:id/runs/active` | polls every 4 s while non-empty; invalidated when runs start and end |
 | `["pr-intent", prId]` | `usePrIntent` | `GET /pulls/:id/intent` | polls every 4 s only while a review run is in flight (the page passes `poll`); `useRegenerateIntent` writes the `POST` response straight into it; invalidated when a live run ends |
+| `["pr-brief", prId, headSha]` | `usePrBrief` | `GET /pulls/:id/brief` | not polled; enabled once `prId` is known, and a new head SHA is a new query. `useGenerateBrief` writes the `POST` response straight into the key it was built with. Nothing invalidates it, and a finished review run does not touch it (see "The PR brief") |
 | `["smart-diff", prId, headSha]` | `useSmartDiff` | `GET /pulls/:id/smart-diff` | not polled; waits until both `prId` and `pr.head_sha` are known, and a new head SHA is a new query. Every head of one PR shares the prefix `smartDiffKeys.pull(prId)` = `["smart-diff", prId]`, which is what gets invalidated: by a finding action, deleting a review or a run, and when a run settles (see below) |
 | `["blast", prId, headSha]` | `useBlastRadius` | `GET /pulls/:id/blast` | not polled; waits until both `prId` and `pr.head_sha` are known, and a new head SHA is a new query. Every head of one PR shares the prefix `blastKeys.pull(prId)` = `["blast", prId]`. Only a finished Resync from the Blast radius note invalidates it (see "Resync from the Blast radius note"); a finished review run does not, because a review does not change the map |
 | `["run-trace", runId]` | `useRunTrace` | `GET /runs/:id/trace` | fetched when the drawer opens; `retry: false` |
@@ -65,6 +66,30 @@ mounted only for those reasons:
    `IndexStatus`), the wait ends and `["blast", prId]` is invalidated, so the map is read again.
 4. Every other answer counts as one poll, and so does a failed one. After `RESYNC_MAX_POLLS` (40) the
    wait ends and the note adds *The index has not changed yet. Try again in a minute.*
+
+**The PR brief (L05).** The PR Brief section on the Overview tab keeps the model call out of the
+read path:
+
+1. On mount `PrBriefSection` calls `usePrBrief`: `GET /pulls/:id/brief`, which never calls a model. The
+   section never calls `useGenerateBrief` on mount, so opening a PR costs nothing.
+2. **Generate**, **Regenerate** (the header icon button and the stale line's action) call
+   `useGenerateBrief`'s `mutate`, which sends `POST /pulls/:id/brief`. On success the response is
+   written into `["pr-brief", prId, headSha]` with `setQueryData`; no request follows and no other key
+   is invalidated.
+3. While the `POST` is pending the section keeps showing the cached brief and only the buttons change
+   to *Generating…*. A failure leaves the cached brief in place and adds a message under the header;
+   the server's `brief_unavailable` (no key for the brief's model) adds a link to Settings. The global
+   mutation toast fires as well.
+4. **Staleness is the server's.** `stale` is computed by the `GET` (the stored head SHA against the
+   PR's), and the key carries `pr.head_sha`, so when the PR gets a new head the page reads the brief
+   again and the stale line appears. The client does not compare SHAs.
+5. A finished review run does not refresh the brief: `useRunSettledRefresh` invalidates `reviews`,
+   `pr-intent` and the other review keys listed above, not `pr-brief`, because a review does not change
+   what the brief was built from. The intent beside the brief is read through its own key, `pr-intent`.
+
+The Review focus rows read nothing extra: a click only changes the URL, and Files changed resolves
+`file` and `line` against the `files` of `["pull", prId]` that the page already holds (see
+[`ui-architecture.md`](ui-architecture.md) → "URL state").
 
 Skills (L02): `["skills"]` / `["skill", id]`, `["skill-versions", id]`, and
 `["agent-skills", agentId]` (every workspace skill with its link state for one agent). Saving,
@@ -121,8 +146,8 @@ Keep server data in the query cache. Do not copy it into `useState`; derive from
    repeat, and the repeat's own empty answer is `0 → 0`, which is not a transition.
 
 The PR's intent is the one piece of review data that is *not* in the run's event stream. The
-server derives it as the run's first step, so the Intent card (above the run on the Agent runs
-tab) polls `pr-intent` every 4 s while a run is in flight and fills in once the server has stored it.
+server derives it as the run's first step, so the Intent card (inside the PR Brief section on the
+Overview tab, and above the run on the Agent runs tab) polls `pr-intent` every 4 s while a run is in flight and fills in once the server has stored it.
 A run whose intent fails still completes; the card keeps showing whatever was stored.
 
 The PR list is **not** invalidated by any of this. Its cost and findings columns catch up on the

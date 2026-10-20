@@ -44,6 +44,21 @@ The Project Context page and the Context tabs of agents and skills read the same
 `GET /repos/:id/context` (the list) and `GET /repos/:id/context/file?path=` (one document with its
 text and "Used by" counts). Neither route is part of a run, and neither writes anything.
 
+## A second reader: the PR brief
+
+A review run is not the only reader of the attachments. The PR Brief
+([`server/src/modules/brief/README.md`](../server/src/modules/brief/README.md)) is written for a pull
+request, not for an agent, so it asks `container.projectContext.forWorkspace` for the union of the
+documents attached to every enabled agent and to those agents' enabled skills: agents in name order,
+each path once, at its first position. The documents are read from the same clone with the same
+per-document rules as a run, but with no run cap. The brief makes its own single model call and fits
+its own input budget by dropping whole documents from the end, then records how many it left out.
+
+Nothing of this reaches a run: `forRun`, the prompt's `## Project context` slot and the run trace are
+unchanged. The brief wraps each document in an `<untrusted source="document">` block of its own, with
+the path as the first line of the content and never in the fence label, and it stores no document
+text, only whether the documents were used, trimmed or missing.
+
 ## Decisions and their trade-offs
 
 | Decision | Why | What it costs |
@@ -53,7 +68,8 @@ text and "Used by" counts). Neither route is part of a run, and neither writes a
 | **Nothing is cached.** Every list, preview and run reads the files and counts tokens again | There is no cache to invalidate | A list request reads every listed document |
 | **The trace keeps the text of every inserted document** | The trace can show exactly what the model was sent | A trace holds a copy of repository text |
 | **A run never fails because of project context.** A skipped document is a record with a reason; a thrown error is logged and the run goes on without documents | A missing clone or a deleted file must not stop a review | A run can proceed with fewer documents than the user expected; the Live Log and the trace say which |
-| **The run reaches the module through `container.projectContext`** | The `reviews` module may not import the `project-context` module, and the container is where the two meet, as with `container.intent` | The service is built in the composition root |
+| **The run reaches the module through `container.projectContext`** | The `reviews` module may not import the `project-context` module, and the container is where the two meet, as with `container.intent`; the `brief` module reaches it the same way | The service is built in the composition root |
+| **The PR brief reads every enabled agent's documents, with no run cap** | A brief belongs to a PR, not to one agent, and it already budgets its input | The brief can read more text than any single run would; it drops whole documents to fit |
 | **The engine stays pure.** `reviewer-core` receives `{ path, text }` documents and does no I/O | The engine has no database or file-system access, so it stays testable with a stubbed provider | The server reads and caps the documents before the call |
 | **Repository markdown is rendered with `SafeMarkdown`, not the vendored `Markdown`** | A document is untrusted; raw HTML shows as text and only `http:`/`https:` links are clickable | Relative links in a preview are plain text |
 

@@ -51,6 +51,12 @@ flowchart LR
   API -->|"run review"| ENGINE
   ENGINE --> LLM
 
+  BRIEF["brief<br/>intent · blast map · changed files · latest review findings · project documents<br/>→ summary, risks, review focus (stored per PR and head SHA)"]
+  API -->|"generate brief (on request)"| BRIEF
+  INTENT -->|"stored intent, read only"| BRIEF
+  PCTX -->|"documents, no model call"| BRIEF
+  BRIEF -->|"one model call"| LLM
+
   MCPCLIENT["MCP client<br/>Claude Code · MCP Inspector"]
   MCP["mcp/<br/>devdigest-mcp · stdio<br/>started on its own, not by dev.sh"]
   MCPCLIENT -->|"stdio · JSON-RPC"| MCP
@@ -77,6 +83,11 @@ and the LLM (via OpenRouter).
 `devdigest-mcp` sits beside that flow, not inside it: an MCP client (Claude Code, MCP Inspector)
 starts it as a child process and it reaches DevDigest only over HTTP, against the running API.
 The review itself still executes in the API (see [MCP server](#mcp-server)).
+
+The **PR Brief** is a separate, on-request flow: from a PR's Overview tab the user generates a cached,
+SHA-bound brief (summary, risks and where to read first). One model call is made over facts DevDigest
+already holds, its answer is checked against the PR's own files and blast map, and a Review focus click
+jumps into Files changed at that line ([`server/src/modules/brief`](server/src/modules/brief/README.md)).
 
 How a project document gets from the clone into the prompt and the run trace is in
 [`docs/project-context.md`](docs/project-context.md).

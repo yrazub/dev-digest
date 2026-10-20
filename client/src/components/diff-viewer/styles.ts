@@ -1,16 +1,17 @@
 import type { CSSProperties } from "react";
+import { STICKY_OFFSET_VAR } from "./constants";
 import type { Line } from "./helpers";
 
 /** Co-located styles for the DiffViewer (extracted from inline styles). */
 export const s = {
   list: { display: "flex", flexDirection: "column", gap: 10 } satisfies CSSProperties,
   empty: { padding: "24px", fontSize: 14, color: "var(--text-muted)", textAlign: "center" } satisfies CSSProperties,
-  fileCard: {
-    border: "1px solid var(--border)",
-    borderRadius: 7,
-    overflow: "hidden",
-    background: "var(--bg-elevated)",
-  } satisfies CSSProperties,
+  /** Below any sticky header, then 96 px above the target file's header when it is scrolled into view. */
+  jumpHeader: { scrollMarginTop: `calc(var(${STICKY_OFFSET_VAR}, 0px) + 96px)` } satisfies CSSProperties,
+  /** Below any sticky header, then 130 px above the target line when it is scrolled into view. */
+  jumpLine: { scrollMarginTop: `calc(var(${STICKY_OFFSET_VAR}, 0px) + 130px)` } satisfies CSSProperties,
+  /** The mark on the target line while it pulses (design `dd-line-pulse`). */
+  linePulse: { background: "var(--accent-bg)" } satisfies CSSProperties,
   fileHeader: {
     display: "flex",
     alignItems: "center",
@@ -106,6 +107,16 @@ export const fs = {
   } satisfies CSSProperties,
 } as const;
 
+/** The file card; the target of a jump gets a 1 px accent border. */
+export function fileCardFor(isTarget: boolean): CSSProperties {
+  return {
+    border: `1px solid ${isTarget ? "var(--accent)" : "var(--border)"}`,
+    borderRadius: 7,
+    overflow: "hidden",
+    background: "var(--bg-elevated)",
+  };
+}
+
 /** Chevron rotates 90deg when the file card is open. */
 export function chevronFor(open: boolean): CSSProperties {
   return {
@@ -121,6 +132,17 @@ export function lineRowFor(kind: Line["kind"], stripe?: string): CSSProperties {
   const base: CSSProperties = { display: "flex", alignItems: "stretch", fontSize: 13, lineHeight: "20px", background };
   // The stripe is an inset shadow so the line does not shift when it appears.
   return stripe ? { ...base, boxShadow: `inset 3px 0 0 ${stripe}` } : base;
+}
+
+/** The row of the jump target: scroll margin, a fade, and the pulse background while it pulses. */
+export function jumpedRow(row: CSSProperties, mark: { pulse: boolean } | undefined): CSSProperties {
+  if (!mark) return row;
+  return {
+    ...row,
+    ...s.jumpLine,
+    transition: "background-color .5s ease-out",
+    ...(mark.pulse ? s.linePulse : null),
+  };
 }
 
 /** Gutter sign colour per line kind. */

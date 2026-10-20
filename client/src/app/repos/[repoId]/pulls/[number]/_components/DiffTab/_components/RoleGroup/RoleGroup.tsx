@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { Icon, SEV } from "@devdigest/ui";
 import type { SmartDiffRole } from "@devdigest/shared";
 import type { PrFile } from "@/lib/types";
-import { DiffViewer, type DiffCommentApi, type DiffFindingApi } from "@/components/diff-viewer";
+import { DiffViewer, type DiffCommentApi, type DiffFindingApi, type DiffJumpTarget } from "@/components/diff-viewer";
 import { ROLE_META } from "../../constants";
 import { groupFindingMark } from "../../helpers";
 import { s } from "../../styles";
@@ -16,15 +16,22 @@ export function RoleGroup({
   files,
   commenting,
   findings,
+  target,
+  onJumped,
 }: {
   role: SmartDiffRole;
   files: PrFile[];
   commenting?: DiffCommentApi;
   findings?: DiffFindingApi;
+  /** The file a navigation points at; a collapsed group that holds it starts open. */
+  target?: DiffJumpTarget;
+  onJumped?: () => void;
 }) {
   const t = useTranslations("prReview");
   const meta = ROLE_META[role];
-  const [open, setOpen] = React.useState(!meta.startsCollapsed);
+  const [open, setOpen] = React.useState(
+    !meta.startsCollapsed || files.some((f) => f.path === target?.path)
+  );
   const mark = groupFindingMark(files, findings?.findings ?? []);
 
   return (
@@ -58,6 +65,8 @@ export function RoleGroup({
             files={files}
             commenting={commenting}
             findings={findings}
+            target={target}
+            onJumped={onJumped}
             defaultOpen={meta.startsCollapsed ? false : undefined}
           />
         </div>

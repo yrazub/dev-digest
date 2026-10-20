@@ -6,6 +6,7 @@ import {
   IntentConfidence,
   IntentRiskArea,
   IntentSource,
+  PrBrief,
   SmartDiff,
 } from './brief.js';
 
@@ -116,3 +117,71 @@ export const BlastRadiusResponse = BlastRadius.extend({
   caller_limit: z.number().int().positive(),
 });
 export type BlastRadiusResponse = z.infer<typeof BlastRadiusResponse>;
+
+/** The kinds of input a PR Brief model call is built from. */
+export const BriefInputKind = z.enum([
+  'intent',
+  'blast_radius',
+  'diff_stats',
+  'description',
+  'linked_issue',
+  'spec_documents',
+]);
+export type BriefInputKind = z.infer<typeof BriefInputKind>;
+
+export const BriefInputStatus = z.enum(['used', 'trimmed', 'missing']);
+export type BriefInputStatus = z.infer<typeof BriefInputStatus>;
+
+export const BriefInputReason = z.enum([
+  'not_derived',
+  'stale', // intent
+  'flag_off',
+  'index_failed',
+  'index_partial',
+  'repo_too_large',
+  'no_data',
+  'pr_files_missing', // blast
+  'empty', // description
+  'none_linked',
+  'no_token',
+  'not_found',
+  'fetch_failed', // linked issue
+  'none_attached',
+  'not_cloned',
+  'all_skipped', // spec documents
+  'over_budget', // any trimmed input
+]);
+export type BriefInputReason = z.infer<typeof BriefInputReason>;
+
+export const BriefInput = z.object({
+  kind: BriefInputKind,
+  status: BriefInputStatus,
+  reason: BriefInputReason.nullable(), // null when used without a remark
+  omitted: z.number().int().nonnegative().nullable(), // documents, callers or files left out
+});
+export type BriefInput = z.infer<typeof BriefInput>;
+
+/** A persisted PR Brief with how it was generated; `stale` is computed on read, not stored. */
+export const PrBriefRecord = PrBrief.extend({
+  pr_id: z.string(),
+  head_sha: z.string(),
+  generated_at: z.string(),
+  provider: z.string(),
+  model: z.string(),
+  tokens_in: z.number().int().nullable(),
+  tokens_out: z.number().int().nullable(),
+  cost_usd: z.number().nullable(),
+  input_tokens: z.number().int().nullable(),
+  input_budget_tokens: z.number().int().positive(),
+  inputs: z.array(BriefInput),
+  dropped: z.object({
+    risks: z.number().int().nonnegative(),
+    review_focus: z.number().int().nonnegative(),
+  }),
+  stale: z.boolean(),
+});
+export type PrBriefRecord = z.infer<typeof PrBriefRecord>;
+
+/** Response of `GET`/`POST /pulls/:id/brief`; null until a brief was generated. */
+export const PrBriefResponse = z.object({ brief: PrBriefRecord.nullable() });
+export type PrBriefResponse = z.infer<typeof PrBriefResponse>;

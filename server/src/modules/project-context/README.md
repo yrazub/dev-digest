@@ -16,15 +16,15 @@ whole path from the clone to the run trace is in
 | File | Role |
 |---|---|
 | [`constants.ts`](constants.ts) | The size, count and token limits, and the folders the walk never enters |
-| [`domain.ts`](domain.ts) | Pure rules: what a document is, its `kind`, the sort and cut, the effective list of a run, the run's token cap |
+| [`domain.ts`](domain.ts) | Pure rules: what a document is, its `kind`, the sort and cut, the effective list of a run, the workspace-wide list, the run's token cap |
 | [`ports.ts`](ports.ts) | `ProjectFiles` (the clone, as this module sees it), `ProjectContextStore` (the tables) and the unit of work |
 | [`repository.ts`](repository.ts) | The only file that imports `src/db/`: the two attachment tables, and workspace-scoped reads of `repos`, `agents`, `skills` and `agent_skills` |
-| [`service.ts`](service.ts) | `ProjectContextService`: `list`, `file`, the owner reads and writes, and `forRun` |
+| [`service.ts`](service.ts) | `ProjectContextService`: `list`, `file`, the owner reads and writes, `forRun` and `forWorkspace` |
 | [`routes.ts`](routes.ts) | Six thin routes; each calls `container.projectContext` once |
 
 The service is built in `src/platform/container.ts` and reached as `container.projectContext`,
-not inside the module, because the `reviews` run needs `forRun` and a module never imports another
-module. Its only file-system access is the `cloneFiles` adapter
+not inside the module, because the `reviews` run needs `forRun`, the `brief` module needs
+`forWorkspace`, and a module never imports another module. Its only file-system access is the `cloneFiles` adapter
 ([`../../adapters/clone-files/index.ts`](../../adapters/clone-files/index.ts)); the module repeats
 that port's shape in its own `ports.ts` instead of importing it. Tests swap the adapter with
 `ContainerOverrides.cloneFiles` and `MockCloneFiles` (`src/adapters/mocks.ts`).
@@ -134,6 +134,35 @@ was inserted, and writes these trace fields (shapes in
 | `prompt_assembly.specs_tokens` | The tokenizer's count of the whole section, or `null` without one |
 | `prompt_assembly.specs_calls` | The number of review calls the section was sent with (more than one in map-reduce), or `null` |
 
+## In the PR brief: `forWorkspace`
+
+The `brief` module ([`../brief/README.md`](../brief/README.md)) is not tied to one agent, so it
+calls `container.projectContext.forWorkspace({ workspaceId, repo })` for the documents of the whole
+workspace. The call calls no model and applies **no run cap**: the brief fits its own input budget
+and drops whole documents from the end when it has to.
+
+```mermaid
+flowchart TD
+  A["workspaceAttachments<br/>each enabled agent: its paths + its enabled linked skills' paths, stored order"] --> B["mergeWorkspace<br/>agents sorted by name (code-unit order)<br/>mergeEffective per agent<br/>a path kept once, at its first position"]
+  B --> C{"no clone_path, or the port<br/>already answered not_cloned?"}
+  C -->|yes| S1["skip: not_cloned<br/>this path and every later one"]
+  C -->|no| D["files.read(path, byte limit)"]
+  D --> E{"answer"}
+  E -->|miss| S2["skip: not_found, too_large,<br/>unreadable or outside_clone"]
+  E -->|"blank text"| S3["skip: empty"]
+  E -->|text| F["documents<br/>raw text, in merged order"]
+```
+
+- **The reads are `forRun`'s.** The same byte limit, the same `not_cloned`, `miss` and `empty`
+  handling and the same reasons; each path is read once, sequentially, from the clone's working tree.
+- **Only enabled agents count**, and within an agent only enabled skills, as in `runAttachments`. A
+  disabled agent's attachments are left out.
+- **The answer** is `{ attached, notCloned, documents, skipped }`. `attached` is the number of
+  distinct merged paths, so `0` means nothing is attached to any enabled agent. Unlike `forRun`'s
+  `specs`, `documents` holds no origin or token count.
+- **Fencing happens in the caller.** The brief wraps each document in its own `<untrusted>` block; the
+  path goes inside the block's content, never into the fence label.
+
 ## Trust and privacy
 
 - **Document text is untrusted data.** `reviewer-core` fences each document and puts a trusted note
@@ -154,9 +183,9 @@ was inserted, and writes these trace fields (shapes in
 
 | File | Covers |
 |---|---|
-| `test/project-context-domain.test.ts` | The pure rules and `parseProjectContextRoots` |
-| `test/project-context-service.test.ts` | `list`, `file`, the owner writes and `forRun` over `MockCloneFiles` and a fake store |
-| `test/project-context.it.test.ts` | The six routes on real Postgres: shapes, ordering, `422`/`404`, `used_by`, cascade, no version bump |
+| `test/project-context-domain.test.ts` | The pure rules, `mergeWorkspace` and `parseProjectContextRoots` |
+| `test/project-context-service.test.ts` | `list`, `file`, the owner writes, `forRun` and `forWorkspace` over `MockCloneFiles` and a fake store |
+| `test/project-context.it.test.ts` | The six routes on real Postgres: shapes, ordering, `422`/`404`, `used_by`, cascade, no version bump; and `workspaceAttachments` |
 | `test/project-context-schema.it.test.ts` | The migration and its cascades |
 | `test/reviews-project-context.it.test.ts` | A real run: prompt content and order, skip reasons, trace fields, Live Log lines |
 | `test/clone-files.test.ts` | The adapter over a temporary directory |

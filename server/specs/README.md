@@ -16,6 +16,7 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | [`L03-smart-diff.md`](L03-smart-diff.md) | `smart-diff` (new), `_shared/file-role` (new) | implemented |
 | [`L04-blast-radius.md`](L04-blast-radius.md) | `blast` (new), `repo-intel` | implemented |
 | [`L05-project-context.md`](L05-project-context.md) | `project-context` (new), `reviews` | approved |
+| [`L05-pr-brief.md`](L05-pr-brief.md) | `brief` (new), `blast`, `project-context`, seed | implemented |
 | [`architecture-refactor.md`](architecture-refactor.md) | all (S1: `pulls`, `reviews`) | draft |
 
 Use [`../src/modules/repo-intel`](../src/modules/repo-intel/README.md) as the reference

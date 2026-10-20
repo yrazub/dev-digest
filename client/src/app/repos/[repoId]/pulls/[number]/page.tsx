@@ -6,7 +6,7 @@
 "use client";
 
 import React from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Skeleton, ErrorState } from "@devdigest/ui";
 import { AppShell } from "@/components/app-shell";
 import { RepoNotFound } from "@/components/repo-not-found";
@@ -29,12 +29,12 @@ import {
 import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
 import { ApiError } from "@/lib/api";
 import { githubPrUrl } from "@/lib/github-urls";
+import { usePrDetailNav } from "./_lib/use-pr-detail-nav";
 import type { FindingRecord } from "@devdigest/shared";
 
 export default function PRDetailPage() {
   const params = useParams<{ repoId: string; number: string }>();
   const search = useSearchParams();
-  const router = useRouter();
   const { repoId, number } = params;
   const { activeRepo } = useActiveRepo();
   const repoNotFound = useRepoNotFound(repoId);
@@ -63,15 +63,8 @@ export default function PRDetailPage() {
     if (prId) qc.invalidateQueries({ queryKey: ["pr-active-runs", prId] });
   };
 
-  const tab = search.get("tab") ?? "overview";
+  const { tab, setTab, setParam, openFocus } = usePrDetailNav(`/repos/${repoId}/pulls/${number}`);
   const traceRunId = search.get("trace");
-  const setParam = (key: string, val: string | null) => {
-    const sp = new URLSearchParams(search.toString());
-    if (val == null) sp.delete(key);
-    else sp.set(key, val);
-    router.replace(`/repos/${repoId}/pulls/${number}${sp.toString() ? `?${sp.toString()}` : ""}`);
-  };
-  const setTab = (t: string) => setParam("tab", t);
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
@@ -140,7 +133,7 @@ export default function PRDetailPage() {
       />
 
       <div style={{ padding: "24px 32px 44px", display: "flex", flexDirection: "column", gap: 24, maxWidth: 1080, margin: "0 auto" }}>
-        {prId && (tab === "overview" || tab === "findings") && (
+        {prId && tab === "findings" && (
           <IntentCard prId={prId} poll={reviewRunning} />
         )}
 
@@ -151,6 +144,8 @@ export default function PRDetailPage() {
             repoId={repoId}
             repoFullName={repoFullName}
             headSha={pr.head_sha}
+            poll={reviewRunning}
+            onOpenFocus={openFocus}
           />
         )}
 

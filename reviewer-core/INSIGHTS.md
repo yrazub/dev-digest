@@ -22,6 +22,7 @@ Traps we have already hit in the engine. Append-only. See the root
 - **2026-10-05** — `ReviewOutcome.scope` has three states (`src/review/run.ts:123`, `:232`): `null` (no tagged finding, filter off), `{ enabled: false, tagged, … }` (the model tagged, nothing filtered) and `{ enabled: true, … }`. A caller reads `scope?.enabled`; non-null does not mean the filter ran.
   The server executor sets `stats.scope_filtered` from `outcome.scope?.enabled` (`../server/src/modules/reviews/run-executor.ts`, `runOneAgent`).
 - **2026-10-05** — `MockLLMProvider` answers every `completeStructured` call with the same fixture, so a map-reduce test built on it gets N copies of each finding and cannot tell "filtered once over the merged set" from "filtered per chunk". Override `completeStructured` per call and parse with `req.schema` (`sequenced`, `test/run.test.ts:429`).
+- **2026-10-18** — `wrapUntrusted(label, content)` escapes `</untrusted>` in `content` only; `label` is interpolated raw into `source="${label}"` (`src/prompt.ts:76-79`), so a label must be a code-defined constant, never a path or other data. The package's own callers follow that: every label is a literal, and a document's path goes into a `### Document:` heading outside the fence through `sanitizeDocPath` (`src/prompt.ts:72`, `:157`). **See also:** `../server/INSIGHTS.md` (the server callers, one of which passes a path).
 
 ## Recurring Errors & Fixes
 
@@ -76,3 +77,4 @@ guard; `src/review/run.ts` `DEFAULT_REVIEW_MAX_TOKENS`; `test/openrouter.test.ts
 
 - **2026-10-05** — L03: the `intent` prompt slot and the scope filter after grounding (`src/scope.ts`).
 - **2026-10-07** — no code change; recorded the line-number accuracy question that the L03 Smart Diff demo exposed.
+- **2026-10-18** — no code change; recorded that `wrapUntrusted` does not escape its label (found by the L05 PR Brief plan review).

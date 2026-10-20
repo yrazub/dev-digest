@@ -154,10 +154,19 @@ export const SmartDiff = z.object({
 export type SmartDiff = z.infer<typeof SmartDiff>;
 
 // ---- Composed PR Brief (pr_brief.json) ----
+export const ReviewFocusItem = z.object({
+  file: z.string().min(1),
+  line: z.number().int().min(1),
+  reason: z.string(),
+});
+export type ReviewFocusItem = z.infer<typeof ReviewFocusItem>;
+
 export const PrBrief = z.object({
-  intent: Intent,
-  blast: BlastRadius,
+  summary: z.string(),
+  intent: Intent.nullable(), // what the model was given; null when the input was missing
+  blast: BlastRadius.nullable(), // same
   risks: Risks,
-  history: PrHistory,
+  review_focus: z.array(ReviewFocusItem),
+  history: PrHistory, // always { history: [] } in this delivery
 });
 export type PrBrief = z.infer<typeof PrBrief>;

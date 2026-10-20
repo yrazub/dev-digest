@@ -96,5 +96,6 @@ export const s = {
     color: "var(--text-primary)",
     margin: 0,
   } satisfies CSSProperties,
+  footerDivider: { height: 1, background: "var(--border)", margin: "16px 0" } satisfies CSSProperties,
   emptyAction: { marginTop: 6 } satisfies CSSProperties,
 } as const;

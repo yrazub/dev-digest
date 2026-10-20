@@ -78,6 +78,7 @@ flowchart TB
     intent["intent<br/>/pulls/:id/intent (GET read · POST re-derive)"]
     smartDiff["smart-diff<br/>/pulls/:id/smart-diff (GET, read-only)"]
     blast["blast<br/>/pulls/:id/blast (GET, read-only)"]
+    brief["brief<br/>/pulls/:id/brief (GET read · POST generate)"]
   end
   subgraph Agents["Agents & skills (Skills Lab)"]
     agents["agents<br/>/agents · /agents/:id · /agents/:id/skills (link + order)"]
@@ -125,13 +126,13 @@ the ready `repo-intel` index, and writes nothing; it calls neither GitHub nor a 
 `getBlastRadius` and one `getIndexState` call on the `repo-intel` facade, in parallel; a PR with no stored
 files skips `getBlastRadius`. The module never imports `repo-intel`: it declares the facade shapes it reads
 as its own types ([`domain.ts`](src/modules/blast/domain.ts), [`ports.ts`](src/modules/blast/ports.ts)), and
-`routes.ts` assigns `container.repoIntel` to its `BlastSource` port, so a new facade reason or index status
-fails `pnpm typecheck`. Grouping, ordering, totals and the degraded mark are the pure mapper
+`container.blast` (built in `src/platform/container.ts`, because the `brief` module reads it too) assigns
+`container.repoIntel` to its `BlastSource` port, so a new facade reason or index status fails `pnpm typecheck`. Grouping, ordering, totals and the degraded mark are the pure mapper
 `toBlastRadius` in `domain.ts`.
 
 | Route | Behaviour |
 |---|---|
-| `GET /pulls/:id/blast` | Answers a `BlastRadiusResponse`, which also parses as `BlastRadius`. `changed_symbols` lists the symbols declared in the PR's files. `downstream` holds one entry per changed symbol that has callers (symbol, `callers` as `name`/`file`/`line`, `endpoints_affected`, `crons_affected`); a symbol without callers stays in `changed_symbols` only. A caller in the file that declares the symbol is dropped, and so is a second caller on the same file and line. Callers are ordered by rank (descending), then file, then line; groups by their highest caller rank, then symbol name (code-unit order). A group's endpoints and crons are the sorted, distinct union of the index's facts for its caller files. `totals` holds `symbols`, `callers` (the rows listed), `endpoints` and `crons` (distinct across all groups) and `symbols_without_callers` (changed symbols whose name has no group); `summary` is a sentence built from them. `indexed_sha` is the commit the line numbers refer to, `null` when the index row has none. `caller_limit` is the facade's per-symbol cap, read from `container.repoIntelLimits`. `degraded` and `reason` are a mark, not an error: the route answers `200` with whatever map exists. `404` code `not_found` for an unknown PR or one of another workspace; `422` for an id that is not a uuid |
+| `GET /pulls/:id/blast` | Answers a `BlastRadiusResponse`, which also parses as `BlastRadius`. `changed_symbols` lists the symbols declared in the PR's files. `downstream` holds one entry per changed symbol that has callers (symbol, `callers` as `name`/`file`/`line`, `endpoints_affected`, `crons_affected`); a symbol without callers stays in `changed_symbols` only. A caller in the file that declares the symbol is dropped, and so is a second caller on the same file and line. Callers are ordered by rank (descending), then file, then line; groups by their highest caller rank, then symbol name (code-unit order). A group's endpoints and crons are the sorted, distinct union of the index's facts for its caller files. `totals` holds `symbols`, `callers` (the rows listed), `endpoints` and `crons` (distinct across all groups) and `symbols_without_callers` (changed symbols whose name has no group); `summary` is a sentence built from them. `indexed_sha` is the commit the line numbers refer to, `null` when the index row has none. `caller_limit` is the facade's per-symbol cap, which `container.blast` (the composition root) passes to the service. `degraded` and `reason` are a mark, not an error: the route answers `200` with whatever map exists. `404` code `not_found` for an unknown PR or one of another workspace; `422` for an id that is not a uuid |
 
 The mark is the first row of this table that matches. The index status comes before the facade's own
 flag because, on a failed index, the facade falls back to the clone and answers `no_data`, which would
@@ -156,6 +157,19 @@ Each request writes one `info` line, `blast: served from the repo-intel index`, 
 answers a complete map there with no clone on disk; the rows are listed in
 [`../e2e/specs/seed-fixtures.md`](../e2e/specs/seed-fixtures.md).
 
+**Brief routes** ([`src/modules/brief/routes.ts`](src/modules/brief/routes.ts); the module is explained in
+[`src/modules/brief/README.md`](src/modules/brief/README.md)). Both answer a `PrBriefResponse`,
+`{ brief: PrBriefRecord | null }`.
+
+| Route | Behaviour |
+|---|---|
+| `GET /pulls/:id/brief` | Reads the stored brief and never calls a model or GitHub. `stale` is computed on read (the stored `head_sha` differs from the PR's). `404` for an unknown PR or one of another workspace; `{ brief: null }` when nothing is stored, or when the stored row no longer parses |
+| `POST /pulls/:id/brief` | Generates a brief with one `risk_brief` model call, validates it against the PR's files and blast map, and replaces the stored one; the answer has `stale: false`. Rate limit 10/min. `404` for an unknown PR; `422` when the PR has no stored files; `400` code `brief_unavailable` when the configured provider has no key, before any GitHub call; `502` `external_service_error` for a model error, a timeout, an answer cut off at the output limit or one that does not match the schema, with the stored brief left as it was. A second `POST` for the same PR while one runs joins it |
+
+The model is the Settings feature model `Risk Brief`. The brief reads the PR's derived intent but never
+derives one, and it reads the blast map through `container.blast`. Generation is never triggered by a
+review run or by a new commit. A brief for PR #482 is seeded.
+
 **Project Context routes** ([`src/modules/project-context/routes.ts`](src/modules/project-context/routes.ts); the
 module is explained in [`src/modules/project-context/README.md`](src/modules/project-context/README.md)). The
 list and preview routes read the repository's clone on disk on every request and cache nothing; the
@@ -169,7 +183,8 @@ attachment routes read and write only the paths and their order. The workspace s
 | `PUT /agents/:id/context` · `PUT /skills/:id/context` | Replace the owner's whole list with `{ paths }`; the array order is stored. A path must be a relative `.md` path with no empty, `.` or `..` segment and none of the characters `"` `<` `>` `\` or a control character, and must sit under a search root; at most 200 paths, no duplicate. Anything else is `422`, and nothing is stored then. The path does not have to exist in the clone. The write does not bump the agent's or the skill's version. Answers the stored `{ paths }` |
 
 A review run reads the same attachments through `container.projectContext.forRun` and inserts the
-documents into the `## Project context` prompt slot; see "Review context" below.
+documents into the `## Project context` prompt slot; see "Review context" below. The PR brief reads the
+attachments of every enabled agent through `container.projectContext.forWorkspace`, with no run cap.
 
 ## Environment
 
@@ -242,6 +257,9 @@ What the reviewer actually sends to the model is assembled in
   is switched on only for a `high` or `medium` intent that is not injection-suspected
   (`scopeFilterEnabled`). With no key for the classifier's provider, or on any
   classification failure, the slot is left out and agents run exactly as before.
+- **The PR brief is a third, separate model call**, made only when the user asks for it through
+  `POST /pulls/:id/brief`. It is not part of a review run and does not change what a reviewer is sent
+  ([`src/modules/brief/README.md`](src/modules/brief/README.md)).
 
 ## Testing
 

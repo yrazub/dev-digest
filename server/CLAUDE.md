@@ -17,7 +17,8 @@
 | a PR's derived intent — the classifier call, its sources, confidence, cache key or failures | `src/modules/intent/README.md` |
 | the PR blast map (`GET /pulls/:id/blast`), its degraded mark, or the `blast` module | `README.md` — API map, then `src/modules/repo-intel/README.md` |
 | a changed file's role, or the Smart Diff grouping (`GET /pulls/:id/smart-diff`) | `src/modules/_shared/file-role/README.md`, then `README.md` — API map |
-| project context — attachments, the clone-file walk, a run's documents or skip reasons | `src/modules/project-context/README.md` |
+| project context — attachments, the clone-file walk, a run's documents or skip reasons, or `forWorkspace` (the PR brief's read path) | `src/modules/project-context/README.md` |
+| the PR brief (`GET`/`POST /pulls/:id/brief`) — its model call, input statuses, trims or validation | `src/modules/brief/README.md` |
 | any test | `../TESTING.md` |
 | a failure that smells familiar | `INSIGHTS.md` — and **append** to it through the `engineering-insights` skill |
 

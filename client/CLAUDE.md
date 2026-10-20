@@ -11,6 +11,7 @@
 | data fetching, calling the API, query keys, or what refreshes after a mutation | `docs/data-flow.md`, then the hooks in `src/lib/hooks/` |
 | a lesson feature on a screen (L01–L08) | `specs/` — that screen's spec, e.g. `specs/L01-findings-counter.md` |
 | the Blast radius block on the PR Overview tab, or its Resync | `specs/L04-blast-radius.md`, then `docs/data-flow.md` |
+| the PR Brief section on Overview, or the Review focus jump into Files changed | `specs/L05-pr-brief.md`, then `docs/data-flow.md` and `docs/ui-architecture.md` — "URL state" |
 | a UI primitive | `src/vendor/ui/README.md` — vendored, do not edit |
 | a shape that crosses the API boundary | `src/vendor/shared` — contracts live there, never redeclared locally |
 | any test | `../TESTING.md` |

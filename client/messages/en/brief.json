@@ -2,14 +2,65 @@
   "block": {
     "intent": "Intent",
     "blast": "Blast radius",
-    "risks": "Risks",
+    "risks": "Risk areas",
     "history": "PR history"
   },
   "noRisks": "No notable risks flagged.",
   "noHistory": "No prior PRs overlap these files.",
   "overlap": "{count} overlap",
   "unavailable": "Brief not available yet.",
-  "unavailableHint": "Run a review or open the PR to compute it.",
+  "unavailableHint": "Generate a Why+Risk brief for this PR.",
+  "section": "PR Brief",
+  "generate": "Generate brief",
+  "generating": "Generating…",
+  "regenerate": "Regenerate brief",
+  "loadFailed": "The brief could not be loaded.",
+  "retry": "Try again",
+  "noApiKey": "Add the key in Settings",
+  "stale": "Generated for {sha}; the PR has newer commits",
+  "inputs": {
+    "without": "Generated without: {list}",
+    "trimmed": "trimmed: {list}",
+    "item": "{kind} ({reason})",
+    "omitted": "{count} left out",
+    "kind": {
+      "intent": "Intent",
+      "blast_radius": "Blast radius",
+      "diff_stats": "Diff stats",
+      "description": "Description",
+      "linked_issue": "Linked issue",
+      "spec_documents": "Spec documents"
+    },
+    "reason": {
+      "not_derived": "not derived yet",
+      "stale": "out of date",
+      "flag_off": "turned off",
+      "index_failed": "index failed",
+      "index_partial": "index incomplete",
+      "repo_too_large": "repository too large",
+      "no_data": "no data",
+      "pr_files_missing": "PR files missing",
+      "empty": "empty",
+      "none_linked": "none linked",
+      "no_token": "no GitHub token",
+      "not_found": "not found",
+      "fetch_failed": "could not be fetched",
+      "none_attached": "none attached",
+      "not_cloned": "repository not cloned",
+      "all_skipped": "all skipped",
+      "over_budget": "over budget"
+    }
+  },
+  "reviewFocus": {
+    "title": "Review focus — read these first",
+    "empty": "No review focus items.",
+    "open": "Open {file}:{line} in Files changed"
+  },
+  "dropped": "Dropped: {risks} risks, {focus} review-focus items — file not in this PR or its blast radius",
+  "footer": {
+    "generated": "generated {time}",
+    "tokens": "{input} / {budget} tokens in"
+  },
   "why": {
     "title": "git-why",
     "blame": "blame",

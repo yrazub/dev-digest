@@ -9,6 +9,13 @@ import type {
   RepoFileMissReason,
   RepoRef,
 } from '@devdigest/shared';
+import { capWords, sanitizeText } from '../_shared/text/plain-text.js';
+import type { SanitizeResult } from '../_shared/text/plain-text.js';
+
+// `sanitizeText` and `capWords` live in `_shared/text` so `brief` can use them too; they are
+// re-exported here so intent's service, prompt and tests keep importing them from this file.
+export { capWords, sanitizeText };
+export type { SanitizeResult };
 
 /**
  * Pure intent rules (no DB / network / framework): sanitising, hunk headers, reference
@@ -64,65 +71,10 @@ const DOCUMENT_EXT_RE = new RegExp(`\\.(?:${DOCUMENT_EXTENSIONS.join('|')})$`, '
 
 // ---------------------------------------------------------------- sanitising
 
-// U+00AD, U+200B–U+200F, U+202A–U+202E, U+2060–U+2064, U+2066–U+2069, U+FEFF, U+E0000–U+E007F
-const INVISIBLE_RE = /[­​-‏‪-‮⁠-⁤⁦-⁩﻿\u{E0000}-\u{E007F}]/gu;
-// Group 1 is set for a closed comment only; an opener with no `-->` after it matches through
-// to the end of the text (see "Scanning cost" below).
-const HTML_COMMENT_RE = /<!--[\s\S]*?(?:(-->)|$)/g;
-const UNTERMINATED_COMMENT_RE = /<!--[\s\S]*$/;
-
-export interface SanitizeResult {
-  text: string;
-  removed: { html_comments: number; invisible_chars: number };
-}
-
-/**
- * Remove HTML comments (an unterminated one runs to the end of the text) and invisible /
- * bidirectional characters, normalise line endings and collapse blank-line runs. Runs
- * before capping so a cap cannot cut a comment in half and leave its tail behind.
- */
-export function sanitizeText(raw: string): SanitizeResult {
-  let htmlComments = 0;
-  let text = raw.replace(HTML_COMMENT_RE, (all: string, closed: string | undefined) => {
-    if (closed === undefined) return all;
-    htmlComments += 1;
-    return '';
-  });
-  text = text.replace(UNTERMINATED_COMMENT_RE, () => {
-    htmlComments += 1;
-    return '';
-  });
-  let invisible = 0;
-  text = text.replace(INVISIBLE_RE, () => {
-    invisible += 1;
-    return '';
-  });
-  text = text
-    .replace(/\r\n?/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-  return { text, removed: { html_comments: htmlComments, invisible_chars: invisible } };
-}
-
 /** Cut `text` to `max` chars; `truncated` says whether anything was lost. */
 export function capText(text: string, max: number): { text: string; truncated: boolean } {
   if (text.length <= max) return { text, truncated: false };
   return { text: text.slice(0, max).trimEnd(), truncated: true };
-}
-
-/**
- * Cap text that a person reads (the classifier's output): cut at the last word boundary that
- * fits and end with an ellipsis, so a label never stops in the middle of a word. The result is
- * at most `max` characters. A text with no usable boundary is cut hard, like `capText`.
- */
-export function capWords(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const room = text.slice(0, max - 1);
-  // `room` already ends on a whole word when the next character is a space.
-  const endsOnWord = /\s/.test(text.charAt(max - 1));
-  const boundary = endsOnWord ? room.length : room.search(/\s\S*$/);
-  const kept = boundary >= Math.floor(max / 2) ? room.slice(0, boundary) : room;
-  return `${kept.replace(/[\s,;:.([{\-–—]+$/, '')}…`;
 }
 
 // ---------------------------------------------------------------- hunk headers
@@ -266,8 +218,7 @@ function stripTrailingPunctuation(url: string): string {
 // every scan below is linear in that text: a failed attempt at one position never re-reads
 // text that the attempts at the following positions would read again. Each replacement is the
 // old rule plus a skip of attempts that fail anyway, so what is detected does not change.
-//  1. HTML_COMMENT_RE also matches an opener with no `-->` (through to the end, left as it
-//     is): no `-->` after one opener means none after any later opener.
+//  1. HTML_COMMENT_RE: see "Scanning cost" in `_shared/text/plain-text.ts`.
 //  2. CLOSING_ISSUE_RE splits a run of spaces one way only; nothing is skipped.
 //  3. blankMarkdownImages: every `![` before one `]` shares that `]`; with no `]` or no `)`
 //     left in the text, no later image can close.
