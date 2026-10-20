@@ -36,12 +36,13 @@ export class ConflictError extends AppError {
 
 export class ExternalServiceError extends AppError {
   constructor(message: string, details?: unknown) {
-    super('external_service_error', message, 502, details);
+    // 503 tells clients the failure is temporary, so they may retry.
+    super('external_service_error', message, 503, details);
   }
 }
 
 export class ConfigError extends AppError {
   constructor(message: string, details?: unknown) {
-    super('config_error', message, 500, details);
+    super('config_error', message, 503, details);
   }
 }
