@@ -4,7 +4,7 @@
 //
 // The decision itself lives in lib/verdict-check.mjs, shared with the git pre-push hook
 // (pre-push.mjs), so the two gates always agree.
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { isGatedCommand } from './lib/command.mjs';
 import { repoRoot } from './lib/git.mjs';
 import { checkPublish } from './lib/verdict-check.mjs';
@@ -17,7 +17,12 @@ if (!isGatedCommand(command)) process.exit(0);
 const deny = (msg) => { process.stderr.write(`pr-self-review gate: ${msg}\n`); process.exit(2); };
 
 try {
-  const result = checkPublish({ root: repoRoot(input.cwd || process.cwd()) });
+  const root = repoRoot(input.cwd || process.cwd());
+  // The hook is registered for this project only. A push from another repository that was added
+  // as a working directory (gen-bin) has no routing here, so it is not this gate's to judge.
+  const project = process.env.CLAUDE_PROJECT_DIR;
+  if (project && realpathSync(root) !== realpathSync(project)) process.exit(0);
+  const result = checkPublish({ root });
   if (!result.ok) deny(result.message);
   process.exit(0);
 } catch (err) {
