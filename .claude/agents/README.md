@@ -83,7 +83,12 @@ session carries each step:
       today's date.
    3. Ask the user every Question, Design gap and UX proposal of the Discovery report, with its
       recommended answer first.
-   4. Run `spec-creator` with pass `write`, the same paths, the Discovery report and the answers.
+   4. Save the Discovery report, with each answer under its question, to
+      `.devdigest/sdd/<feature>/discovery.md` (git-ignored), and run a **new** `spec-creator` with
+      pass `write`, the same paths and that file. Do not resume the discovery agent with
+      `SendMessage`: a resumed agent re-reads its whole history on every turn, and in L05 PR Brief
+      that history reached 38M tokens (`docs/retros/l05-pr-brief.md`). The agent cannot save the
+      file itself — its write guard allows only spec paths.
    5. Show the Spec report and its "Open questions left" to the user. On approval, set
       `Status: approved` in each spec file and index row yourself — the agent never does.
 1. Run `implementation-planner` with pass `review` and the spec path (or the bug or
@@ -96,8 +101,10 @@ session carries each step:
    one) and is approved again; only then go on. An approved spec that nothing has been built from
    yet is reopened instead: set `Status: draft` in the umbrella, every module spec and every
    index row, then run the `write` pass — `spec-creator` refuses to edit an approved spec.
-3. Run `implementation-planner` with pass `plan`, the spec path, the Requirements review, the
-   answers and the chosen mode.
+3. Save the Requirements review, with the answers and the chosen mode, to
+   `.devdigest/sdd/<feature>/review.md`, and run a **new** `implementation-planner` with pass
+   `plan`, the spec path and that file — not the review agent resumed with `SendMessage`, for the
+   reason in step 0.4. The planner has no `Write` tool, so the main session saves it.
 4. Show the plan to the user in full and wait for approval. Resolve its "Open questions"
    first; a changed plan goes back through `implementation-planner`, not through hand edits.
 5. Save the approved plan **verbatim** to `specs/plans/<feature>.md` (the same name as the
@@ -136,7 +143,11 @@ spans packages; `architecture-reviewer` is optional. Then continue at step 9 bel
       regressions", "Suspected product bugs" and "Needs a production change" go back to
       `implementer` for the same phase, then `test-writer` runs again. Read "Existing tests
       edited" every time it is not empty: each row must quote a plan or spec item.
-   5. Commit the closed phase, code and tests together.
+   5. On the last phase that touches `server/` or `reviewer-core/`, and on the last that touches
+      `client/`, run `architecture-reviewer` in `change` mode on that area's code before the
+      commit. A CRITICAL or WARNING finding goes back to `implementer` for the same phase, then
+      `test-writer`, then the check again. Phases added by an amendment skip this.
+   6. Commit the closed phase, code and tests together.
 7. After the last phase, run `plan-verifier` with the plan path, the deviations the
    implementer declared (it rates a declared deviation `satisfied`, an undeclared one `partial`)
    and the base ref when the branch is not cut from `origin/main`, and `architecture-reviewer`
@@ -219,9 +230,9 @@ on demand with the `Skill` tool; `implementation-planner`, `architecture-reviewe
 
 | Agent | Give it | It reads on its own | It returns |
 |---|---|---|---|
-| spec-creator | the pass (`discovery` or `write`), the request, paths to the saved task text and design files, the base commit; for `write`, also the Discovery report and the user's answers | root and module `CLAUDE.md` and `README.md`, `specs/` and the module `specs/` indexes, overlapping specs, the code and contracts the feature touches, `TESTING.md`, the `INSIGHTS.md` files | `discovery`: a **Discovery report** — Understanding · Questions · Design gaps · Module interaction · UX proposals · Untrusted inputs · Proposed files · Not read; nothing written. `write`: specs in the working tree, uncommitted, plus a **Spec report** — Files written · Acceptance criteria · Discovery outcomes · Open questions left · For the main session |
+| spec-creator | the pass (`discovery` or `write`), the request, paths to the saved task text and design files, the base commit; for `write`, also the path to the saved Discovery report with the user's answers | root and module `CLAUDE.md` and `README.md`, `specs/` and the module `specs/` indexes, overlapping specs, the code and contracts the feature touches, `TESTING.md`, the `INSIGHTS.md` files | `discovery`: a **Discovery report** — Understanding · Questions · Design gaps · Module interaction · UX proposals · Untrusted inputs · Proposed files · Not read; nothing written. `write`: specs in the working tree, uncommitted, plus a **Spec report** — Files written · Acceptance criteria · Discovery outcomes · Open questions left · For the main session |
 | researcher | one concrete question, anchored to a package, feature, library or version | module `CLAUDE.md` and `README.md`, code, tests, git history; or official docs, changelogs, source repositories | a **research report** as its final message: Answer · Findings with evidence · References or Sources · Not found · Not checked |
-| implementation-planner | the pass (`review`, `plan` or `amend`) and an approved spec path, or a bug or technical-change description; for `plan`, also the Requirements review, the user's answers and the execution mode; for `amend`, the saved plan path and the gaps with their IDs and evidence | module `CLAUDE.md` files, the spec and its module specs, `TESTING.md`, every relevant `INSIGHTS.md`, [`routing.json`](../skills/pr-self-review/routing.json), the matching `SKILL.md` files, the code it names | `review`: a **Requirements review** — Findings · Clarifications needed · Recommendations (each marked whether it changes the spec) · Execution mode · Ready to plan. `plan`: an **Implementation Plan** — Context read · Constraints · Phases (file table with skills and blocking rules, the test work order, `Verify (code)` and `Verify (phase)`, `Done when` citing an AC) · Out of scope · Risks · Open questions. `amend`: a **Plan amendment** — Gap triage · Replacements · New phase · For the user |
+| implementation-planner | the pass (`review`, `plan` or `amend`) and an approved spec path, or a bug or technical-change description; for `plan`, also the path to the saved Requirements review with the user's answers and the execution mode; for `amend`, the saved plan path and the gaps with their IDs and evidence | module `CLAUDE.md` files, the spec and its module specs, `TESTING.md`, every relevant `INSIGHTS.md`, [`routing.json`](../skills/pr-self-review/routing.json), the matching `SKILL.md` files, the code it names | `review`: a **Requirements review** — Findings · Clarifications needed · Recommendations (each marked whether it changes the spec) · Execution mode · Ready to plan. `plan`: an **Implementation Plan** — Context read · Constraints · Phases (file table with skills and blocking rules, the test work order, `Verify (code)` and `Verify (phase)`, `Done when` citing an AC) · Out of scope · Risks · Open questions. `amend`: a **Plan amendment** — Gap triage · Replacements · New phase · For the user |
 | implementer | the path to an approved plan and the phase to build; from the second phase on, the statement that the previous phase closed green | its phase of the plan (sliced by [`scripts/plan-phase.mjs`](scripts/plan-phase.mjs)), the module spec of each package the phase touches and the umbrella criteria its `Done when` cites, the `CLAUDE.md` of each touched package, the skills each phase names | changed code in the working tree, uncommitted, no tests, plus an **Implementation report**: Phases · Baseline · Verification · Existing tests failing · Deviations · Not done / blocked · Insight candidates · For reviewers |
 | test-writer | after a phase: the plan path, the phase and the implementer's "Existing tests failing" table; standalone: the behaviour to cover and where it lives; for a bug: the description and the expected behaviour; for a gap: the `plan-verifier` item IDs with their quoted requirements | the plan phase (the same slice), the spec, `TESTING.md`, the module `CLAUDE.md` and `INSIGHTS.md`, the source under test, the nearest sibling test, the skills [`routing.json`](../skills/pr-self-review/routing.json) matches to the test files | test files in the working tree, uncommitted, plus a **Test report**: Tests written · Existing tests edited · Existing tests deleted · Suspected regressions · Suspected product bugs · Left failing, pre-existing · Verification · Needs a production change · Not covered · Insight candidates |
 | architecture-reviewer | the mode (`change` or `audit`); for `change`, the changed-file list with new files marked and a patch file when there is one; for `audit`, a directory or module; optionally the plan path and the `pnpm arch:check` result line | root and module `CLAUDE.md`, `routing.json` and the architecture `SKILL.md` files it matches, the dependency-cruiser config and baseline, the architecture documents, the root and module `INSIGHTS.md`, the files in scope and their importers | an **Architecture review** as its final message: Findings · Pre-existing · Checked · Left to the machine check · Not checked |
@@ -234,12 +245,14 @@ missing or ambiguous. The exact templates are in each agent file under "Output" 
 
 What the main session does with each result:
 
-- **Discovery report** — ask the user its Questions, Design gaps and UX proposals, then run the
-  `write` pass with the answers.
+- **Discovery report** — ask the user its Questions, Design gaps and UX proposals, save it with
+  the answers to `.devdigest/sdd/<feature>/discovery.md`, then run a new agent for the `write`
+  pass.
 - **Spec report** — show it with its open questions; on approval set `Status: approved` in the
   spec files and index rows.
 - **Requirements review** — ask the user its Clarifications, Recommendations and the execution
-  mode; spec-changing recommendations go to `spec-creator` first; then run the `plan` pass.
+  mode; spec-changing recommendations go to `spec-creator` first; save it with the answers to
+  `.devdigest/sdd/<feature>/review.md`, then run a new agent for the `plan` pass.
 - **Plan** — show it to the user; once approved, save it to `specs/plans/<feature>.md` and add
   a row to [`specs/README.md`](../../specs/README.md).
 - **Implementation report** — read it, then pass its "Existing tests failing" table to

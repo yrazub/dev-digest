@@ -56,7 +56,7 @@ Flows target **read-only seeded data** (the demo repo `acme/payments-api`, PR
 
 ```sh
 # 1. install the agent-browser CLI once (downloads Chrome for Testing)
-npm i -g agent-browser && agent-browser install
+npm i -g agent-browser@0.39.0 && agent-browser install
 ```
 
 ### Hermetic (recommended)
@@ -88,7 +88,9 @@ Env knobs:
 
 - Runner: `E2E_BASE_URL`, `AGENT_BROWSER_BIN` (default `agent-browser`),
   `E2E_STEP_TIMEOUT` (ms, default 60000), `E2E_FIND_WAIT` (ms, default 10000).
-- Hermetic stack (`scripts/e2e.sh`): `E2E_PG_PORT` (5433), `E2E_API_PORT` (3101),
+- Hermetic stack (`scripts/e2e.sh`): it resolves `AGENT_BROWSER_BIN` before booting — the
+  `agent-browser` on `PATH` if it runs, else the global install's platform binary — and stops if
+  neither runs. `E2E_PG_PORT` (5433), `E2E_API_PORT` (3101),
   `E2E_WEB_PORT` (3100), `E2E_PG_CONTAINER` (`devdigest-e2e-postgres`),
   `E2E_PG_IMAGE` (`pgvector/pgvector:pg16`), `E2E_API_RATE_LIMIT_MAX` (10000). The last one becomes the
   API's `API_RATE_LIMIT_MAX` for this stack only: the flows send close to the API's default limit of 120

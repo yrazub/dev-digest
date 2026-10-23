@@ -22,7 +22,7 @@ If nothing matches, proceed.
 `npm test` — runs the flows against whatever is already on `E2E_BASE_URL`
 (default `http://localhost:3000`). `npm run typecheck`.
 
-One-time setup: `npm i -g agent-browser && agent-browser install`.
+One-time setup: `npm i -g agent-browser@0.39.0 && agent-browser install`.
 
 Note: npm, not pnpm. The lockfile here is `package-lock.json`.
 
