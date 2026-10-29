@@ -115,6 +115,14 @@ be obvious to anyone reading the code, it does not belong here.
 - **2026-10-18** — a review of the finished implementation plan by a model of another family (the L05 homework's "cross-model review"), done before `/execute-plan`, found four real gaps that spec-creator, implementation-planner's own review pass and the main session had all missed: findings taken from an unfinished review run, the completion log written before the validation that produces its counts, a rate-limit test that asserted only an exported constant, and an unescaped `wrapUntrusted` label. Each was checked against the code before it was accepted, and all four went into the plan as an `amend` pass with no fix phase, because nothing was built yet (`specs/plans/L05-pr-brief.md:7`, `:178`, `:209`, `:249-252`, commit "amend the L05 PR Brief plan after a cross-model review"). Run it on every plan of a multi-package feature, and check each claim before amending.
 - **2026-10-18** — A plan's "Expected to change: none" should count typecheck-only breaks. A new required prop (`onOpenFocus: (file: string, line: number) => void`, `client/src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/OverviewTab.tsx:15`) fails the client's `pnpm typecheck` at test call sites while `pnpm test` stays green, because vitest does not type-check; that is where the L05 PR Brief phase 7 deviation came from. **See also:** `client/INSIGHTS.md` (client `typecheck` covers test files).
 
+## What Doesn't Work
+
+### A skill eval whose fixture already shows the pattern: the with-skill and baseline runs tie
+**Date:** 2026-10-29
+**Cause:** the no-skill agent reads the fixture and copies what it finds there. In the `onion-architecture` evals the fixture carried `server/CLAUDE.md`, a dependency-cruiser config named with the skill's own rule IDs, a lazy getter already in `container.ts`, and a legacy file marked as legacy, so the first round tied on 3 of 4 cases (36/37 vs 36/37) and three replacement cases tied again (`adapter-secret-lazy`, `pure-rule-placement`, `touch-legacy-shrink-baseline`). The only case that separated the runs was `transaction-owned-by-use-case` (8/8 vs 3/8), because no fixture file states its rule. The same happened to two of four `engineering-insights` cases (routing and the trivial session), where the repo's own `INSIGHTS.md` header already documents the entry format.
+**Fix / rule:** build an eval around a rule that only the skill's text states: before keeping a case, grep the fixture for the rule's name and for an example of the pattern, and remove what it finds. Run each case once with and once without the skill and delete the ties. Drop an assertion that both runs fail for a reason unrelated to the skill (such as "a test was written" when the prompt did not ask for one).
+**Evidence:** `.claude/skills/onion-architecture/references/drizzle-persistence.md:42` (`db-tx-owned-by-use-case`, the one rule no fixture restated); the surviving case is `.claude/skills/onion-architecture/evals/transaction-owned-by-use-case/case.yaml`.
+
 ## Tool & Library Notes
 
 - **2026-09-20** — the `claude` CLI is not on `PATH` in a VS Code extension install; `which claude`
@@ -253,6 +261,7 @@ be obvious to anyone reading the code, it does not belong here.
   `ProjectContextView` row, footer `"<documents.length> files · <total_tokens> tokens total"`.
 - **2026-10-18** — The `chrome-devtools` MCP runs with `--autoConnect` (`.mcp.json:8`) and drives the user's own Chrome window, so `resize_page` does not change `innerWidth`. For a narrow-width check use `emulate` with viewport `<w>x<h>x1`, and reset it with an empty viewport before closing the tab.
 - **2026-10-18** — BSD `sed` on macOS reads the argument after `-i` as the backup suffix, so `sed -i 's/a/b/' file` fails with `unterminated substitute pattern`. Use `sed -i '' …`, `perl -pi -e`, or the Edit tool. No line in the repo shows it.
+- **2026-10-29** — the `skill-creator` viewer `eval-viewer/generate_review.py` needs Python 3.10 or newer: on macOS system Python 3.9.6 it stops at `def build_run(root: Path, run_dir: Path, budget: dict) -> dict | None:` (line 192) with `TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'`, and `from __future__ import annotations` fixes it. Copy the script out of the installed skill, add that import after the module docstring (before it is a `SyntaxError`), and run the copy; do not edit the installed skill. No repo file shows this: the script lives in the local, synced `skill-creator` skill folder.
 
 ## Decisions
 
@@ -469,6 +478,12 @@ the editor tool.
 **2026-10-19:** the screenshot line is now run by a short-lived sub-agent, not the main session, and it returns rows instead of images (`.claude/skills/execute-plan/SKILL.md:69`); the rule above still holds.
 
 
+## Open Questions
+
+- **2026-10-29** — `onion-architecture` says two different things about a baselined legacy service that a task touches: `SKILL.md:132` ("Do not refactor unrelated leaks in a feature PR"; run `pnpm arch:baseline` only if the task fixes one) and `references/composition-root-di.md:57` ("Existing services are migrated only when a task already touches them. When one is, run `pnpm arch:baseline` in the same PR"). In a fixture eval (add one endpoint to a `ReviewsService` that takes the whole `Container`) the with-skill run left the service as it was and flagged a follow-up, so it took the `SKILL.md` reading. Open: does "touches" mean any edit to the file or a change to that service's behaviour? Settling it means editing the skill's text, which is the user's decision. (`.claude/skills/onion-architecture/SKILL.md:132`, `.claude/skills/onion-architecture/references/composition-root-di.md:57`)
+  **Skill:** `onion-architecture`
+  **Resolved 2026-10-29:** the user asked for it fixed; "touches" now means the task edits the service or its repository (one new method counts), so that file is migrated and the baseline shrunk in the same PR, while files the task does not open stay as they are. Edited `SKILL.md:132` and `references/composition-root-di.md:57`, skill version 1.1.0. A re-run of the fixture case migrated the service and removed its two baseline entries; before the edit the same run left it alone.
+
 ## Session Notes
 
 - **2026-09-20** — added the `engineering-insights` skill and restructured all five
@@ -538,3 +553,4 @@ the editor tool.
 - **2026-10-18** — L05 PR Brief specified and planned, no code: specs approved (AC-19 reworded once after the planner's review), plan amended after a cross-model review; `/execute-plan` to run with `--per-chat 5` (phases 1–5 are server-only, no screenshots). **See also:** `server/INSIGHTS.md`, `reviewer-core/INSIGHTS.md`.
 - **2026-10-18** — L05 PR Brief built with `/execute-plan` (11 phases, two of them review fixes); final checks: plan-verifier and architecture-reviewer pass (round 3), docs, hermetic e2e 14/14. Entries in `server/`, `client/` and `e2e/` INSIGHTS.
 - **2026-10-19** — applied the L05 PR Brief retro recommendations 1–5 on `chore/workflow-retro-fixes`: implementer self-check, per-area architecture check in `state.mjs` (17/17 tests), file handoff between spec and plan passes, sub-agent screenshot check, `e2e.sh` agent-browser resolver; superseded the 2026-10-16 "resume with SendMessage" entry.
+- **2026-10-29** — evals for the `engineering-insights` and `onion-architecture` skills (fixture repos, with/without-skill runs, 33 + 8 assertions): only the transaction-ownership case separated the runs; entries above. Cases and fixtures are in each skill's `evals/` folder.

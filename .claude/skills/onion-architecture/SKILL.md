@@ -2,8 +2,8 @@
 name: onion-architecture
 description: "Onion (ports-and-adapters) architecture for the DevDigest backend — server/ (Fastify 5, Drizzle/Postgres, Zod, the DI container, adapters) and reviewer-core/. Decides which layer a piece of backend code belongs to, which way a dependency may point, where a port interface lives, how a service gets its dependencies, where transactions start, where Zod parses, and how dependency-cruiser enforces all of it (pnpm arch:check). Use when adding or moving a route, service, repository, adapter, port or domain rule in server/ or reviewer-core/; when a service needs the database, GitHub or an LLM; when reviewing a backend diff for layering; or when arch:check fails. Does not cover Fastify, Drizzle or Zod API usage — use fastify-best-practices, drizzle-orm-patterns and zod for that."
 metadata:
-  version: "1.0.0"
-  updated: "2026-09-27"
+  version: "1.1.0"
+  updated: "2026-10-29"
 ---
 
 # Onion architecture — DevDigest backend
@@ -129,7 +129,7 @@ Never re-baseline to silence a new violation.
 
 - **Writing code:** walk the table in "Where does this code go?" before creating a file. Then run `pnpm arch:check`.
 - **Reviewing:** check the CRITICAL and HIGH rules first, and cite the ID and file. For example: "`db-only-in-repository`: `pulls/routes.ts` queries `t.repos` directly."
-- **Touching legacy code:** code already in the baseline may stay as it is. Do not *add* a new leak next to it. Do not refactor unrelated leaks in a feature PR. If a task fixes one, run `pnpm arch:baseline` in the same PR so the baseline shrinks.
+- **Touching legacy code:** a baselined file may stay as it is unless the task edits it. Leaks in files the task does not open are unrelated: do not refactor them in a feature PR, and do not *add* a new leak next to one. When the task adds to or changes a baselined service or repository (even one new method), migrate that file in the same PR (narrow dependencies, contract types instead of rows) and run `pnpm arch:baseline` so the baseline shrinks.
 - **Unsure between two layers:** pick the outer one. Moving code inward later is cheap. Undoing a domain that imports Drizzle is not.
 
 Sources for every rule: [references/sources.md](references/sources.md).

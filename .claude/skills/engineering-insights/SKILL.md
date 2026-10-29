@@ -87,7 +87,8 @@ Then pick one of four outcomes deliberately. Appending is not the default.
 |---|---|
 | nothing related | write the new entry |
 | the same claim, nothing new | **write nothing.** A second copy does not make the first truer, and two near-identical entries are how these files stop being read |
-| the same topic, with a new detail or a narrower case | **extend** — append a dated line beneath the existing entry. Never reword the entry itself |
+| the same symptom (same error string or same cause) with a new detail or trigger | **extend** — append a dated line beneath the existing entry. Never reword the entry itself |
+| a related but different symptom or cause (another error string, or the same area failing another way) | **new entry**, and append `**See also:**` beneath the old one pointing to it, so a session that reads only the old entry finds the new one |
 | something the new finding contradicts | **resolve it** — below |
 
 ### When a new finding contradicts an old one
