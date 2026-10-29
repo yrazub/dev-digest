@@ -1,0 +1,11 @@
+name: reviewer-core
+on:
+  pull_request:
+    paths:
+      - 'reviewer-core/**'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd reviewer-core && npm ci && npm test

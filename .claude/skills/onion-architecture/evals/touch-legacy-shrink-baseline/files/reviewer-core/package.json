@@ -1,0 +1,4 @@
+{
+  "name": "@devdigest/reviewer-core",
+  "scripts": { "test": "vitest run" }
+}

@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: touch-legacy-shrink-baseline
+expected_outcome: |
+  Because the task touches the legacy ReviewsService (which takes the whole Container and exposes ReviewRow), the skill's rule applies: migrate it to narrow dependencies and contract types while it is open, and shrink the known-violations baseline in the same change (remove the now-fixed entries, or tell the user to run pnpm arch:baseline). The new endpoint is thin, schema-first, and 404s through NotFoundError thrown by the service.
+context:
+  scaffold_script: place-files.sh
