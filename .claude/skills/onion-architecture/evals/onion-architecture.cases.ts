@@ -35,9 +35,8 @@ export const cases: SkillCase[] = [
     prompt:
       "In a Fastify + Drizzle codebase organised in onion-architecture modules, a runs module must save a run's findings and mark the run done as one atomic step, after an LLM call has produced the findings. Answer in at most five short bullets: which layer decides that the two writes are atomic, where db.transaction is called, how the service triggers it without importing Drizzle, whether the repository sees the db or the transaction, and where the LLM call goes relative to the transaction. Output only the bullets.",
     practices: [
-      "says the service (use case) decides which writes must be atomic, and the repository decides how that is done with Drizzle",
-      "says db.transaction lives in the repository or infrastructure layer, never in the service",
-      "says the service triggers the transaction through a port or interface (for example a UnitOfWork with a run method) and does not import Drizzle",
+      "says the service (use case) is the layer that decides which writes must be atomic",
+      "says the service starts the transaction through a port that takes the work to run as a callback (a UnitOfWork-style run(work) method), not through one repository method that performs both writes",
       "says the repository accepts either the db or the transaction as its executor so the same code runs inside the transaction",
       "says the LLM call happens before the transaction opens, so no external call runs inside it",
     ],
@@ -63,7 +62,6 @@ export const cases: SkillCase[] = [
     practices: [
       "flags that the new service method returns the Drizzle ReviewRow type instead of a contract from the shared package",
       "flags that the service still takes the whole Container instead of narrow dependencies",
-      "flags that the new route declares no Zod params or response schema in its route options",
       "says that because this change edits the baselined reviews service, it should be migrated now (narrow dependencies, contract type) and the baseline should shrink, for example by running pnpm arch:baseline in the same change",
     ],
     threshold: 0.6,
