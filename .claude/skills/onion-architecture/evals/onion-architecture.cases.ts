@@ -1,68 +1,72 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import type { SkillCase } from "../../../../evals/src/index.js";
+import { fixtureReader, type SkillCase } from "../../../../evals/src/index.js";
 
-// Package-format twin of two Skill Creator cases that sit in this folder
-// (transaction-owned-by-use-case/, touch-legacy-shrink-baseline/). Their fixture repos are read
-// from those folders, so there is one copy of the fixtures. The package's skill runner gives the
-// model NO tools, so each prompt inlines the relevant files and asks for the changed files as
-// text; the judge scores the proposed change, not edited files.
+// Package-format evals for onion-architecture. Short, structured answers so the result is stable
+// on a small model: reviews of small fixtures, one placement question, and a negative control.
+// Fixtures live in ./fixtures (read with fixtureReader). The agentic Skill Creator cases that
+// edit a whole fixture repo are in the sibling folders (transaction-owned-by-use-case/, ...).
+//
+// Practices are written at the level of the concept ("DB access belongs in a repository") so any
+// correct wording passes. One practice per case names something only this skill knows (a rule ID,
+// the UnitOfWork pattern); with a 0.6 threshold a single miss on it does not fail the case.
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const FENCE = "`".repeat(3);
+const fx = fixtureReader(import.meta.url);
 
-function files(caseDir: string, paths: string[]): string {
-  return paths
-    .map((p) => `### ${p}\n${FENCE}\n${readFileSync(join(HERE, caseDir, "files", p), "utf8")}${FENCE}`)
-    .join("\n\n");
-}
-
-const ANSWER_FORMAT =
-  "You cannot run or edit anything here. Reply with every file you would create or change, each as its path followed by the complete new content in a code block, then a short note to me with anything I should know.";
+const REVIEW_INSTRUCTIONS =
+  "Review the code below for architectural and layering problems only. For each problem: name the violation (and the project's rule ID if it defines one), say which layer the code is in versus where it belongs, and give the concrete fix. Output only your review.";
 
 export const cases: SkillCase[] = [
   {
-    name: "two writes must land together: the use case owns the transaction boundary",
+    name: "review flags the layering violations in a new digests module",
     kind: "quality",
-    prompt: `A run's findings get saved and then the run is marked done, as two separate writes in modules/runs. If the second write fails the run stays 'running' with its findings already saved. Fix that so the two writes land together or not at all.\n\n${ANSWER_FORMAT}\n\nCurrent code of the module:\n\n${files("transaction-owned-by-use-case", [
-      "server/src/modules/runs/repository.ts",
-      "server/src/modules/runs/service.ts",
-      "server/src/modules/runs/routes.ts",
-    ])}`,
+    prompt: `${REVIEW_INSTRUCTIONS}\n\n### service.ts\n${fx("digests-service.ts")}\n\n### routes.ts\n${fx("digests-routes.ts")}`,
     practices: [
-      "the proposed RunService does not import drizzle-orm or anything from src/db, and does not call db.transaction itself",
-      "RunService itself expresses that the two writes must be atomic, by calling a unit-of-work or transaction port around saveFindings and markDone; the atomicity is not hidden inside one repository method that quietly does both",
-      "the answer declares a port interface for the atomic unit (for example UnitOfWork with a run(work) method) in a ports.ts file, without Drizzle types in it",
-      "the repository can run on a transaction executor (the db or a tx passed in), and the Drizzle db.transaction call lives in the repository file or next to it, not in the service",
-      "the LLM call (runReview) is made before the transaction is opened, and nothing slow or external runs inside the transaction callback",
-      "the unit-of-work implementation is constructed in runs/routes.ts and passed to the service, not constructed inside the service",
+      "flags the Drizzle query inside the service (a database query in the use-case layer) and says it belongs in a repository",
+      "flags that the service constructs the GitHub adapter itself (new GitHubAdapter, reading process.env) and says adapters are built in the composition root and injected",
+      "flags that the service takes the whole Container instead of the narrow dependencies it uses",
+      "flags the route handler for calling .parse(req.params) itself or for querying the database directly, and says routes should be thin and validate through the route schema",
+      "cites at least two project rule IDs for its findings (for example db-only-in-repository, di-composition-root-only, di-narrow-deps, edge-thin-routes, edge-schema-first)",
     ],
-    threshold: 0.7,
-    maxTurns: 6,
+    threshold: 0.6,
+    maxTurns: 3,
   },
   {
-    name: "touching a baselined legacy service: migrate it and shrink the baseline",
+    name: "says who owns the transaction when two writes must be atomic",
     kind: "quality",
-    prompt: `Add GET /pulls/:id/reviews/:reviewId to the server: it returns one review of a pull request and answers 404 when there is none. Put it in the existing reviews module.\n\n${ANSWER_FORMAT} If a file is generated by a tool, say which command to run instead of writing it out.\n\nCurrent code:\n\n${files("touch-legacy-shrink-baseline", [
-      "server/src/modules/reviews/repository.ts",
-      "server/src/modules/reviews/service.ts",
-      "server/src/modules/reviews/routes.ts",
-      "server/src/db/rows.ts",
-      "server/src/platform/errors.ts",
-      "server/src/vendor/shared/index.ts",
-      "server/src/vendor/shared/review.ts",
-      "server/.dependency-cruiser-known-violations.json",
-    ])}`,
+    prompt:
+      "In a Fastify + Drizzle codebase organised in onion-architecture modules, a runs module must save a run's findings and mark the run done as one atomic step, after an LLM call has produced the findings. Answer in at most five short bullets: which layer decides that the two writes are atomic, where db.transaction is called, how the service triggers it without importing Drizzle, whether the repository sees the db or the transaction, and where the LLM call goes relative to the transaction. Output only the bullets.",
     practices: [
-      "the proposed ReviewsService no longer imports or accepts the Container type; it receives a store, port or repository through its constructor",
-      "the proposed service and routes no longer import from src/db (including src/db/rows.ts) and no ReviewRow type is exposed by the service",
-      "the repository returns a Review contract defined in server/src/vendor/shared with snake_case fields, for the existing list and for the new lookup, instead of ReviewRow",
-      "the two known-violation entries for reviews/service.ts are removed from .dependency-cruiser-known-violations.json, or the answer tells me to run pnpm arch:baseline in this change; no new entry is added",
-      "a missing review is reported by the service throwing NotFoundError, not by the route building its own 404 body",
-      "the new route declares Zod params (the pull id and the review id) and a response schema in the route options and does not call .parse inside the handler",
+      "says the service (use case) decides which writes must be atomic, and the repository decides how that is done with Drizzle",
+      "says db.transaction lives in the repository or infrastructure layer, never in the service",
+      "says the service triggers the transaction through a port or interface (for example a UnitOfWork with a run method) and does not import Drizzle",
+      "says the repository accepts either the db or the transaction as its executor so the same code runs inside the transaction",
+      "says the LLM call happens before the transaction opens, so no external call runs inside it",
     ],
-    threshold: 0.7,
-    maxTurns: 6,
+    threshold: 0.6,
+    maxTurns: 3,
+  },
+  {
+    name: "review of a layered pulls module reports no violations (negative control)",
+    kind: "quality",
+    prompt: `${REVIEW_INSTRUCTIONS} If there are no problems, say so plainly.\n\n### ports.ts\n${fx("pulls-ports.ts")}\n\n### repository.ts\n${fx("pulls-repository.ts")}\n\n### service.ts\n${fx("pulls-service.ts")}`,
+    practices: [
+      "reports no layering violation in the code, or only minor non-blocking observations, and does not call anything a violation or critical problem",
+      "does not claim that the repository's use of drizzle-orm or the db schema is a violation, since the repository is the layer that is meant to use them",
+      "does not claim that the service depends on a concrete class or on Drizzle; it depends on the PullStore port",
+    ],
+    threshold: 0.6,
+    maxTurns: 3,
+  },
+  {
+    name: "review of a change that edits a baselined legacy service says to migrate it and shrink the baseline",
+    kind: "quality",
+    prompt: `Review this diff for architectural and layering problems only. The project checks layering with dependency-cruiser and keeps known leaks in a baseline file (below). List each violation the new code introduces or continues, with the project's rule ID if there is one. Then say what the project's rules expect me to do about the existing reviews service and the baseline in this change. Output only the review.\n\n${fx("reviews-get-review.diff")}\n\nCurrent baseline (.dependency-cruiser-known-violations.json):\n${fx("known-violations-baseline.json")}`,
+    practices: [
+      "flags that the new service method returns the Drizzle ReviewRow type instead of a contract from the shared package",
+      "flags that the service still takes the whole Container instead of narrow dependencies",
+      "flags that the new route declares no Zod params or response schema in its route options",
+      "says that because this change edits the baselined reviews service, it should be migrated now (narrow dependencies, contract type) and the baseline should shrink, for example by running pnpm arch:baseline in the same change",
+    ],
+    threshold: 0.6,
+    maxTurns: 3,
   },
 ];
