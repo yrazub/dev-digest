@@ -3,7 +3,7 @@
 Touched: `server/src/db/schema.ts`, `server/src/db/migrations/0007_add_review_status.sql` (generated),
 `server/package.json` (no change), `server/vitest.config.ts` (no change).
 
-## 1. relation "reviews" does not exist (again)
+## 1. relation "reviews" does not exist
 
 Pulled main, started the API: `error: relation "reviews" does not exist`. Ran
 `cd server && pnpm db:migrate`, fine. (Same thing as always - migrations don't run on boot.)

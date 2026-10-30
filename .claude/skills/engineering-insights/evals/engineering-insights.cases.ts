@@ -20,10 +20,11 @@ export const cases: SkillCase[] = [
   {
     name: "decides skip, extend, new entry or supersede for each finding of a session",
     kind: "quality",
-    prompt: `Below is a session log with four findings and the current server/INSIGHTS.md. For each of the four findings, decide what to do with server/INSIGHTS.md and give one line in this form: <finding> | <skip | extend | new entry | supersede> | <the existing entry it repeats, extends, replaces or should point at, or none> | <section it goes under>. Output only the four lines.\n\n### session-log.md\n${fromCase(DEDUPE, "session-log.md")}\n\n### server/INSIGHTS.md\n${fromCase(DEDUPE, "server/INSIGHTS.md")}`,
+    prompt: `Below is a session log with four findings and the current server/INSIGHTS.md. For each of the four findings, decide what to do with server/INSIGHTS.md and give one line in this form: <finding> | <skip | extend | new entry | supersede> | <the existing entry it repeats, extends or replaces, or the related existing entry it must be linked to with See also, or none> | <section it goes under>. Output only the four lines.\n\n### session-log.md\n${fromCase(DEDUPE, "session-log.md")}\n\n### server/INSIGHTS.md\n${fromCase(DEDUPE, "server/INSIGHTS.md")}`,
     practices: [
       "for the repeated 'relation \"reviews\" does not exist' error (finding 1) the decision is skip, because server/INSIGHTS.md already records it",
-      "for the rebase failure 'column \"status\" ... already exists' (finding 2) the decision is a new entry or an extension (not skip), and the line points at the existing 'relation does not exist' entry as the related one",
+      "for the rebase failure 'column \"status\" ... already exists' (finding 2) the decision is a new entry or an extension, not skip",
+      "for the rebase failure 'column \"status\" ... already exists' (finding 2) the line names the existing 'relation does not exist' entry as the related one, not none",
       "for the removed db:push script (finding 3) the decision is supersede, and the line names the old db:push tip as the entry it replaces",
       "for the tests that silently skip *.it.test.ts when Docker is not running (finding 4) the decision is a new entry (not skip or extend)",
     ],
@@ -33,12 +34,13 @@ export const cases: SkillCase[] = [
   {
     name: "routes findings to the right INSIGHTS.md files, tags a skill finding, links two-sided changes",
     kind: "quality",
-    prompt: `Below is a session log with four findings. The repository has four INSIGHTS.md files: root, server, client and reviewer-core. For each finding give one line in this form: <finding> | <the INSIGHTS.md file or files it goes to> | <tags or links the entries need>. Add one last line saying whether anything contradicts an instruction in the repository and what you would do about it. Output only these lines.\n\n### session-log.md\n${fromCase(VENDOR, "session-log.md")}`,
+    prompt: `Below is a session log with four findings. The repository has four INSIGHTS.md files: root, server, client and reviewer-core. For each finding give one line in this form: <finding> | <the INSIGHTS.md file or files it goes to> | <tags or links the entries need>. Add one last line saying whether anything contradicts an instruction in the repository and what the instruction should say instead. Output only these lines.\n\n### session-log.md\n${fromCase(VENDOR, "session-log.md")}`,
     practices: [
-      "the finding about the zod skill's snippet (result.error.errors does not exist in Zod 4) goes to the root INSIGHTS.md with a Skill tag naming zod, and also to server/INSIGHTS.md, each pointing at the other with See also",
+      "the finding about the zod skill's snippet (result.error.errors does not exist in Zod 4) goes to the root INSIGHTS.md with a Skill tag naming zod",
+      "the zod finding is routed to server/INSIGHTS.md as well as the root INSIGHTS.md (both files are named for it)",
       "the stale vendored severity enum (missing SUGGESTION) goes to client/INSIGHTS.md, not to a file under client/src/vendor",
       "the confidence field that the engine emits but the server mapper drops goes to both reviewer-core/INSIGHTS.md and server/INSIGHTS.md, each pointing at the other with See also",
-      "the last line says that the CLAUDE.md instruction 'run npm install after pulling' is contradicted by the CI failure and proposes the fix (use npm ci)",
+      "the last line says that the CLAUDE.md instruction 'run npm install after pulling' is wrong or contradicted, and says it should say to use npm ci instead",
     ],
     threshold: 0.6,
     maxTurns: 3,
