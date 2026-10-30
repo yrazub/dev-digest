@@ -25,6 +25,23 @@ captured, then add one dated `Session Notes` line.
 An empty capture is a correct outcome. Signal quality beats volume — a file nobody trusts is
 worse than a short one.
 
+## Decide first
+
+Six situations decide what you write, and the quickest way to get one wrong is to treat it as
+"just add an entry". Read the list before step 1.
+
+- **Same symptom or cause already recorded, nothing new** → **skip**: write nothing. Only when the
+  repeat adds a new detail or trigger, append one dated line beneath the old entry (**extend**).
+- **Related but different symptom** (another error string, or the same area failing another way)
+  → a **new entry**, and a `**See also:**` line beneath the old one pointing at it.
+- **An old entry stopped being true** → `**Superseded YYYY-MM-DD:**` beneath it. Not "extend".
+- **A skill's advice was wrong about module code** → **two** entries: one in the module's file, one
+  at the root tagged ``**Skill:** `<name>` ``, each with `**See also:**` to the other.
+- **One change lands on both sides of a boundary** (an engine and the server that persists its
+  output) → one entry **per module**, each with `**See also:**` to the other.
+- **The finding contradicts an instruction** (`CLAUDE.md`, a skill, a spec) → write the entry, tell
+  the user, and leave the instruction alone.
+
 ## Workflow
 
 ```
