@@ -11,6 +11,6 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": false
   },
-  "include": ["src", "skills", "agents", "workflow", "vitest.config.ts"],
+  "include": ["src", "skills", "agents", "workflow", "vitest.config.ts", "../.claude/skills/*/evals/*.cases.ts"],
   "exclude": ["node_modules", "**/fixtures/**"]
 }
