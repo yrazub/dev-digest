@@ -35,8 +35,10 @@ Six situations decide what you write, and the quickest way to get one wrong is t
 - **Related but different symptom** (another error string, or the same area failing another way)
   → a **new entry**, and a `**See also:**` line beneath the old one pointing at it.
 - **An old entry stopped being true** → `**Superseded YYYY-MM-DD:**` beneath it. Not "extend".
-- **A skill's advice was wrong about module code** → **two** entries: one in the module's file, one
-  at the root tagged ``**Skill:** `<name>` ``, each with `**See also:**` to the other.
+- **A skill's advice was wrong about module code** → **two** entries, never one: one in the
+  module's file (`server/INSIGHTS.md` if the code is in `server/`) and one in the root
+  `INSIGHTS.md` tagged ``**Skill:** `<name>` ``, each with `**See also:**` to the other. Writing
+  only the root entry is the usual mistake.
 - **One change lands on both sides of a boundary** (an engine and the server that persists its
   output) → one entry **per module**, each with `**See also:**` to the other.
 - **The finding contradicts an instruction** (`CLAUDE.md`, a skill, a spec) → write the entry, tell
@@ -65,7 +67,7 @@ Six situations decide what you write, and the quickest way to get one wrong is t
 | `e2e/**` | `e2e/INSIGHTS.md` |
 | `mcp/**` | `mcp/INSIGHTS.md` |
 | two or more packages, or none of them — git, CI, Docker, secrets, `scripts/`, the agent workflow itself | root `INSIGHTS.md` |
-| a skill under `.claude/skills/` — how it behaves, what it covers, where its guidance is wrong or out of date | root `INSIGHTS.md`, with a `**Skill:**` line |
+| a skill under `.claude/skills/` — how it behaves, what it covers, where its guidance is wrong or out of date | root `INSIGHTS.md`, with a `**Skill:**` line — plus a module entry too when the skill's advice failed on that module's code (see "Decide first") |
 
 Check with `git diff --name-only` (add `HEAD` for committed work) rather than from memory.
 
