@@ -162,7 +162,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm vitest run skills/${{ matrix.skill }}
+      - run: pnpm vitest run skills/${{ matrix.skill }}/
 
       - name: Keep the records
         if: always()
@@ -213,7 +213,7 @@ jobs:
           docker compose -f proxy/docker-compose.yml up -d
           pnpm proxy:wait
 
-      - run: node scripts/run-with-fallback.mjs agents/${{ matrix.agent }}
+      - run: node scripts/run-with-fallback.mjs agents/${{ matrix.agent }}/
 
       - name: Proxy log
         if: failure()
