@@ -28,7 +28,7 @@ const REVIEW_PROMPT = reviewPrompt(
 // discriminating case for the strict-vs-lite A/B: both variants should FIND both problems, but
 // only the strict variant (which must quote a rule per finding) should reliably cite them.
 const REVIEWER_CORE_PROMPT = reviewPrompt(
-  ["reviewer-core/src/pipeline/run.ts"],
+  ["reviewer-core/src/review/run.ts"],
   fx("reviewer-core-gate.diff"),
 );
 
@@ -84,8 +84,8 @@ export const cases: AgentCase[] = [
     kind: "quality",
     prompt: REVIEWER_CORE_PROMPT,
     practices: [
-      "flags the `import { readFileSync } from 'node:fs'` added to reviewer-core/src/pipeline/run.ts as a violation: the pure engine must do no Node I/O",
-      "flags that runPipeline now returns `deduped` directly, skipping the mandatory `groundFindings()` gate before findings are emitted",
+      "flags the `import { readFileSync } from 'node:fs'` added to reviewer-core/src/review/run.ts as a violation: the pure engine must do no Node I/O",
+      "flags that reviewPullRequest no longer calls `groundFindings()` and keeps every merged finding, skipping the mandatory grounding gate",
       "names a core-* rule ID from the onion-architecture skill (core-no-node-io or core-stays-pure) for the fs-import finding, not only a prose description",
       "cites reviewer-core/CLAUDE.md, by path:line or by quoting its rule that the grounding gate is mandatory, for the skipped-gate finding",
     ],
