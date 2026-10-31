@@ -3,47 +3,69 @@ import { fixtureReader } from "../../src/index.js";
 
 const fx = fixtureReader(import.meta.url);
 
-const REVIEW_PROMPT = `Audit this diff against DevDigest's documented structural contracts.
+// The agent's Step 0 stops with "Clarification needed" when a `change` task has no file list, so
+// every prompt names the mode and the files. The files exist only in the patch (they are not in
+// the working tree), so the agent has to review from the patch.
+const reviewPrompt = (files: string[], patch: string) =>
+  `Mode: change. Baseline: the patch below (no patch file). Changed files, all modified:\n${files
+    .map((f) => `- ${f}`)
+    .join("\n")}\n\nThe files exist only in this patch, not in the working tree: review from the patch. ` +
+  `Do not report files that are absent from the tree (a module's repository or routes file, for ` +
+  `example): they are not part of this change. ` +
+  `Audit it against DevDigest's documented architecture rules. Output only your report.\n\n${patch}`;
 
-${fx("checkout-service.diff")}`;
+const REVIEW_PROMPT = reviewPrompt(
+  [
+    "server/src/modules/checkout/domain/checkout.ts",
+    "server/src/modules/checkout/service.ts",
+  ],
+  fx("checkout-service.diff"),
+);
 
-// A second real diff whose violations map onto DevDigest-SPECIFIC rule names
-// (`reviewer-core-zero-io`, `reviewer-core-ground-findings-gate`) that a competent model will
-// describe in prose but will not spontaneously name unless the agent forces a citation. This is
-// the discriminating case for the strict-vs-lite A/B: both variants should FIND both problems,
-// but only the strict variant (which keeps the "cite the exact documented rule per finding" hard
-// rule) should reliably emit the identifier. The checkout diff's textbook violations don't
-// discriminate — the model volunteers `inward-only-dependencies`/`di-discipline` either way.
-const REVIEWER_CORE_PROMPT = `Audit this diff against DevDigest's documented structural contracts.
+// A second diff. Its violations map onto rules a competent model describes in prose but does not
+// name unless the agent forces a citation: `core-no-node-io` (a skill rule ID) and the grounding
+// gate, whose rule has no skill ID and lives only in reviewer-core/CLAUDE.md. This is the
+// discriminating case for the strict-vs-lite A/B: both variants should FIND both problems, but
+// only the strict variant (which must quote a rule per finding) should reliably cite them.
+const REVIEWER_CORE_PROMPT = reviewPrompt(
+  ["reviewer-core/src/pipeline/run.ts"],
+  fx("reviewer-core-gate.diff"),
+);
 
-${fx("reviewer-core-gate.diff")}`;
+// A diff that violates NO documented rule (a local-variable rename, no new imports). A grounded
+// reviewer reports no findings; this surfaces the COST of relaxing the citation rule, since a lite
+// variant freed from "quote a rule" is more prone to fabricating a best-practice finding.
+const BENIGN_PROMPT = reviewPrompt(
+  ["server/src/modules/blast/score.ts"],
+  fx("benign-refactor.diff"),
+);
 
-// A diff that violates NO documented rule (a pure local-variable rename inside a domain file, no
-// new imports, no cross-layer edges). A grounded reviewer should report zero violations. This
-// surfaces the COST of relaxing the citation rule: freed from "every finding must name a
-// documented contract", the lite variant is more prone to fabricating a judgment/best-practice
-// finding where the strict variant stays silent.
-const BENIGN_PROMPT = `Audit this diff against DevDigest's documented structural contracts.
-
-${fx("benign-refactor.diff")}`;
+// A diff that edits a vendored copy. The rule against it ("do not touch client/src/vendor/**")
+// lives only in CLAUDE.md files and has no skill rule ID, so a reviewer that is not forced to cite
+// a rule can describe the problem in prose and skip the path:line. The file is real, so the agent
+// can read it and the CLAUDE.md that forbids the edit.
+const VENDOR_PROMPT = reviewPrompt(
+  ["client/src/vendor/shared/contracts/findings.ts"],
+  fx("vendor-edit.diff"),
+).replace("The files exist only in this patch, not in the working tree: review from the patch. ", "");
 
 // Shared across the strict (architecture-reviewer) and relaxed (architecture-reviewer-lite)
-// variants so the two agents are graded on the exact same task — the only thing that should
-// move between the two runs is whether "cites the specific documented rule" keeps passing.
+// variants so both are graded on the same task. The practice that should move between the two
+// series is the one that demands a rule citation per finding; read the practices, not the case
+// total.
 export const cases: AgentCase[] = [
   {
     name: "flags both violations in the checkout diff with severity and a citable rule",
     kind: "quality",
     prompt: REVIEW_PROMPT,
     practices: [
-      "flags the domain file (checkout.ts) importing a type from 'fastify' as a violation of the inward-only dependency rule between Domain and Presentation layers",
-      "flags the `new PgCheckoutRepository()` call inside service.ts as a violation of DI discipline (concrete adapters/repositories must be constructed only in the composition root / container)",
-      "names the specific documented rule identifier for EVERY finding (e.g. `inward-only-dependencies`, `di-discipline`) rather than describing the problem only in prose",
-      "assigns a severity (critical/high/medium/low/info) to each finding",
-      "quotes the offending line verbatim as evidence for each finding, not a paraphrase",
-      "ends with an explicit PASS/FAIL gate verdict based on whether any critical or high findings exist",
+      "flags the domain file (checkout.ts) importing FastifyReply from 'fastify' as a violation: an inner layer depends on a web framework",
+      "flags the `new PgCheckoutRepository()` call inside service.ts as a violation: a concrete repository is constructed outside the composition root",
+      "names a documented rule ID for EVERY finding (for example dep-domain-framework-free, dep-inward-only, di-composition-root-only) and not only a prose description",
+      "gives each finding a severity of CRITICAL, WARNING or SUGGESTION",
+      "quotes the offending line of code verbatim as evidence for each finding, not a paraphrase",
     ],
-    threshold: 1.0,
+    threshold: 0.8,
     maxTurns: 25,
   },
   {
@@ -51,25 +73,35 @@ export const cases: AgentCase[] = [
     kind: "quality",
     prompt: REVIEW_PROMPT,
     practices: [
-      "does not invent an architecture-contract violation for the optional `reply?: FastifyReply` parameter beyond the inward-only-dependencies import issue itself (no runtime bug/security finding fabricated as an architecture rule)",
-      "stays scoped to structural/layering/DI findings and does not comment on naming, style, or test coverage",
+      "does not invent a runtime-bug or security finding for the optional `reply?: FastifyReply` parameter; it appears only as part of the framework-import finding",
+      "stays scoped to structural, layering and DI findings and does not comment on naming, style or test coverage",
     ],
     threshold: 1.0,
     maxTurns: 25,
   },
   {
-    name: "cites the DevDigest-specific rule identifier for reviewer-core violations",
+    name: "cites a documented rule for each reviewer-core violation",
     kind: "quality",
     prompt: REVIEWER_CORE_PROMPT,
     practices: [
-      "flags the `import { readFileSync } from 'node:fs'` added to reviewer-core/src/pipeline/run.ts as a violation (reviewer-core must do no I/O except the injected LLMProvider)",
-      "flags that runPipeline now returns `deduped` directly, skipping the mandatory `groundFindings()` gate before emitting findings",
-      "names the exact documented rule identifier `reviewer-core-zero-io` for the fs-import finding rather than only describing it in prose",
-      "names the exact documented rule identifier `reviewer-core-ground-findings-gate` for the skipped-gate finding rather than only describing it in prose",
-      "quotes the offending line verbatim as evidence for each finding, not a paraphrase",
-      "ends with an explicit PASS/FAIL gate verdict based on whether any critical or high findings exist",
+      "flags the `import { readFileSync } from 'node:fs'` added to reviewer-core/src/pipeline/run.ts as a violation: the pure engine must do no Node I/O",
+      "flags that runPipeline now returns `deduped` directly, skipping the mandatory `groundFindings()` gate before findings are emitted",
+      "names a core-* rule ID from the onion-architecture skill (core-no-node-io or core-stays-pure) for the fs-import finding, not only a prose description",
+      "cites reviewer-core/CLAUDE.md, by path:line or by quoting its rule that the grounding gate is mandatory, for the skipped-gate finding",
     ],
-    threshold: 1.0,
+    threshold: 0.8,
+    maxTurns: 25,
+  },
+  {
+    name: "cites the CLAUDE.md rule for an edit to a vendored copy",
+    kind: "quality",
+    prompt: VENDOR_PROMPT,
+    practices: [
+      "flags that the vendored client copy of the contract (client/src/vendor/shared/contracts/findings.ts) was changed by hand and now differs from the authored contract in the server",
+      "cites a documented rule for that finding: a rule ID, or a CLAUDE.md line given by path:line or by quote, not only a prose description",
+      "says the fix is to change the authored contract in server/src/vendor/shared and re-sync the client copy",
+    ],
+    threshold: 0.6,
     maxTurns: 25,
   },
   {
@@ -77,9 +109,8 @@ export const cases: AgentCase[] = [
     kind: "quality",
     prompt: BENIGN_PROMPT,
     practices: [
-      "reports no violations for the benign rename (or records only `info`-level, non-blocking observations) — it does not invent a critical/high/medium finding",
-      "does not fabricate a documented-rule violation where the diff violates none of the checked rules",
-      "the final gate verdict is PASS",
+      "reports no findings for the rename, or only SUGGESTION-level observations; it does not report a CRITICAL or WARNING finding",
+      "does not claim that the diff violates a documented rule or name a rule ID as broken",
     ],
     threshold: 1.0,
     maxTurns: 25,
