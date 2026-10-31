@@ -12,10 +12,10 @@
 # skills, agents and workflow run on OpenRouter and are not required checks yet. Make `skills` and
 # `agents` required in branch protection once they are stable on the chosen model.
 #
-# The model is a knob, not code. Repository variables EVAL_MODEL / EVAL_JUDGE_MODEL (skills,
-# agents) and EVAL_WORKFLOW_MODEL / EVAL_WORKFLOW_JUDGE_MODEL (workflow), or the inputs of a manual
-# run. Defaults: DeepSeek for skills and agents; Gemini for workflow, because evals/README.md
-# measured DeepSeek doing the work inline instead of dispatching the subagent.
+# The model is a knob, not code. Two switches: repository variables SKILLS_MODEL (skills) and
+# TOOL_MODEL (agents and workflow), or the inputs of a manual run. Defaults: DeepSeek for skills,
+# Gemini for the tool tiers, because evals/README.md measured DeepSeek doing the work inline
+# instead of dispatching the subagent, and a DeepSeek agent case did not fit the test timeout.
 #
 # No secret reaches a fork PR: the three OpenRouter jobs are skipped unless the PR comes from this
 # repository.
@@ -35,16 +35,12 @@ on:
       - '.github/workflows/evals.yml'
   workflow_dispatch:
     inputs:
-      model:
-        description: 'OpenRouter slug for skills and agents (empty = repository default)'
+      skills_model:
+        description: 'OpenRouter slug for skills (empty = SKILLS_MODEL variable, else DeepSeek)'
         required: false
         default: ''
-      judge_model:
-        description: 'OpenRouter slug for their judge (empty = same as the model)'
-        required: false
-        default: ''
-      workflow_model:
-        description: 'OpenRouter slug for the workflow tier (empty = repository default)'
+      tool_model:
+        description: 'OpenRouter slug for agents and workflow (empty = TOOL_MODEL variable, else Gemini)'
         required: false
         default: ''
       run_all:
@@ -141,8 +137,8 @@ jobs:
     env:
       # Content tier: a direct OpenAI-format call to OpenRouter. No proxy, so no OPENROUTER_BASE_URL.
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      EVAL_MODEL: ${{ inputs.model || vars.EVAL_MODEL || 'deepseek/deepseek-chat' }}
-      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || vars.EVAL_JUDGE_MODEL || inputs.model || vars.EVAL_MODEL || 'deepseek/deepseek-chat' }}
+      EVAL_MODEL: ${{ inputs.skills_model || vars.SKILLS_MODEL || 'deepseek/deepseek-chat' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.skills_model || vars.SKILLS_MODEL || 'deepseek/deepseek-chat' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -186,8 +182,8 @@ jobs:
       # Tool tier: the Agent SDK speaks the Anthropic protocol, so it goes through the proxy.
       OPENROUTER_BASE_URL: http://localhost:4000
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      EVAL_MODEL: ${{ inputs.model || vars.EVAL_MODEL || 'deepseek/deepseek-chat' }}
-      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || vars.EVAL_JUDGE_MODEL || inputs.model || vars.EVAL_MODEL || 'deepseek/deepseek-chat' }}
+      EVAL_MODEL: ${{ inputs.tool_model || vars.TOOL_MODEL || 'google/gemini-2.5-flash' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.tool_model || vars.TOOL_MODEL || 'google/gemini-2.5-flash' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -240,8 +236,8 @@ jobs:
     env:
       OPENROUTER_BASE_URL: http://localhost:4000
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      EVAL_MODEL: ${{ inputs.workflow_model || vars.EVAL_WORKFLOW_MODEL || 'google/gemini-2.5-flash' }}
-      EVAL_JUDGE_MODEL: ${{ inputs.workflow_model || vars.EVAL_WORKFLOW_JUDGE_MODEL || vars.EVAL_WORKFLOW_MODEL || 'google/gemini-2.5-flash' }}
+      EVAL_MODEL: ${{ inputs.tool_model || vars.TOOL_MODEL || 'google/gemini-2.5-flash' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.tool_model || vars.TOOL_MODEL || 'google/gemini-2.5-flash' }}
     steps:
       - uses: actions/checkout@v4
 

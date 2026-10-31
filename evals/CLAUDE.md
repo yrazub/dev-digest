@@ -82,6 +82,7 @@ pnpm. Run from this folder.
 - A pass rate over two runs excludes breakage; it does not show stability. Say "n=2" when you
   report one.
 - CI (`.github/workflows/evals.yml`): `quality` (`eval:quality`) is blocking. `skills`, `agents`
-  and `workflow` run only what the changed files affect, on OpenRouter (DeepSeek; Gemini for
-  workflow), and are not required checks. A different model from the local Haiku runs, so a case
-  tuned on Haiku can be red there.
+  and `workflow` run only what the changed files affect, on OpenRouter (DeepSeek for skills,
+  Gemini for agents and workflow; knobs `SKILLS_MODEL` and `TOOL_MODEL`). `workflow` is
+  informational, and none of them is a required check yet. The model differs from the local Haiku
+  runs, so a case tuned on Haiku can be red there.
