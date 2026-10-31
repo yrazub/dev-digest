@@ -45,6 +45,9 @@ export interface RunOptions {
   stopWhen?: (partial: Pick<Result, "subagents" | "filesRead" | "skillsInvoked" | "toolsUsed">) => boolean;
 }
 
+/** Tools no eval session may use: evals read and plan, they never change the repository. */
+const MUTATING_TOOLS = ["Bash", "Write", "Edit", "NotebookEdit"];
+
 /** Run one headless Claude turn-loop and extract what it ACTUALLY did (not its prose). */
 export async function runClaude(prompt: string, opts: RunOptions = {}): Promise<Result> {
   const allowedTools = opts.allowedTools ?? [];
@@ -62,9 +65,12 @@ export async function runClaude(prompt: string, opts: RunOptions = {}): Promise<
   const options: Options = {
     model: opts.model ?? EVAL_MODEL,
     maxTurns: opts.maxTurns ?? MAX_TURNS,
-    permissionMode: "bypassPermissions", // safe: evals only read/plan and tools are allow-listed
+    // bypassPermissions makes `allowedTools` an auto-approve list, NOT a restriction: without the
+    // disallowedTools line below a session can still call Bash/Write/Edit (a control run did).
+    permissionMode: "bypassPermissions",
     systemPrompt,
     allowedTools,
+    disallowedTools: MUTATING_TOOLS,
     cwd: opts.cwd ?? REPO_ROOT,
     // Default: do NOT load on-disk config — isolates the injected artifact. workflowTask overrides.
     settingSources: opts.settingSources ?? [],
