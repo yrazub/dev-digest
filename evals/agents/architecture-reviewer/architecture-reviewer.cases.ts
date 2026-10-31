@@ -14,6 +14,20 @@ const reviewPrompt = (files: string[], patch: string) =>
   `example): they are not part of this change. ` +
   `Audit it against DevDigest's documented architecture rules. Output only your report.\n\n${patch}`;
 
+// Practices that only the strict agent promises: it must cite a documented rule per finding.
+// `architecture-reviewer-lite` has that hard rule removed on purpose, so its eval drops these
+// (see citationPractices) instead of being red for the very thing that makes it "lite".
+const CITE_EVERY_RULE =
+  "names a documented rule ID for EVERY finding (for example dep-domain-framework-free, dep-inward-only, di-composition-root-only) and not only a prose description";
+const CITE_CORE_RULE =
+  "names a core-* rule ID from the onion-architecture skill (core-no-node-io or core-stays-pure) for the fs-import finding, not only a prose description";
+const CITE_GATE_RULE =
+  "cites reviewer-core/CLAUDE.md, by path:line or by quoting its rule that the grounding gate is mandatory, for the skipped-gate finding";
+const CITE_VENDOR_RULE =
+  "cites a documented rule for that finding: a rule ID, or a CLAUDE.md line given by path:line or by quote, not only a prose description";
+
+export const citationPractices = new Set([CITE_EVERY_RULE, CITE_CORE_RULE, CITE_GATE_RULE, CITE_VENDOR_RULE]);
+
 const REVIEW_PROMPT = reviewPrompt(
   [
     "server/src/modules/checkout/domain/checkout.ts",
@@ -61,7 +75,7 @@ export const cases: AgentCase[] = [
     practices: [
       "flags the domain file (checkout.ts) importing FastifyReply from 'fastify' as a violation: an inner layer depends on a web framework",
       "flags the `new PgCheckoutRepository()` call inside service.ts as a violation: a concrete repository is constructed outside the composition root",
-      "names a documented rule ID for EVERY finding (for example dep-domain-framework-free, dep-inward-only, di-composition-root-only) and not only a prose description",
+      CITE_EVERY_RULE,
       "gives each finding a severity of CRITICAL, WARNING or SUGGESTION",
       "quotes the offending line of code verbatim as evidence for each finding, not a paraphrase",
     ],
@@ -79,17 +93,28 @@ export const cases: AgentCase[] = [
     threshold: 1.0,
     maxTurns: 25,
   },
+  // The reviewer-core diff has two violations. One case each: a model that finds only one of them
+  // fails only its own case, and the report says which.
   {
-    name: "cites a documented rule for each reviewer-core violation",
+    name: "flags the node:fs import in reviewer-core and names its core rule",
     kind: "quality",
     prompt: REVIEWER_CORE_PROMPT,
     practices: [
       "flags the `import { readFileSync } from 'node:fs'` added to reviewer-core/src/review/run.ts as a violation: the pure engine must do no Node I/O",
-      "flags that reviewPullRequest no longer calls `groundFindings()` and keeps every merged finding, skipping the mandatory grounding gate",
-      "names a core-* rule ID from the onion-architecture skill (core-no-node-io or core-stays-pure) for the fs-import finding, not only a prose description",
-      "cites reviewer-core/CLAUDE.md, by path:line or by quoting its rule that the grounding gate is mandatory, for the skipped-gate finding",
+      CITE_CORE_RULE,
     ],
-    threshold: 0.8,
+    threshold: 1.0,
+    maxTurns: 25,
+  },
+  {
+    name: "flags the skipped grounding gate in reviewer-core and cites its rule",
+    kind: "quality",
+    prompt: REVIEWER_CORE_PROMPT,
+    practices: [
+      "flags that reviewPullRequest no longer calls `groundFindings()` and keeps every merged finding, skipping the mandatory grounding gate",
+      CITE_GATE_RULE,
+    ],
+    threshold: 1.0,
     maxTurns: 25,
   },
   {
@@ -98,7 +123,7 @@ export const cases: AgentCase[] = [
     prompt: VENDOR_PROMPT,
     practices: [
       "flags that the vendored client copy of the contract (client/src/vendor/shared/contracts/findings.ts) was changed by hand and now differs from the authored contract in the server",
-      "cites a documented rule for that finding: a rule ID, or a CLAUDE.md line given by path:line or by quote, not only a prose description",
+      CITE_VENDOR_RULE,
       "says the fix is to change the authored contract in server/src/vendor/shared and re-sync the client copy",
     ],
     threshold: 0.6,
