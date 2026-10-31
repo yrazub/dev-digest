@@ -37,13 +37,30 @@ export async function llmJudge(output: string, practices: string[], model = EVAL
   const listed = practices.map((p, i) => `${i + 1}. ${p}`).join("\n");
   const prompt = `${JUDGE_RUBRIC}\n\n## PRACTICES\n${listed}\n\n## OUTPUT\n${output}\n\nReturn the JSON now.`;
   // A cheap judge model sometimes returns JSON that does not parse (an unescaped quote in the
-  // evidence). That says nothing about the output under test, so ask once more before failing.
-  let results: Verdict["results"];
+  // evidence). That says nothing about the output under test, so ask again, up to twice, and tell
+  // the judge what was wrong with its last reply: a bare retry tends to repeat the same mistake.
+  const first = (await runContent(prompt, { allowedTools: [], maxTurns: 1, model })).text;
+  let results: Verdict["results"] | undefined;
+  let lastText = first;
+  let lastError: unknown;
   try {
-    results = parseVerdict((await runContent(prompt, { allowedTools: [], maxTurns: 1, model })).text);
-  } catch {
-    results = parseVerdict((await runContent(prompt, { allowedTools: [], maxTurns: 1, model })).text);
+    results = parseVerdict(first);
+  } catch (err) {
+    lastError = err;
   }
+  for (let attempt = 0; !results && attempt < 2; attempt++) {
+    const fix =
+      `${prompt}\n\nYour previous reply was not valid JSON (${(lastError as Error).message.slice(0, 160)}). ` +
+      "Reply again with ONLY the minified JSON. Inside every string escape a double quote as \\\" and " +
+      "write a line break as \\n; or shorten the evidence to a few words with no quotes in it.";
+    lastText = (await runContent(fix, { allowedTools: [], maxTurns: 1, model })).text;
+    try {
+      results = parseVerdict(lastText);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  if (!results) throw lastError;
   const total = results.length || 1;
   const passed = results.filter((r) => r.passed).length;
   return { results, passed, total, score: passed / total };
