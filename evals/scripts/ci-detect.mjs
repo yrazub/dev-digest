@@ -60,10 +60,15 @@ const skippedAgents = agentNames.filter((n) => !hasEvals("agents", n));
 
 // The workflow tier measures the LIVE harness, so anything that changes it re-triggers it:
 // the root or .claude CLAUDE.md, any agent definition, the workflow cases, or the engine itself.
+// DevDigest: the workflow cases route through every CLAUDE.md (root and per package), the
+// documents those tables point to, and the skills the activation cases name.
 const runWorkflow = changed.some(
   (f) =>
-    f === "CLAUDE.md" ||
-    f === ".claude/CLAUDE.md" ||
+    /(^|\/)CLAUDE\.md$/.test(f) ||
+    f === "TESTING.md" ||
+    /^docs\/project-context\.md$/.test(f) ||
+    /^(server|client|reviewer-core)\/docs\//.test(f) ||
+    /^\.claude\/skills\/.+\/SKILL\.md$/.test(f) ||
     /^\.claude\/agents\/.+\.md$/.test(f) ||
     /^evals\/workflow\//.test(f) ||
     /^evals\/src\//.test(f),
