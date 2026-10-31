@@ -1,80 +1,116 @@
 import type { WorkflowCase } from "../src/index.js";
 
 /**
- * Systemic ("workflow") tier — asserts the real on-disk harness (CLAUDE.md + skills + subagents,
- * loaded via settingSources:["project"]) behaves as documented. Organized by scenario, not by a
- * single artifact, because these behaviors are cross-cutting.
+ * Systemic ("workflow") tier: asserts that the real on-disk harness (CLAUDE.md files, skills and
+ * subagents, loaded through settingSources:["project"]) behaves as documented. The judge is the
+ * tool-call trace (files read, skills engaged, subagents launched), never the model's own words.
+ * The sessions have a read-only allow-list (Read, Grep, Glob, Task, Agent, Skill).
  *
- * Budget: 5 Claude sessions total.
- *   - 3 × trace     → 1 session each                      = 3
- *   - 1 × activation pair (positive + near-miss negative) = 2
+ * What is under test is the routing in the CLAUDE.md files. The root CLAUDE.md ("Before answering")
+ * and each module CLAUDE.md (server/, client/, reviewer-core/) carry a table that says which
+ * document to read first for a kind of task. A prompt therefore NEVER names the document: it
+ * describes the task and asks the agent to follow this repo's own guidance, so a pass means the
+ * routing worked, not that the model obeyed a file name.
  *
- * `trace` folds several assertions into ONE session (cheaper, coarser) and stops early once its
- * evidence is in — so a dispatch-bearing trace never waits out the nested subagent's full run.
+ * Budget: 8 cases, 9 Claude sessions (the contrast case runs two).
+ *   - 2 x root routing (trace)
+ *   - 2 x module routing, server and client (trace, module CLAUDE.md then the document)
+ *   - 1 x contrast: real repo versus an empty directory
+ *   - 2 x activation pair for engineering-insights
+ *   - 1 x dispatch of architecture-reviewer
  */
 export const cases: WorkflowCase[] = [
-  // --- trace (1 session): CLAUDE.md "Read When" routing + subagent dispatch, together -----------
+  // --- root CLAUDE.md routing: one table row per case ------------------------------------------
   {
     kind: "trace",
-    // Endpoint must NOT already exist, or the model reviews the existing code inline instead of
-    // planning-then-dispatching. GET /reviews/:id/export is genuinely absent from routes.ts.
-    name: "API-route task reads api-contracts AND pulls the architecture-reviewer",
+    name: "root routing: a Project Context change leads to docs/project-context.md",
     prompt:
-      "Я планую додати НОВИЙ, ще не реалізований ендпоінт GET /reviews/:id/export (віддає ревʼю як " +
-      "markdown). Спершу звірся з конвенціями API цього репо. Потім ОБОВʼЯЗКОВО запусти сабагента " +
-      "architecture-reviewer, щоб він оцінив мій план на відповідність onion-шарам — не рецензуй сам.",
-    expectFilesRead: ["server/docs/api-contracts.md"],
-    expectSubagents: ["architecture-reviewer"],
+      "I am about to change how a repository document reaches the review prompt and the run trace. " +
+      "Before touching any code, follow this repo's own guidance on which document to read for " +
+      "that, and read it.",
+    expectFilesRead: ["docs/project-context.md"],
+    maxTurns: 8,
+  },
+  {
+    kind: "trace",
+    name: "root routing: a testing question leads to TESTING.md",
+    prompt:
+      "I want to add a test for a new helper in the API. Follow this repo's own guidance on where " +
+      "a test belongs and which kind to write, and read the document it points to.",
+    expectFilesRead: ["TESTING.md"],
     maxTurns: 8,
   },
 
-  // --- trace (1 session): two "Read When" rows at once -----------------------------------------
+  // --- module CLAUDE.md routing: root -> module CLAUDE.md -> document -------------------------
+  // Both hops are asserted: the package's own CLAUDE.md, then the document it routes to. A module
+  // CLAUDE.md is not loaded until the agent works in that package, so reading it is the evidence
+  // that the root table sent the agent there. (An open question without an instruction to read
+  // makes the agent only advise reading it, which is why the prompts tell it to follow the guidance.)
   {
     kind: "trace",
-    // Tests the CLAUDE.md "Read When" routing, so the prompt must push toward CONSULTING the docs,
-    // not exploring source. Earlier phrasing ("розберись, як усе влаштовано") sent the model straight
-    // into schema.ts / pipeline.run.ts and it never opened the routed doc. One anchor doc (pipeline.md)
-    // keeps this a deterministic routing check — asserting two docs in one session is inherently flaky.
-    name: "pipeline task follows CLAUDE.md routing to pipeline.md",
+    name: "server routing: a schema change leads through server/CLAUDE.md to server/docs/schema.md",
     prompt:
-      "Я збираюся змінити review pipeline. Перш ніж торкатися коду — звірся з настановами цього репо " +
-      "(CLAUDE.md) щодо того, яку документацію треба прочитати для змін у pipeline, і прочитай саме ці документи.",
-    expectFilesRead: ["reviewer-core/docs/pipeline.md"],
+      "I need to add a column to a table in the API's database. Before anything else, follow this " +
+      "repo's own guidance for backend schema changes and read the document it points to.",
+    expectFilesRead: ["server/CLAUDE.md", "server/docs/schema.md"],
+    maxTurns: 8,
+  },
+  {
+    kind: "trace",
+    name: "client routing: fetching data in a component leads through client/CLAUDE.md to client/docs/data-flow.md",
+    prompt:
+      "I need to show data from the API in a new component of the web client. Before writing " +
+      "anything, follow this repo's own guidance on data fetching and read the document it " +
+      "points to.",
+    expectFilesRead: ["client/CLAUDE.md", "client/docs/data-flow.md"],
     maxTurns: 8,
   },
 
-  // --- trace (1 session): CLAUDE.md "Hit unexpected behavior" routing -> gotchas ----------------
-  // Was a contrast case, but the control run (empty tmpdir) could still reach the real repo by
-  // absolute path and read gotchas.md, making the negative flaky. As a single-session trace it
-  // reliably checks the same routing rule: in the real repo, the discovery prompt reads gotchas.md.
+  // --- contrast: is it CLAUDE.md that leads the agent there? -----------------------------------
+  // Same task as the server routing case. Treatment is the real repo; control runs in an empty
+  // temporary directory with no project settings, so it cannot reach the document at all.
   {
-    kind: "trace",
-    name: "CLAUDE.md routes a gotchas lookup to reviewer-core/insights",
+    kind: "contrast",
+    name: "contrast: the schema document is read in the repo and not in an empty directory",
     prompt:
-      "У reviewer-core я стикнувся з несподіваною поведінкою — щось працює не так, як я очікував. " +
-      "За настановами цього репо, де це вже могло бути задокументовано? Прочитай той файл.",
-    expectFilesRead: ["reviewer-core/insights/gotchas.md"],
-    maxTurns: 5,
+      "I need to add a column to a table in the API's database. Before anything else, follow this " +
+      "repo's own guidance for backend schema changes and read the document it points to.",
+    expectFileRead: "server/docs/schema.md",
+    maxTurns: 8,
   },
 
-  // --- activation pair (2 sessions): positive + near-miss negative ------------------------------
+  // --- activation pair: engineering-insights --------------------------------------------------
   {
     kind: "activation",
     name: "engineering-insights activates on a genuine discovery",
     prompt:
-      "Щойно з'ясував, чому pgvector-запит повертав нуль рядків — розмірність колонки не збіглася " +
-      "після зміни моделі ембедингів. Хочу це зафіксувати, щоб більше не наступати.",
+      "I just found out why a pgvector query returned zero rows: the column dimension no longer " +
+      "matched after we changed the embedding model. I want to record this so nobody hits it again.",
     skill: "engineering-insights",
     shouldActivate: true,
     maxTurns: 4,
   },
   {
     kind: "activation",
-    name: "near-miss negative — explaining the same topic must NOT record an insight",
+    name: "near-miss negative: explaining the same topic must NOT record an insight",
     prompt:
-      "Поясни, як у pgvector працюють розмірності колонок і чому невідповідність повертає нуль рядків.",
+      "Explain how column dimensions work in pgvector and why a mismatch returns zero rows.",
     skill: "engineering-insights",
     shouldActivate: false,
     maxTurns: 4,
+  },
+
+  // --- dispatch -------------------------------------------------------------------------------
+  {
+    kind: "dispatch",
+    name: "an architecture plan review pulls in the architecture-reviewer subagent",
+    // The module must not exist yet, or the model reviews existing code inline instead of
+    // delegating. There is no `exports` module in server/src/modules.
+    prompt:
+      "I plan to add a NEW module `exports` to server/src/modules, with a route, a service and a " +
+      "repository. Before I write any code, you MUST launch the architecture-reviewer subagent to " +
+      "check this plan against the onion layers. Do not review it yourself.",
+    expectSubagent: "architecture-reviewer",
+    maxTurns: 8,
   },
 ];
