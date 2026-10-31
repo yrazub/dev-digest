@@ -31,6 +31,8 @@ export interface RecordData {
   verdict?: Verdict;
   grounded?: number;
   threshold?: number;
+  /** Workflow tests: whether the case's trace assertions held. Overrides the isError default. */
+  passed?: boolean;
   extra?: Record<string, unknown>;
 }
 
@@ -40,7 +42,7 @@ export interface RecordData {
  * from being silently empty.
  */
 export function record(label: string, data: RecordData): void {
-  const { result, verdict, grounded, threshold, extra } = data;
+  const { result, verdict, grounded, threshold, passed, extra } = data;
   const state = expect.getState();
   const nodeid = `${state.testPath ?? "?"} > ${state.currentTestName ?? label}`;
 
@@ -51,7 +53,9 @@ export function record(label: string, data: RecordData): void {
       ? false
       : verdict && threshold !== undefined
         ? verdict.score >= threshold
-        : !result.isError;
+        : passed !== undefined
+          ? passed
+          : !result.isError;
 
   const outDir = join(OUTPUTS, RUN_ID);
   mkdirSync(outDir, { recursive: true });
