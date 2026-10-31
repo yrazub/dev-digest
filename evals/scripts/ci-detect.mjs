@@ -6,7 +6,8 @@
  *
  *   .claude/skills/<name>/**   OR  evals/skills/<name>/**   → run evals/skills/<name>  (content tier)
  *   .claude/agents/<name>.md   OR  evals/agents/<name>/**   → run evals/agents/<name>  (tool tier)
- *   CLAUDE.md / .claude/CLAUDE.md / any agent / engine change → run the workflow tier
+ *   any CLAUDE.md, a document its routing tables point to, or the engine → run the workflow tier
+ *   (a changed skill or agent runs only its own evals, never the workflow tier)
  *
  * A changed artifact with NO written evals is NOT a failure: it is reported on the `skipped_*`
  * outputs so the job can print a visible "SKIP <name> (no evals)" line instead of going red.
@@ -58,18 +59,16 @@ const skippedSkills = skillNames.filter((n) => !hasEvals("skills", n));
 const agents = agentNames.filter((n) => hasEvals("agents", n));
 const skippedAgents = agentNames.filter((n) => !hasEvals("agents", n));
 
-// The workflow tier measures the LIVE harness, so anything that changes it re-triggers it:
-// the root or .claude CLAUDE.md, any agent definition, the workflow cases, or the engine itself.
-// DevDigest: the workflow cases route through every CLAUDE.md (root and per package), the
-// documents those tables point to, and the skills the activation cases name.
+// The workflow tier measures how the CLAUDE.md files route the agent. It re-runs when the routing
+// changes: any CLAUDE.md (root and per package), a document those tables point to, the workflow
+// cases, or the engine itself. A changed skill or agent does NOT trigger it: it runs only its own
+// evals, so one edit costs one tier.
 const runWorkflow = changed.some(
   (f) =>
     /(^|\/)CLAUDE\.md$/.test(f) ||
     f === "TESTING.md" ||
     /^docs\/project-context\.md$/.test(f) ||
     /^(server|client|reviewer-core)\/docs\//.test(f) ||
-    /^\.claude\/skills\/.+\/SKILL\.md$/.test(f) ||
-    /^\.claude\/agents\/.+\.md$/.test(f) ||
     /^evals\/workflow\//.test(f) ||
     /^evals\/src\//.test(f),
 );
