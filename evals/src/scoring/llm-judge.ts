@@ -36,8 +36,14 @@ function parseVerdict(text: string): Verdict["results"] {
 export async function llmJudge(output: string, practices: string[], model = EVAL_JUDGE_MODEL): Promise<Verdict> {
   const listed = practices.map((p, i) => `${i + 1}. ${p}`).join("\n");
   const prompt = `${JUDGE_RUBRIC}\n\n## PRACTICES\n${listed}\n\n## OUTPUT\n${output}\n\nReturn the JSON now.`;
-  const res = await runContent(prompt, { allowedTools: [], maxTurns: 1, model });
-  const results = parseVerdict(res.text);
+  // A cheap judge model sometimes returns JSON that does not parse (an unescaped quote in the
+  // evidence). That says nothing about the output under test, so ask once more before failing.
+  let results: Verdict["results"];
+  try {
+    results = parseVerdict((await runContent(prompt, { allowedTools: [], maxTurns: 1, model })).text);
+  } catch {
+    results = parseVerdict((await runContent(prompt, { allowedTools: [], maxTurns: 1, model })).text);
+  }
   const total = results.length || 1;
   const passed = results.filter((r) => r.passed).length;
   return { results, passed, total, score: passed / total };
