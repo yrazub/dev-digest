@@ -17,6 +17,10 @@
 # Gemini for the tool tiers, because evals/README.md measured DeepSeek doing the work inline
 # instead of dispatching the subagent, and a DeepSeek agent case did not fit the test timeout.
 #
+# Agents and workflow run on the cheap TOOL_MODEL first; only the tests that failed are re-run on
+# FALLBACK_MODEL (scripts/run-with-fallback.mjs). A test is green when either model passes it, and
+# the job summary says which one did, so a test that needed the stronger model is visible.
+#
 # No secret reaches a fork PR: the three OpenRouter jobs are skipped unless the PR comes from this
 # repository.
 name: evals
@@ -41,6 +45,10 @@ on:
         default: ''
       tool_model:
         description: 'OpenRouter slug for agents and workflow (empty = TOOL_MODEL variable, else Gemini)'
+        required: false
+        default: ''
+      fallback_model:
+        description: 'OpenRouter slug that re-runs failed agent/workflow tests (empty = FALLBACK_MODEL variable, else Haiku)'
         required: false
         default: ''
       run_all:
@@ -184,6 +192,7 @@ jobs:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       EVAL_MODEL: ${{ inputs.tool_model || vars.TOOL_MODEL || 'google/gemini-2.5-flash' }}
       EVAL_JUDGE_MODEL: ${{ inputs.tool_model || vars.TOOL_MODEL || 'google/gemini-2.5-flash' }}
+      FALLBACK_MODEL: ${{ inputs.fallback_model || vars.FALLBACK_MODEL || 'anthropic/claude-haiku-4.5' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -204,7 +213,7 @@ jobs:
           docker compose -f proxy/docker-compose.yml up -d
           pnpm proxy:wait
 
-      - run: pnpm vitest run agents/${{ matrix.agent }}
+      - run: node scripts/run-with-fallback.mjs agents/${{ matrix.agent }}
 
       - name: Proxy log
         if: failure()
@@ -238,6 +247,7 @@ jobs:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       EVAL_MODEL: ${{ inputs.tool_model || vars.TOOL_MODEL || 'google/gemini-2.5-flash' }}
       EVAL_JUDGE_MODEL: ${{ inputs.tool_model || vars.TOOL_MODEL || 'google/gemini-2.5-flash' }}
+      FALLBACK_MODEL: ${{ inputs.fallback_model || vars.FALLBACK_MODEL || 'anthropic/claude-haiku-4.5' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -258,7 +268,7 @@ jobs:
           docker compose -f proxy/docker-compose.yml up -d
           pnpm proxy:wait
 
-      - run: pnpm eval:workflow
+      - run: node scripts/run-with-fallback.mjs workflow
 
       - name: Proxy log
         if: failure()

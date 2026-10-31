@@ -84,5 +84,7 @@ pnpm. Run from this folder.
 - CI (`.github/workflows/evals.yml`): `quality` (`eval:quality`) is blocking. `skills`, `agents`
   and `workflow` run only what the changed files affect, on OpenRouter (DeepSeek for skills,
   Gemini for agents and workflow; knobs `SKILLS_MODEL` and `TOOL_MODEL`). `workflow` is
-  informational, and none of them is a required check yet. The model differs from the local Haiku
+  informational, and none of them is a required check yet. `agents` and `workflow` re-run only
+  their failed tests on `FALLBACK_MODEL` (Haiku) through `scripts/run-with-fallback.mjs`; the job
+  summary says which model passed each test. The model differs from the local Haiku
   runs, so a case tuned on Haiku can be red there.
