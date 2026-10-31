@@ -1,0 +1,64 @@
+diff --git a/server/src/modules/reviews/repository.ts b/server/src/modules/reviews/repository.ts
+--- a/server/src/modules/reviews/repository.ts
++++ b/server/src/modules/reviews/repository.ts
+@@ -1,13 +1,20 @@
+-import { eq } from 'drizzle-orm';
++import { and, eq } from 'drizzle-orm';
+ import type { Db } from '../../db/client.js';
+ import * as t from '../../db/schema.js';
+ import type { ReviewRow } from '../../db/rows.js';
+
+ export class ReviewRepository {
+   constructor(private readonly db: Db) {}
+
+   async listForPull(pullId: string): Promise<ReviewRow[]> {
+     return this.db.select().from(t.reviews).where(eq(t.reviews.pullId, pullId));
+   }
++
++  async findForPull(pullId: string, reviewId: string): Promise<ReviewRow | null> {
++    const [row] = await this.db
++      .select()
++      .from(t.reviews)
++      .where(and(eq(t.reviews.pullId, pullId), eq(t.reviews.id, reviewId)));
++    return row ?? null;
++  }
+ }
+diff --git a/server/src/modules/reviews/service.ts b/server/src/modules/reviews/service.ts
+--- a/server/src/modules/reviews/service.ts
++++ b/server/src/modules/reviews/service.ts
+@@ -1,15 +1,23 @@
+ import type { Container } from '../../platform/container.js';
+ import { ReviewRepository } from './repository.js';
+ import type { ReviewRow } from '../../db/rows.js';
++import { NotFoundError } from '../../platform/errors.js';
+
+ export class ReviewsService {
+   private readonly repo: ReviewRepository;
+
+   constructor(private readonly container: Container) {
+     this.repo = new ReviewRepository(container.db);
+   }
+
+   async list(pullId: string): Promise<ReviewRow[]> {
+     return this.repo.listForPull(pullId);
+   }
++
++  async get(pullId: string, reviewId: string): Promise<ReviewRow> {
++    const review = await this.repo.findForPull(pullId, reviewId);
++    if (!review) throw new NotFoundError('Review');
++    return review;
++  }
+ }
+diff --git a/server/src/modules/reviews/routes.ts b/server/src/modules/reviews/routes.ts
+--- a/server/src/modules/reviews/routes.ts
++++ b/server/src/modules/reviews/routes.ts
+@@ -5,4 +5,9 @@ export default async function reviewsRoutes(app: FastifyInstance) {
+   const service = new ReviewsService(createContainer());
+
+   app.get('/pulls/:id/reviews', async (req) => service.list((req.params as { id: string }).id));
++
++  app.get('/pulls/:id/reviews/:reviewId', async (req) => {
++    const { id, reviewId } = req.params as { id: string; reviewId: string };
++    return service.get(id, reviewId);
++  });
+ }

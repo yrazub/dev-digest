@@ -1,0 +1,13 @@
+diff --git a/client/src/vendor/shared/contracts/findings.ts b/client/src/vendor/shared/contracts/findings.ts
+index 5555555..6666666 100644
+--- a/client/src/vendor/shared/contracts/findings.ts
++++ b/client/src/vendor/shared/contracts/findings.ts
+@@ -8,7 +8,7 @@ import { z } from 'zod';
+  *  - shared web↔api types.
+  */
+
+-export const Severity = z.enum(['CRITICAL', 'WARNING', 'SUGGESTION']);
++export const Severity = z.enum(['CRITICAL', 'WARNING', 'SUGGESTION', 'INFO']);
+ export type Severity = z.infer<typeof Severity>;
+
+ export const FindingCategory = z.enum(['bug', 'security', 'perf', 'style', 'test']);

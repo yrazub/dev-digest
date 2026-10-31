@@ -1,0 +1,287 @@
+# evals suite — evals for the harness itself (@devdigest/evals): skills, agents, CLAUDE.md routing.
+#
+# Jobs:
+#   quality   static check of skills and agents. No LLM, no secrets. Blocking.
+#   changes   maps the PR's changed files to the evals they affect (evals/scripts/ci-detect.mjs).
+#             A skill or agent with no evals is logged as SKIP, never a failure.
+#   skills    one matrix leg per changed skill. Content tier: a direct OpenRouter call, no proxy.
+#   agents    one matrix leg per changed agent. Tool tier: needs the LiteLLM proxy.
+#   workflow  the CLAUDE.md / activation / dispatch tier, once. Tool tier, proxy, and informational
+#             (continue-on-error): activation cases are indicative on non-Anthropic models.
+#
+# skills, agents and workflow run on OpenRouter and are not required checks yet. Make `skills` and
+# `agents` required in branch protection once they are stable on the chosen model.
+#
+# The model is a knob, not code. Two switches: repository variables SKILLS_MODEL (skills) and
+# TOOL_MODEL (agents and workflow), or the inputs of a manual run. Defaults: DeepSeek for skills,
+# Gemini for the tool tiers, because evals/README.md measured DeepSeek doing the work inline
+# instead of dispatching the subagent, and a DeepSeek agent case did not fit the test timeout.
+#
+# Agents and workflow run on the cheap TOOL_MODEL first; only the tests that failed are re-run on
+# FALLBACK_MODEL (scripts/run-with-fallback.mjs). A test is green when either model passes it, and
+# the job summary says which one did, so a test that needed the stronger model is visible.
+#
+# No secret reaches a fork PR: the three OpenRouter jobs are skipped unless the PR comes from this
+# repository.
+name: evals
+
+on:
+  pull_request:
+    paths:
+      - 'evals/**'
+      - '.claude/**'
+      - '**/CLAUDE.md'
+      - 'TESTING.md'
+      - 'docs/project-context.md'
+      - 'server/docs/**'
+      - 'client/docs/**'
+      - 'reviewer-core/docs/**'
+      - '.github/workflows/evals.yml'
+  workflow_dispatch:
+    inputs:
+      skills_model:
+        description: 'OpenRouter slug for skills (empty = SKILLS_MODEL variable, else DeepSeek)'
+        required: false
+        default: ''
+      tool_model:
+        description: 'OpenRouter slug for agents and workflow (empty = TOOL_MODEL variable, else Gemini)'
+        required: false
+        default: ''
+      fallback_model:
+        description: 'OpenRouter slug that re-runs failed agent/workflow tests (empty = FALLBACK_MODEL variable, else Haiku)'
+        required: false
+        default: ''
+      run_all:
+        description: 'Run every skill, every agent and the workflow tier, ignoring the changed files'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evals-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EVAL_BACKEND: openrouter
+  EVAL_QUIET: '1'
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: evals
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+
+      - run: pnpm eval:quality
+
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      skills: ${{ steps.detect.outputs.skills }}
+      agents: ${{ steps.detect.outputs.agents }}
+      run_workflow: ${{ steps.detect.outputs.run_workflow }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Decide which evals the change affects
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          RUN_ALL: ${{ inputs.run_all }}
+        run: |
+          if [ "$RUN_ALL" = "true" ] || [ -z "$BASE_SHA" ]; then
+            names() { ls "$1" | node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(0,"utf8").split("\n").filter(Boolean)))'; }
+            {
+              echo "skills=$(names evals/skills)"
+              echo "agents=$(names evals/agents)"
+              echo "run_workflow=true"
+            } >> "$GITHUB_OUTPUT"
+          else
+            CHANGED_FILES="$(git diff --name-only "$BASE_SHA"...HEAD)" node evals/scripts/ci-detect.mjs
+          fi
+
+  skills:
+    name: skills (${{ matrix.skill }})
+    needs: changes
+    if: needs.changes.outputs.skills != '[]' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        skill: ${{ fromJSON(needs.changes.outputs.skills) }}
+    defaults:
+      run:
+        working-directory: evals
+    env:
+      # Content tier: a direct OpenAI-format call to OpenRouter. No proxy, so no OPENROUTER_BASE_URL.
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EVAL_MODEL: ${{ inputs.skills_model || vars.SKILLS_MODEL || 'deepseek/deepseek-chat' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.skills_model || vars.SKILLS_MODEL || 'deepseek/deepseek-chat' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm vitest run skills/${{ matrix.skill }}/
+
+      - name: Keep the records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-skill-${{ matrix.skill }}
+          path: evals/results/
+          if-no-files-found: ignore
+
+  agents:
+    name: agents (${{ matrix.agent }})
+    needs: changes
+    if: needs.changes.outputs.agents != '[]' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        agent: ${{ fromJSON(needs.changes.outputs.agents) }}
+    defaults:
+      run:
+        working-directory: evals
+    env:
+      # Tool tier: the Agent SDK speaks the Anthropic protocol, so it goes through the proxy.
+      OPENROUTER_BASE_URL: http://localhost:4000
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EVAL_MODEL: ${{ inputs.tool_model || vars.TOOL_MODEL || 'google/gemini-2.5-flash' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.tool_model || vars.TOOL_MODEL || 'google/gemini-2.5-flash' }}
+      FALLBACK_MODEL: ${{ inputs.fallback_model || vars.FALLBACK_MODEL || 'anthropic/claude-haiku-4.5' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start the LiteLLM proxy
+        run: |
+          docker compose -f proxy/docker-compose.yml up -d
+          pnpm proxy:wait
+
+      - run: node scripts/run-with-fallback.mjs agents/${{ matrix.agent }}/
+
+      - name: Proxy log
+        if: failure()
+        run: docker compose -f proxy/docker-compose.yml logs --tail 100
+
+      - name: Stop the proxy
+        if: always()
+        run: docker compose -f proxy/docker-compose.yml down
+
+      - name: Keep the records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-agent-${{ matrix.agent }}
+          path: evals/results/
+          if-no-files-found: ignore
+
+  workflow:
+    name: workflow
+    needs: changes
+    if: needs.changes.outputs.run_workflow == 'true' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Informational: activation cases are indicative, not blocking, on a non-Anthropic model.
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: evals
+    env:
+      OPENROUTER_BASE_URL: http://localhost:4000
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EVAL_MODEL: ${{ inputs.tool_model || vars.TOOL_MODEL || 'google/gemini-2.5-flash' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.tool_model || vars.TOOL_MODEL || 'google/gemini-2.5-flash' }}
+      FALLBACK_MODEL: ${{ inputs.fallback_model || vars.FALLBACK_MODEL || 'anthropic/claude-haiku-4.5' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start the LiteLLM proxy
+        run: |
+          docker compose -f proxy/docker-compose.yml up -d
+          pnpm proxy:wait
+
+      - run: node scripts/run-with-fallback.mjs workflow
+
+      - name: Proxy log
+        if: failure()
+        run: docker compose -f proxy/docker-compose.yml logs --tail 100
+
+      - name: Stop the proxy
+        if: always()
+        run: docker compose -f proxy/docker-compose.yml down
+
+      - name: Keep the records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-workflow
+          path: evals/results/
+          if-no-files-found: ignore

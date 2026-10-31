@@ -54,8 +54,9 @@ const digests = new DigestService({
   missing (`di-lazy-secrets`).
 - When two modules need the same service, give it a lazy getter in `container.ts`. That is the
   shared root.
-- **Existing services are migrated only when a task already touches them.** When one is, run
-  `pnpm arch:baseline` in the same PR so the baseline shrinks.
+- **Existing services are migrated only when a task already touches them**, i.e. edits the service or
+  its repository (adding one method counts). When one is, run `pnpm arch:baseline` in the same PR so
+  the baseline shrinks. A service the task does not open stays as it is.
 
 ## `di-composition-root-only`
 

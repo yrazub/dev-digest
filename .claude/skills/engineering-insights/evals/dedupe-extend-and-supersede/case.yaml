@@ -1,0 +1,11 @@
+schema_version: "1.1"
+name: dedupe-extend-and-supersede
+expected_outcome: |
+  Four items in the log. (1) "relation does not exist" is already recorded: write nothing. (2) the
+  rebase "column already exists" failure is a narrower case of the same topic: extend the existing entry
+  with a dated line beneath it, without rewording it. (3) db:push no longer exists and contradicts an
+  existing Tool & Library Note: append Superseded beneath the old entry (keep its text), write the
+  replacement rule as its own entry, and flag the contradiction to the user in the reply. (4) the silent
+  skip of *.it.test.ts without Docker is new and gets its own entry with the vitest.config.ts evidence.
+context:
+  scaffold_script: place-files.sh

@@ -1,0 +1,9 @@
+{
+  "name": "@devdigest/api",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "arch:check": "depcruise src --config .dependency-cruiser.cjs",
+    "arch:baseline": "depcruise src --config .dependency-cruiser.cjs --output-type baseline > .dependency-cruiser-known-violations.json"
+  }
+}

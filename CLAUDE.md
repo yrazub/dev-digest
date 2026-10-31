@@ -1,6 +1,6 @@
 # DevDigest
 
-Local-first AI pull-request review. Five standalone packages, **no monorepo
+Local-first AI pull-request review. Six standalone packages, **no monorepo
 workspace** — each has its own `package.json` and lockfile; cross-package code is
 shared through tsconfig path aliases, never published modules.
 
@@ -11,7 +11,8 @@ The table below is a routing map, not a substitute for reading the file.
 
 | If the task touches… | Read first |
 |---|---|
-| anything under `client/` `server/` `reviewer-core/` `e2e/` `mcp/` | that module's `CLAUDE.md`, then its `README.md` |
+| anything under `client/` `server/` `reviewer-core/` `e2e/` `mcp/` `evals/` | that module's `CLAUDE.md`, then its `README.md` |
+| an eval case (`*.cases.ts`, `*.eval.ts`), the eval runner, or whether a skill/agent/CLAUDE.md change still behaves | `evals/CLAUDE.md` — cases are a separate suite from the code tests in `TESTING.md` |
 | the end-to-end review flow, or "how does X reach Y" | `README.md` — architecture diagram |
 | how a repository document reaches the prompt and the run trace (Project Context) | `docs/project-context.md` |
 | any test, or deciding where a test belongs | `TESTING.md` |
@@ -44,6 +45,7 @@ Node ≥22 · TypeScript · Fastify 5 · Drizzle + Postgres/pgvector · Next.js 
 | test one package | `cd <pkg> && pnpm test` (server, client) / `npm test` (reviewer-core, e2e, mcp) |
 | typecheck | same, `typecheck` |
 | MCP server | `cd mcp && npm ci` once, then `node mcp/bin/devdigest-mcp.mjs` — not part of `./scripts/dev.sh` |
+| evals | `cd evals && pnpm eval:quality` (static, free) · `eval:skills` · `eval:agents` · `eval:workflow` (these call Claude) · `eval:repeat <path> -n 2 --label x` · `typecheck` |
 
 ## Map
 
@@ -54,6 +56,7 @@ Node ≥22 · TypeScript · Fastify 5 · Drizzle + Postgres/pgvector · Next.js 
 | `reviewer-core/` | `@devdigest/reviewer-core` | pure engine: diff → prompt → LLM → findings | npm |
 | `e2e/` | `@devdigest/e2e` | deterministic browser flows | npm |
 | `mcp/` | `@devdigest/mcp` | local `devdigest-mcp` MCP server (stdio), an HTTP client of the API | npm |
+| `evals/` | `@devdigest/evals` | evals for the harness itself: skills, agents, CLAUDE.md routing (judged by tool-call trace) | pnpm |
 | `server/src/vendor/shared` | `@devdigest/shared` | Zod contracts, one definition for every package | — |
 
 ## Conventions

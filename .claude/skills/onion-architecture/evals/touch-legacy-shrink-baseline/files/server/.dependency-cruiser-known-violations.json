@@ -1,0 +1,8 @@
+[
+  { "type": "dependency", "from": "src/modules/pulls/routes.ts", "to": "src/db/client.ts",
+    "rule": { "severity": "error", "name": "db-only-in-repository" } },
+  { "type": "dependency", "from": "src/modules/reviews/service.ts", "to": "src/platform/container.ts",
+    "rule": { "severity": "error", "name": "di-narrow-deps" } },
+  { "type": "dependency", "from": "src/modules/reviews/service.ts", "to": "src/db/rows.ts",
+    "rule": { "severity": "error", "name": "db-only-in-repository" } }
+]

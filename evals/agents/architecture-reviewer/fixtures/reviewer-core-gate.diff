@@ -1,0 +1,25 @@
+diff --git a/reviewer-core/src/review/run.ts b/reviewer-core/src/review/run.ts
+index ccccccc..ddddddd 100644
+--- a/reviewer-core/src/review/run.ts
++++ b/reviewer-core/src/review/run.ts
+@@ -8,8 +8,9 @@ import type {
+   UnifiedDiff,
+ } from '@devdigest/shared';
+ import { Review as ReviewSchema } from '@devdigest/shared';
++import { readFileSync } from 'node:fs';
+ import { assemblePrompt, type ProjectContextDoc } from '../prompt.js';
+-import { groundFindings, groundingSummary } from '../grounding.js';
++import { groundingSummary } from '../grounding.js';
+ import { applyScopeFilter } from '../scope.js';
+ import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
+ 
+@@ -238,7 +239,8 @@ export async function reviewPullRequest(
+   );
+ 
+   // SHARED citation-grounding gate (the only post-step; not duplicated per strategy).
+-  const ground = groundFindings(merged.findings, input.diff);
++  const extraRules = readFileSync('.devdigest/extra-rules.txt', 'utf8');
++  const ground = { kept: merged.findings, dropped: [] as never[] };
+   const grounding = groundingSummary(ground);
+   for (const d of ground.dropped) {
+     emit('info', `grounding dropped "${d.finding.title}": ${d.reason}`);

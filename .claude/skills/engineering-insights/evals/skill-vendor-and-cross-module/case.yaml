@@ -1,0 +1,13 @@
+schema_version: "1.1"
+name: skill-vendor-and-cross-module
+expected_outcome: |
+  Four findings, each with a routing subtlety. (1) the zod skill gave Zod-3 advice that fails in this
+  Zod-4 repo: two entries - one against the module code, and one in the root file tagged with the
+  `**Skill:** \`zod\`` line, each with See also to the other; the skill's own folder is not edited.
+  (2) the vendored client copy is stale: recorded in client/INSIGHTS.md against the consumer, with no edit
+  to client/src/vendor. (3) the engine/server confidence field: one entry per module, each with See also
+  to the other. (4) `npm install` vs CLAUDE.md contradicts an instruction: write the entry if worthwhile
+  but stop and tell the user, naming CLAUDE.md, the evidence and the edit proposed, and leave CLAUDE.md
+  untouched.
+context:
+  scaffold_script: place-files.sh

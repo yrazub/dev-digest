@@ -25,6 +25,25 @@ captured, then add one dated `Session Notes` line.
 An empty capture is a correct outcome. Signal quality beats volume — a file nobody trusts is
 worse than a short one.
 
+## Decide first
+
+Six situations decide what you write, and the quickest way to get one wrong is to treat it as
+"just add an entry". Read the list before step 1.
+
+- **Same symptom or cause already recorded, nothing new** → **skip**: write nothing. Only when the
+  repeat adds a new detail or trigger, append one dated line beneath the old entry (**extend**).
+- **Related but different symptom** (another error string, or the same area failing another way)
+  → a **new entry**, and a `**See also:**` line beneath the old one pointing at it.
+- **An old entry stopped being true** → `**Superseded YYYY-MM-DD:**` beneath it. Not "extend".
+- **A skill's advice was wrong about module code** → **two** entries, never one: one in the
+  module's file (`server/INSIGHTS.md` if the code is in `server/`) and one in the root
+  `INSIGHTS.md` tagged ``**Skill:** `<name>` ``, each with `**See also:**` to the other. Writing
+  only the root entry is the usual mistake.
+- **One change lands on both sides of a boundary** (an engine and the server that persists its
+  output) → one entry **per module**, each with `**See also:**` to the other.
+- **The finding contradicts an instruction** (`CLAUDE.md`, a skill, a spec) → write the entry, tell
+  the user, and leave the instruction alone.
+
 ## Workflow
 
 ```
@@ -48,7 +67,7 @@ worse than a short one.
 | `e2e/**` | `e2e/INSIGHTS.md` |
 | `mcp/**` | `mcp/INSIGHTS.md` |
 | two or more packages, or none of them — git, CI, Docker, secrets, `scripts/`, the agent workflow itself | root `INSIGHTS.md` |
-| a skill under `.claude/skills/` — how it behaves, what it covers, where its guidance is wrong or out of date | root `INSIGHTS.md`, with a `**Skill:**` line |
+| a skill under `.claude/skills/` — how it behaves, what it covers, where its guidance is wrong or out of date | root `INSIGHTS.md`, with a `**Skill:**` line — plus a module entry too when the skill's advice failed on that module's code (see "Decide first") |
 
 Check with `git diff --name-only` (add `HEAD` for committed work) rather than from memory.
 
@@ -87,7 +106,8 @@ Then pick one of four outcomes deliberately. Appending is not the default.
 |---|---|
 | nothing related | write the new entry |
 | the same claim, nothing new | **write nothing.** A second copy does not make the first truer, and two near-identical entries are how these files stop being read |
-| the same topic, with a new detail or a narrower case | **extend** — append a dated line beneath the existing entry. Never reword the entry itself |
+| the same symptom (same error string or same cause) with a new detail or trigger | **extend** — append a dated line beneath the existing entry. Never reword the entry itself |
+| a related but different symptom or cause (another error string, or the same area failing another way) | **new entry**, and append `**See also:**` beneath the old one pointing to it, so a session that reads only the old entry finds the new one |
 | something the new finding contradicts | **resolve it** — below |
 
 ### When a new finding contradicts an old one
