@@ -1,5 +1,5 @@
 {
-  "$comment": "Which skill reviews which changed files. Every folder in .claude/skills/ must have an entry here; one without is reported as unrouted. `review: false` marks a skill that is not a reviewer. `critical_rules` is the closed list of rule IDs that may stay CRITICAL; any other CRITICAL from that skill is clamped to WARNING. The bar is explained in references/critical-rules.md.",
+  "$comment": "Which skill reviews which changed files. Every folder in .claude/skills/ must have an entry here; one without is reported as unrouted. `review: false` marks a skill that is not a reviewer. `critical_rules` is the closed list of rule IDs that may stay CRITICAL; any other CRITICAL from that skill is clamped to WARNING. The bar is explained in references/critical-rules.md. `evals/**` and `.claude/skills/*/evals/**` are excluded on purpose: no review skill covers eval cases, and the evals workflow checks them (`pnpm typecheck` and `pnpm eval:quality` are blocking in CI; the model-run tiers are informational).",
   "defaults": {
     "base": "origin/main",
     "max_files": 12
@@ -11,6 +11,8 @@
     "skills-lock.json",
     "server/src/db/migrations/**",
     "client/src/vendor/**",
+    "evals/**",
+    ".claude/skills/*/evals/**",
     "**/*.md",
     "**/*.{png,jpg,jpeg,gif,webp,ico,svg,pdf,woff,woff2,ttf}"
   ],
