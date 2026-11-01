@@ -36,7 +36,7 @@ This feature is separate from the `evals/` package, which evaluates the Claude C
   50), with fixed inputs and a stored snapshot of the agent's version, system prompt, provider,
   model, strategy and skills.
 - Scoring entirely in code, with zero LLM calls: a finding matches an expectation when the file is
-  the same and the line ranges overlap; recall, precision and citation accuracy per run.
+  the same and the line ranges overlap, with a 2-line tolerance on each side for a `must_find` expectation; recall, precision and citation accuracy per run.
 - An Eval Dashboard page in the sidebar's Skills Lab section: all agents with their latest run, the
   six most recent runs across agents, a per-agent view with metric cards and a runs table, and a
   Compare modal for two runs of one agent with signed metric deltas and a word-level system-prompt
@@ -135,7 +135,7 @@ percentage minus the older one's, in points ("pt"), with its sign.
 | AC-29 | P1 | WHEN a run starts, the API shall store with the run the agent's version, system prompt, provider, model, strategy, and the name and version of each enabled linked skill. | US-3, US-5 | integration (server) |
 | AC-30 | P1 | WHILE a run reviews a case, the API shall give the model only the case's stored diff fragment, title and description, the run's stored system prompt and its skills, and no repository map, callers digest, file-rank note, intent, project-context document or memory. | US-3 | integration (server) |
 | AC-31 | P1 | WHEN every case of a run has finished or been deleted, the API shall store one result per remaining case and set the run's status to `done`. | US-3 | integration (server) |
-| AC-32 | P1 | The API shall count a grounded finding as matching a case's expectation exactly when its file equals the expectation's file and its line range overlaps the expectation's line range, ends included. | US-4 | unit (server) |
+| AC-32 | P1 | The API shall count a grounded finding as matching a case's expectation exactly when its file equals the expectation's file and its line range overlaps, ends included, the expectation's line range widened by 2 lines on each side for a `must_find` expectation and not widened for a `must_not_flag` expectation. | US-4 | unit (server) |
 | AC-33 | P1 | The API shall compute a run's recall as the number of completed `must_find` cases with at least one matching grounded finding, divided by the number of completed `must_find` cases. | US-4 | unit (server) |
 | AC-34 | P1 | The API shall compute a run's precision as TP / (TP + FP), where TP counts the grounded findings matching their own case's `must_find` expectation and FP counts those matching their own case's `must_not_flag` expectation. | US-4 | unit (server) |
 | AC-35 | P1 | The API shall compute a run's citation accuracy as the number of findings kept by the citation gate divided by the number kept plus the number dropped, over the run's completed cases. | US-4 | unit (server) |
@@ -237,7 +237,7 @@ AC-96, AC-97: the repository has no root `package.json` (decision of 2026-11-01)
 | EC-17 | The user leaves the page during a run and comes back | Polling resumes; the button shows progress | AC-55, AC-54 |
 | EC-18 | No `must_find` case completed; no finding matched any expectation; no finding at all | Recall, precision or citation accuracy is null, shown as "—" with no delta | AC-36, AC-74 |
 | EC-19 | A finding matches neither its case's expectation nor anything else | Counted in neither TP nor FP; still counted for citation accuracy | AC-34, AC-35 |
-| EC-20 | Several findings overlap one `must_find` expectation | The case passes once for recall; each finding adds to TP | AC-33, AC-34 |
+| EC-20 | Several findings match one `must_find` expectation | The case passes once for recall; each finding adds to TP | AC-33, AC-34 |
 | EC-21 | The agent has no run, or exactly one done run | Metrics "—" or shown without delta; "No runs yet" in the history | AC-53, AC-74, AC-75 |
 | EC-22 | A case is deleted after runs used it | Earlier runs keep their metrics and counts; that case's results go with it | AC-25 |
 | EC-23 | A case is deleted while a run of its agent is in flight | Delete is disabled on the Evals tab while the run is `running`; a delete that still reaches the API (another tab, a direct call) is accepted, and the run finishes with that case counted neither as passed nor as errored and left out of its metrics | AC-31, AC-98, AC-99 |
@@ -259,6 +259,8 @@ AC-96, AC-97: the repository has no root `package.json` (decision of 2026-11-01)
 | EC-39 | Another workspace's id in a route | `404` | AC-50 |
 | EC-40 | The seeded stack has no API key | The seeded runs show from the database; Compare works | AC-93, AC-94 |
 | EC-41 | Docker is not running when `./scripts/verify-l06.sh` runs | The command fails with "Docker is required for the eval integration tests" instead of printing green with the self-skipped integration tests | AC-97 |
+| EC-42 | A finding sits 1 or 2 lines outside a `must_find` expectation's range (the model miscounted lines) | It matches: the case passes and the finding counts toward TP; 3 lines outside is still a miss | AC-32 |
+| EC-43 | A finding sits 1 line outside a `must_not_flag` expectation's range | It does not match: the case passes and the finding counts as no FP | AC-32 |
 
 ## Non-functional requirements
 - NFR-1 — LLM cost: scoring makes 0 model calls. Creating a case, listing cases or runs, reading a

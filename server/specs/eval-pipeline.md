@@ -58,7 +58,7 @@ parent run table is added, through one generated migration. `reviewer-core` is u
 | R-SRV-16 | The run row shall store, read once at the start, the agent's `version`, `system_prompt`, `provider`, `model`, `strategy`, and `skills` as `[{ name, version }]` of its enabled linked skills in prompt order; every case of the run shall use these values and the skill bodies read at the same moment. | AC-29, AC-71, AC-81, AC-82 |
 | R-SRV-17 | For each case the executor shall call `reviewPullRequest()` once with `systemPrompt`, `model`, `strategy` and the skill blocks of R-SRV-16, `diff` parsed from `input_diff`, `prDescription` set to the stored description when not null, and `task` built like the review task line from the stored number, title and author; and shall pass no `callers`, `repoMap`, `specs`, `memory`, `intent` or `scopeFilter`, and no file-rank note. | AC-30 |
 | R-SRV-18 | WHEN every case of a run that still exists has a result, the executor shall set `status: 'done'`, `finished_at`, `recall`, `precision`, `citation_accuracy`, `cases_passed`, `cases_errored` and `cost_usd` (the sum over completed cases, null when any of them is null). | AC-31 |
-| R-SRV-19 | The scorer shall treat a grounded finding as matching an expectation exactly when `finding.file === expectation.file` and `finding.start_line <= expectation.end_line` and `expectation.start_line <= finding.end_line`. | AC-32 |
+| R-SRV-19 | The scorer shall treat a grounded finding as matching an expectation exactly when `finding.file === expectation.file` and `finding.start_line <= expectation.end_line + t` and `expectation.start_line − t <= finding.end_line`, where `t` is the named constant `MUST_FIND_LINE_TOLERANCE = 2` for a `must_find` expectation and 0 for a `must_not_flag` expectation. | AC-32 |
 | R-SRV-20 | The scorer shall set a run's `recall` to the number of completed `must_find` cases with at least one matching grounded finding divided by the number of completed `must_find` cases. | AC-33 |
 | R-SRV-21 | The scorer shall set a run's `precision` to TP / (TP + FP), with TP the count of grounded findings matching their own case's expectation over completed `must_find` cases and FP the same count over completed `must_not_flag` cases. | AC-34 |
 | R-SRV-22 | The scorer shall set a run's `citation_accuracy` to Σ kept / Σ (kept + dropped) over the completed cases, where kept is the length of the engine's grounded findings and dropped the length of its `dropped` list. | AC-35 |
@@ -215,7 +215,7 @@ export const EvalFoundFinding = z.object({
   title: z.string(),
   severity: Severity,
   category: FindingCategory,
-  matches: z.boolean(),             // overlaps this case's expectation (R-SRV-19)
+  matches: z.boolean(),             // matches this case's expectation (R-SRV-19)
 });
 export const EvalCaseResult = EvalRunRecord.extend({
   suite_run_id: z.string(),
@@ -358,7 +358,7 @@ The spec agent cannot write this file; the plan builds it (R-SRV-44–R-SRV-47).
 
 | File | Kind | Covers |
 |---|---|---|
-| `test/eval-domain.test.ts` | hermetic | match rule incl. touching ends and other files (R-SRV-19); recall, precision, citation over a fixture of mixed cases with several matches per case, unmatched findings, errored cases excluded (R-SRV-20–R-SRV-22, R-SRV-31); nulls (R-SRV-23); per-case columns; the fragment cut at 1,500 lines with overlapping and non-overlapping hunks (R-SRV-4, R-SRV-8); case naming incl. an empty and a 60-character title, and a title whose cut ends in `-` (R-SRV-12) |
+| `test/eval-domain.test.ts` | hermetic | match rule incl. touching ends and other files, `MUST_FIND_LINE_TOLERANCE` = 2, `must_find` matching 1 and 2 lines past either end and missing at 3, the tolerance not crossing files, `must_not_flag` not matching 1 line past either end, and the same at the per-case score level (R-SRV-19); recall, precision, citation over a fixture of mixed cases with several matches per case, unmatched findings, errored cases excluded (R-SRV-20–R-SRV-22, R-SRV-31); nulls (R-SRV-23); per-case columns; the fragment cut at 1,500 lines with overlapping and non-overlapping hunks (R-SRV-4, R-SRV-8); case naming incl. an empty and a 60-character title, and a title whose cut ends in `-` (R-SRV-12) |
 | `test/eval-scorer-purity.test.ts` | hermetic | the scorer module imports nothing but `@devdigest/shared` (source scan) and scores a fixture with a `MockLLMProvider` whose `calls` stay empty (R-SRV-24) |
 | `test/eval-executor.test.ts` | hermetic, fake ports | concurrency never above 3 with 7 cases (R-SRV-36); the inputs handed to `reviewPullRequest()` — no callers, repo map, specs, memory, intent, scope filter, rank note (R-SRV-17) |
 | `test/eval-rate-limit.test.ts` | hermetic | the route's rate-limit config (R-SRV-34), as `brief-rate-limit.test.ts` does |
