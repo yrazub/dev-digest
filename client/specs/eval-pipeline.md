@@ -118,7 +118,8 @@ Strings go through `next-intl`. Breadcrumbs: `/evals` — `page.crumbSkillsLab` 
 |---|---|
 | FindingCard button, saved / in-set / error states | the existing `FindingCard/` (a sub-component if it grows), agent id threaded from `FindingsPanel` and `InlineFinding`'s parents |
 | Evals tab (metric strip, cases, runs, delete modal) | `src/app/agents/_components/AgentEditor/_components/EvalsTab/` |
-| Shared eval pieces (metric bar, delta label, run row, run drawer, Compare modal, word diff) | `src/components/eval/` (per the `frontend-ui-architecture` skill: shared by the Evals tab and the dashboard, so not inside either feature's `_components/`) |
+| Shared eval pieces (metric bar, delta label, runs table, run drawer, run button, constants) | `src/components/eval/` (shared by the Evals tab and the dashboard, so not inside either feature's `_components/`) |
+| Compare modal, its word diff and compare helpers | `src/app/evals/[agentId]/_components/CompareModal/` (one consumer, the agent view — `struct-colocate`) |
 | Overview page | `src/app/evals/page.tsx` + `src/app/evals/_components/EvalOverview/` |
 | Agent view | `src/app/evals/[agentId]/page.tsx` + `_components/AgentEvalView/` |
 | Sidebar item | `src/components/app-shell/nav.ts` |
@@ -186,9 +187,9 @@ Design source: "DevDigest Design (standalone).html" from the task, decoded — a
 | `nav` / app-shell test | R-WEB-28 |
 | `EvalOverview.test.tsx` | R-WEB-29–R-WEB-31, R-WEB-41, R-WEB-42, R-WEB-56: agents with and without runs, a disabled agent, no agents, the recent feed, navigation |
 | `AgentEvalView.test.tsx` | R-WEB-32–R-WEB-55: deltas incl. ±0, null metrics, fewer than two done runs, selection rules incl. a third pick and disabled rows, Compare tiles, word diff, configuration block, no-change text, flipped cases, `?compare=` write and read (valid, unknown, failed), banner, trend card present, "Show more", checkbox names, ellipsis titles, modal max height; costs in `formatCostUsd` form incl. the Cost tile delta (R-WEB-35, R-WEB-39) |
-| word-diff helper test (in `src/components/eval/`) | R-WEB-36: insertions, deletions, identical prompts, whitespace kept |
+| word-diff helper test (in `src/app/evals/[agentId]/_components/CompareModal/`) | R-WEB-36: insertions, deletions, identical prompts, whitespace kept |
 | trend label helper test (pure, no chart render — jsdom gives `ResponsiveContainer` no size) | R-WEB-55: tooltip text "v{version} · {cost}", a null cost as "—", null metric values kept as gaps |
-| shared eval component tests in `src/components/eval/` | R-WEB-26, R-WEB-35, R-WEB-49: metric bar, delta label, run row, run drawer, Compare modal pieces used by both surfaces |
+| shared eval component tests in `src/components/eval/` | R-WEB-26, R-WEB-49: metric bar, delta label, runs table, run drawer used by both surfaces |
 | eval hooks test (`src/lib/hooks/evals.test.tsx`) | R-WEB-20, R-WEB-21: polling while `running`, the invalidations on completion |
 
 Component tests mock `fetch`; AC-93 and AC-94 are an `e2e` flow over the seeded runs (server spec,
