@@ -119,7 +119,9 @@ describe("RunDrawer content", () => {
     expect(within(first).getByRole("img", { name: "pass" })).toBeInTheDocument();
     expect(within(first).getByText("stripe-key-leak")).toBeInTheDocument();
     expect(within(first).getByText("must find")).toBeInTheDocument();
-    expect(within(first).getByText("src/auth.ts:10-14")).toBeInTheDocument();
+    // the path and the line range are separate spans (the range never truncates)
+    expect(within(first).getByText("src/auth.ts")).toBeInTheDocument();
+    expect(within(first).getByText(":10-14")).toBeInTheDocument();
     expect(within(first).getByText("Hardcoded key")).toBeInTheDocument();
     // exactly one finding is marked as matching
     expect(within(first).getAllByText("matches")).toHaveLength(1);
@@ -132,6 +134,104 @@ describe("RunDrawer content", () => {
 
     expect(within(third).getByRole("img", { name: "errored" })).toBeInTheDocument();
     expect(within(third).getByText("No diff available for a.ts")).toBeInTheDocument();
+  });
+
+  it("shortens a long path from the left but keeps the full line range and the full location in the title", () => {
+    const longFile = "packages/billing/src/lib/format/duration.ts";
+    mocks.query.data = detail([
+      result("1", {
+        outcome: "pass",
+        actual_output: {
+          findings: [
+            { ...FINDING, file: longFile, start_line: 116, end_line: 128, title: "Off by one", matches: true },
+            { ...FINDING, file: "src/short.ts", start_line: 1, end_line: 2, title: "Short path", matches: false },
+          ],
+          dropped: 0,
+        },
+      }),
+    ]);
+    render(ui(vi.fn()));
+
+    expect(screen.getByText("…/src/lib/format/duration.ts")).toBeInTheDocument();
+    expect(screen.queryByText(longFile)).not.toBeInTheDocument();
+    expect(screen.getByText(":116-128")).toBeInTheDocument();
+    // the whole location stays reachable on hover
+    expect(screen.getByTitle(`${longFile}:116-128`)).toBeInTheDocument();
+    // a path that fits is shown whole
+    expect(screen.getByText("src/short.ts")).toBeInTheDocument();
+    expect(screen.getByText(":1-2")).toBeInTheDocument();
+  });
+
+  it("shows what a failed must_find case expected next to the range the agent actually reported", () => {
+    mocks.query.data = detail([
+      result("1", {
+        case_name: "off-by-one",
+        kind: "must_find",
+        outcome: "fail",
+        expectation: {
+          kind: "must_find",
+          file: "src/format/duration.ts",
+          start_line: 17,
+          end_line: 17,
+          title: "t",
+          severity: "CRITICAL",
+          category: "security",
+        } as EvalCaseResult["expectation"],
+        actual_output: {
+          findings: [{ ...FINDING, file: "src/format/duration.ts", start_line: 16, end_line: 16, matches: false }],
+          dropped: 0,
+        },
+      }),
+    ]);
+    render(ui(vi.fn()));
+
+    expect(screen.getByText("Expected src/format/duration.ts:17-17")).toBeInTheDocument();
+    // the finding's own range is visible, so the one-line miss can be seen
+    expect(screen.getByText(":16-16")).toBeInTheDocument();
+    expect(screen.queryByText("matches")).not.toBeInTheDocument();
+  });
+
+  it("shows what a failed must_not_flag case must not flag", () => {
+    mocks.query.data = detail([
+      result("1", {
+        case_name: "no-flag",
+        kind: "must_not_flag",
+        outcome: "fail",
+        expectation: {
+          kind: "must_not_flag",
+          file: "src/safe.ts",
+          start_line: 5,
+          end_line: 9,
+        } as EvalCaseResult["expectation"],
+        actual_output: {
+          findings: [{ ...FINDING, file: "src/safe.ts", start_line: 6, end_line: 7, matches: false }],
+          dropped: 0,
+        },
+      }),
+    ]);
+    render(ui(vi.fn()));
+
+    expect(screen.getByText("Must not flag src/safe.ts:5-9")).toBeInTheDocument();
+    expect(screen.queryByText(/^Expected /)).not.toBeInTheDocument();
+  });
+
+  it("shows no expectation line for a passed or an errored case", () => {
+    mocks.query.data = detail([
+      result("1", { case_name: "ok", outcome: "pass" }),
+      result("2", {
+        case_name: "ok-not-flag",
+        kind: "must_not_flag",
+        outcome: "pass",
+        expectation: { kind: "must_not_flag", file: "src/safe.ts", start_line: 5, end_line: 9 } as EvalCaseResult["expectation"],
+      }),
+      result("3", { case_name: "broken", outcome: "errored", actual_output: null, error: "boom" }),
+    ]);
+    render(ui(vi.fn()));
+
+    expect(screen.getByText("ok")).toBeInTheDocument();
+    expect(screen.getByText("broken")).toBeInTheDocument();
+    expect(screen.queryByText(/^Expected /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Must not flag /)).not.toBeInTheDocument();
   });
 
   it("uses the singular for one dropped finding and shows a failed run's own error", () => {

@@ -1,5 +1,6 @@
 /* RunDrawer — a right-side panel with one run's per-case results: outcome, case name, kind,
-   the grounded findings (matching ones marked), the dropped count and the error. A local panel
+   the expectation of a failed case, the grounded findings (matching ones marked), the dropped
+   count and the error. A finding's line range is never truncated; only its path is. A local panel
    rather than the vendored Drawer, which has no Esc handling. Closes on Esc or its button and
    puts focus back on `returnFocusTo`. Every text is a React text node. */
 "use client";
@@ -10,7 +11,7 @@ import { Icon } from "@devdigest/ui";
 import { useEvalRun } from "@/lib/hooks/evals";
 import type { EvalCaseResult } from "@devdigest/shared";
 import { KIND_PILL, OUTCOME_ICON } from "./constants";
-import { formatRunTime } from "./helpers";
+import { formatLocation, formatRunTime, shortenPath } from "./helpers";
 import { s } from "./styles";
 
 function ResultBlock({ result }: { result: EvalCaseResult }) {
@@ -36,12 +37,26 @@ function ResultBlock({ result }: { result: EvalCaseResult }) {
         </span>
         <span style={s.kindPill(pill.color, pill.bg, pill.border)}>{t(`kind.${result.kind}`)}</span>
       </div>
+      {result.outcome === "fail" && (
+        <div className="mono" style={s.expectation}>
+          {t(`drawer.expectation.${result.expectation.kind}`, {
+            location: formatLocation(
+              result.expectation.file,
+              result.expectation.start_line,
+              result.expectation.end_line,
+            ),
+          })}
+        </div>
+      )}
       {output && output.findings.length > 0 && (
         <ul style={s.findings}>
           {output.findings.map((f, i) => (
             <li key={`${f.file}:${f.start_line}:${i}`} style={s.finding}>
-              <span className="mono" style={s.findingLoc} title={`${f.file}:${f.start_line}-${f.end_line}`}>
-                {f.file}:{f.start_line}-{f.end_line}
+              <span className="mono" style={s.findingLoc} title={formatLocation(f.file, f.start_line, f.end_line)}>
+                <span style={s.findingPath}>{shortenPath(f.file)}</span>
+                <span style={s.findingRange}>
+                  :{f.start_line}-{f.end_line}
+                </span>
               </span>
               <span style={s.findingTitle} title={f.title}>
                 {f.title}

@@ -201,17 +201,35 @@ export const s = {
     flexShrink: 0,
   }),
   findings: { listStyle: "none", margin: "6px 0 0", padding: 0 } satisfies CSSProperties,
+  expectation: {
+    fontSize: 11.5,
+    color: "var(--text-muted)",
+    marginTop: 6,
+    overflowWrap: "anywhere",
+  } satisfies CSSProperties,
   finding: {
     display: "flex",
-    alignItems: "baseline",
+    alignItems: "flex-start",
     gap: 8,
     fontSize: 12,
     color: "var(--text-secondary)",
     padding: "2px 0",
     minWidth: 0,
   } satisfies CSSProperties,
-  findingLoc: { ...oneLine, fontSize: 11.5, flexShrink: 1, maxWidth: "50%" } satisfies CSSProperties,
-  findingTitle: { ...oneLine, flex: 1 } satisfies CSSProperties,
+  /* The path shrinks and ellipsises; the `:start-end` range never does (R-WEB-44). */
+  findingLoc: { display: "flex", fontSize: 11.5, minWidth: 0, maxWidth: "55%" } satisfies CSSProperties,
+  findingPath: { ...oneLine } satisfies CSSProperties,
+  findingRange: { flexShrink: 0, whiteSpace: "nowrap" } satisfies CSSProperties,
+  /* Up to two lines, then an ellipsis; the full title stays in the element's `title`. */
+  findingTitle: {
+    flex: 1,
+    minWidth: 0,
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: 2,
+    overflow: "hidden",
+    overflowWrap: "anywhere",
+  } satisfies CSSProperties,
   matches: {
     fontSize: 10,
     fontWeight: 700,

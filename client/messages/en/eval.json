@@ -150,6 +150,10 @@
     "matches": "matches",
     "dropped": "{count, plural, one {# finding dropped} other {# findings dropped}}",
     "noFindings": "No findings",
+    "expectation": {
+      "must_find": "Expected {location}",
+      "must_not_flag": "Must not flag {location}"
+    },
     "loading": "Loading run…",
     "loadError": "Could not load this run.",
     "label": "Run details"

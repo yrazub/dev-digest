@@ -32,6 +32,28 @@ export function formatRunTime(iso: string): string {
   return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`;
 }
 
+/** `file:start-end`, the form a finding's or an expectation's location is shown in. */
+export function formatLocation(file: string, startLine: number, endLine: number): string {
+  return `${file}:${startLine}-${endLine}`;
+}
+
+/** A path cut from the left so its file name stays visible: `…/format/duration.ts`. Keeps as many
+    trailing segments as fit in `maxChars`; a path that already fits, or has no folder, is returned
+    unchanged. */
+export function shortenPath(path: string, maxChars = 30): string {
+  if (path.length <= maxChars) return path;
+  const segments = path.split("/");
+  const fileName = segments.pop();
+  if (!fileName || segments.length === 0) return path;
+  let kept = fileName;
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const next = `${segments[i]}/${kept}`;
+    if (`…/${next}`.length > maxChars) break;
+    kept = next;
+  }
+  return `…/${kept}`;
+}
+
 /** The accessible name of a run's checkbox (R-WEB-48): `YYYY-MM-DD HH:mm · v<n>`. */
 export function runCheckboxLabel(run: Pick<EvalSuiteRun, "started_at" | "config">): string {
   return `${formatRunTime(run.started_at)} · v${run.config.agent_version}`;

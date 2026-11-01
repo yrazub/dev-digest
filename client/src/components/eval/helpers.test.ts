@@ -6,6 +6,7 @@ import {
   deltaPoints,
   deltaText,
   flippedCases,
+  formatLocation,
   formatRunTime,
   latestDone,
   orderPair,
@@ -14,8 +15,45 @@ import {
   runCheckboxLabel,
   runningRun,
   sameConfig,
+  shortenPath,
   sparkValues,
 } from "./helpers";
+
+describe("formatLocation", () => {
+  it("joins the file and the line range as `file:start-end`", () => {
+    expect(formatLocation("src/auth.ts", 10, 14)).toBe("src/auth.ts:10-14");
+    expect(formatLocation("a.ts", 3, 3)).toBe("a.ts:3-3");
+  });
+});
+
+describe("shortenPath", () => {
+  it("returns a path that fits unchanged, including one of exactly 30 characters", () => {
+    expect(shortenPath("src/format/duration.ts")).toBe("src/format/duration.ts");
+    const thirty = "src/lib/format/duration-xyz.ts";
+    expect(thirty).toHaveLength(30);
+    expect(shortenPath(thirty)).toBe(thirty);
+    // one character over the limit is cut
+    expect(shortenPath("src/lib/format/duration-xyzw.ts")).toBe("…/lib/format/duration-xyzw.ts");
+  });
+
+  it("returns a path without a folder unchanged, however long", () => {
+    const name = "a-very-long-file-name-without-any-folder.ts";
+    expect(name.length).toBeGreaterThan(30);
+    expect(shortenPath(name)).toBe(name);
+  });
+
+  it("cuts a long folder chain from the left and keeps the file name and as many trailing folders as fit", () => {
+    expect(shortenPath("packages/billing/src/lib/format/duration.ts")).toBe("…/src/lib/format/duration.ts");
+    // a bigger budget keeps more folders, a smaller one fewer
+    expect(shortenPath("packages/billing/src/lib/format/duration.ts", 40)).toBe("…/billing/src/lib/format/duration.ts");
+    expect(shortenPath("packages/billing/src/lib/format/duration.ts", 20)).toBe("…/format/duration.ts");
+  });
+
+  it("never cuts the file name, even when it alone exceeds the limit", () => {
+    const name = "an-extremely-long-file-name-that-exceeds-the-limit.ts";
+    expect(shortenPath(`src/some/dir/${name}`)).toBe(`…/${name}`);
+  });
+});
 
 describe("pct", () => {
   it("rounds a 0..1 metric to a whole percent and shows an em-dash when unknown", () => {
