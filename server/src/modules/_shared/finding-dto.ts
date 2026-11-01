@@ -36,7 +36,8 @@ export function findingRowToDto(row: PersistedFinding): FindingRecord {
     title: row.title,
     file: row.file,
     start_line: row.startLine,
-    end_line: row.endLine,
+    // A stored range that ends before it starts is shown as its first line.
+    end_line: Math.max(row.endLine, row.startLine),
     rationale: row.rationale,
     suggestion: row.suggestion ?? null,
     confidence: row.confidence,
