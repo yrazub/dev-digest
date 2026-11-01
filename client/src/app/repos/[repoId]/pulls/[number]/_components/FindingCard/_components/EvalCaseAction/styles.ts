@@ -2,8 +2,10 @@ import type { CSSProperties } from "react";
 
 /** Co-located styles for EvalCaseAction. */
 export const s = {
-  /** Hoverable wrapper that carries the tooltip of a disabled button. */
-  tooltipWrap: { display: "inline-flex" } satisfies CSSProperties,
+  /** Hoverable wrapper that carries the tooltip of a disabled button. `relative` anchors the
+   *  absolutely positioned `visuallyHidden` span here, so it cannot escape the scrolling `main`
+   *  and stretch the page into a second scrollbar. */
+  tooltipWrap: { display: "inline-flex", position: "relative" } satisfies CSSProperties,
   /** Screen-reader-only text the disabled button's `aria-describedby` points at. */
   visuallyHidden: {
     position: "absolute",
