@@ -5,11 +5,24 @@
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
-import type { ReviewRecord } from "@devdigest/shared";
+import { NextIntlClientProvider } from "next-intl";
+import type { FindingRecord, ReviewRecord } from "@devdigest/shared";
+import prReview from "../../../../../../../../messages/en/prReview.json";
 
-// The header's delete button uses a TanStack mutation; no query client here.
+// The header's delete button uses a TanStack mutation; no query client here. The open body
+// renders a FindingsPanel, whose cards act through `useFindingAction` and the eval hooks.
 vi.mock("@/lib/hooks/reviews", () => ({
   useDeleteReview: () => ({ mutate: vi.fn(), isPending: false }),
+  useFindingAction: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+// Like the real hook, the mock answers with cases only for the agent that owns them.
+vi.mock("@/lib/hooks/evals", async () => ({
+  ...(await vi.importActual<typeof import("@/lib/hooks/evals")>("@/lib/hooks/evals")),
+  useAgentEvalCases: (agentId: string | null) => ({
+    data: agentId === "a1" ? { cases: [{ source_finding_id: "f1" }] } : undefined,
+  }),
+  useCreateEvalCase: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false, isError: false }),
 }));
 
 import { ReviewRunAccordion } from "./ReviewRunAccordion";
@@ -52,5 +65,43 @@ describe("ReviewRunAccordion — cost in the header", () => {
     cleanup();
     renderAccordion();
     expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+  });
+});
+
+describe("ReviewRunAccordion — the agent of the run reaches its findings", () => {
+  const FINDING: FindingRecord = {
+    id: "f1",
+    severity: "WARNING",
+    category: "bug",
+    title: "Unchecked input",
+    file: "src/a.ts",
+    start_line: 3,
+    end_line: 3,
+    rationale: "Input is not validated.",
+    suggestion: null,
+    confidence: 0.9,
+    review_id: "rv-1",
+    accepted_at: "2026-10-04T00:00:00Z",
+    dismissed_at: null,
+  };
+
+  const renderOpen = (review: ReviewRecord) =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ prReview }}>
+        <ReviewRunAccordion review={review} prId="pr-1" defaultOpen />
+      </NextIntlClientProvider>,
+    );
+
+  it("lets a finding card look up the cases of review.agent_id", () => {
+    renderOpen({ ...REVIEW, findings: [FINDING] });
+    expect(screen.getByText("In eval set")).toBeInTheDocument();
+  });
+
+  it("gives a run with no agent cards whose eval control is disabled", () => {
+    renderOpen({ ...REVIEW, agent_id: null, findings: [FINDING] });
+    expect(screen.queryByText("In eval set")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Turn into eval case" })).toHaveAccessibleDescription(
+      "No agent for this finding",
+    );
   });
 });

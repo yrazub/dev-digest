@@ -28,6 +28,11 @@ export function findingsOfLatestReviews(reviews: ReviewRecord[]): FindingRecord[
   return [...newest.values()].flatMap((r) => r.findings);
 }
 
+/** Review id → the id of the agent that ran it (null when the review has none). */
+export function agentIdByReview(reviews: ReviewRecord[]): Map<string, string | null> {
+  return new Map(reviews.map((r) => [r.id, r.agent_id]));
+}
+
 /** Counted (not dismissed) findings whose file is one of the PR's files. */
 export function countedInDiff(findings: FindingRecord[], files: PrFile[]): number {
   const paths = new Set(files.map((f) => f.path));

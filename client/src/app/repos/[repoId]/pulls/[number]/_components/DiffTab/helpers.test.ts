@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { FindingRecord, PrFile, ReviewRecord, SmartDiffGroup } from "@devdigest/shared";
 import {
+  agentIdByReview,
   countedInDiff,
   diffBodyMode,
   findingsOfLatestReviews,
@@ -281,5 +282,24 @@ describe("jumpTarget", () => {
 
   it("keeps the file alone when there is no line parameter", () => {
     expect(jumpTarget(files, "src/config.ts", null)).toEqual({ path: "src/config.ts", line: null });
+  });
+});
+
+describe("agentIdByReview", () => {
+  it("maps each review id to the id of its agent, null included", () => {
+    const map = agentIdByReview([
+      review("r1", "a1", "2026-10-01T10:00:00Z", []),
+      review("r2", null, "2026-10-02T10:00:00Z", []),
+      review("r3", "a1", "2026-10-03T10:00:00Z", []),
+    ]);
+    expect(map.get("r1")).toBe("a1");
+    expect(map.get("r2")).toBeNull();
+    expect(map.get("r3")).toBe("a1");
+    expect(map.has("r9")).toBe(false);
+    expect(map.size).toBe(3);
+  });
+
+  it("is empty for no reviews", () => {
+    expect(agentIdByReview([]).size).toBe(0);
   });
 });
