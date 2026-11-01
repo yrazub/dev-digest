@@ -11,9 +11,10 @@ import { Button, Icon, Modal, SectionLabel } from "@devdigest/ui";
 import { useEvalRun } from "@/lib/hooks/evals";
 import { formatCostUsd } from "@/lib/format-cost";
 import type { EvalConfigSnapshot, EvalSuiteRunDetail } from "@devdigest/shared";
-import { METRIC_COLOR } from "./constants";
-import { DeltaLabel } from "./DeltaLabel";
-import { configDiffers, costDelta, deltaPoints, flippedCases, pct, sameConfig } from "./helpers";
+import { METRIC_COLOR } from "@/components/eval/constants";
+import { DeltaLabel } from "@/components/eval/DeltaLabel";
+import { deltaPoints, pct } from "@/components/eval/helpers";
+import { configDiffers, costDelta, flippedCases, sameConfig } from "./helpers";
 import { s } from "./styles";
 import { wordDiff } from "./word-diff";
 
@@ -174,7 +175,7 @@ export function CompareModal({
             oldText={formatCostUsd(oldRun.cost_usd)}
             newText={formatCostUsd(newRun.cost_usd)}
             color="var(--text-primary)"
-            delta={cost && <span style={s.delta("muted")}>{cost}</span>}
+            delta={cost && <span style={s.costDelta}>{cost}</span>}
           />
         </div>
         {sameConfig(oldRun.config, newRun.config) ? (

@@ -10,7 +10,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, ErrorState, Icon, SectionLabel, Skeleton, Dropdown } from "@devdigest/ui";
 import { AppShell } from "@/components/app-shell";
-import { CompareModal } from "@/components/eval/CompareModal";
+import { CompareModal } from "../CompareModal";
 import { RunDrawer } from "@/components/eval/RunDrawer";
 import { RunEvalButton } from "@/components/eval/RunEvalButton";
 import { RunsTable } from "@/components/eval/RunsTable";

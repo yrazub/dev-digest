@@ -3,7 +3,7 @@ import { render, screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type { EvalCaseResult, EvalSuiteRunDetail } from "@devdigest/shared";
-import messages from "../../../messages/en/eval.json";
+import messages from "../../../../../../messages/en/eval.json";
 
 // The hook module is the seam: the modal only reads two runs by id. One stable object per id.
 const mocks = vi.hoisted(() => ({ runs: {} as Record<string, { data: unknown }> }));
