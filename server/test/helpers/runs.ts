@@ -1,6 +1,7 @@
 import * as t from '../../src/db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
+import type { EvalSuiteRunDetail } from '@devdigest/shared';
 import type { PgFixture } from './pg.js';
 
 /**
@@ -57,6 +58,34 @@ export async function waitForRunTrace<T = any>(
     const res = await app.inject({ method: 'GET', url: `/runs/${runId}/trace` });
     if (res.statusCode === 200) return res.json() as T;
     if (Date.now() - start > timeoutMs) throw new Error(`trace of run ${runId} was never persisted`);
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
+
+/**
+ * Poll `GET /eval-runs/:id` until the eval run leaves `running`, and resolve the final detail.
+ * An eval run is fire-and-forget like a review run: `POST /agents/:id/eval-runs` answers 202 with
+ * the run `running` and the cases are reviewed in the background. After `timeoutMs` (default
+ * 15 000) it throws, with the last status in the message, so a hung run fails loudly.
+ */
+export async function waitForEvalRun(
+  app: FastifyInstance,
+  runId: string,
+  opts: { timeoutMs?: number } = {},
+): Promise<EvalSuiteRunDetail> {
+  const { timeoutMs = 15_000 } = opts;
+  const start = Date.now();
+  for (;;) {
+    const res = await app.inject({ method: 'GET', url: `/eval-runs/${runId}` });
+    if (res.statusCode === 200) {
+      const run = res.json() as EvalSuiteRunDetail;
+      if (run.status !== 'running') return run;
+    } else if (res.statusCode !== 404) {
+      throw new Error(`GET /eval-runs/${runId} answered ${res.statusCode}`);
+    }
+    if (Date.now() - start > timeoutMs) {
+      throw new Error(`eval run ${runId} did not finish within ${timeoutMs} ms (last answer ${res.statusCode})`);
+    }
     await new Promise((r) => setTimeout(r, 25));
   }
 }

@@ -7,17 +7,37 @@
  * The outside world is replaced through `overrides` (an empty `MockSecretsProvider`, so
  * `~/.devdigest/secrets.json` is never read, `MockGitHubClient` and `MockGitClient`): no key, no network.
  * Each test inserts its own agent, repo, PR, review and findings, so counts never depend on the seed.
- * Spec: `server/specs/eval-pipeline.md` (R-SRV-1–R-SRV-14, R-SRV-35, R-SRV-37); plan: `specs/plans/eval-pipeline.md`, phases 4–5.
- * Not covered here: the run routes (phase 6), the 1,500-line cut (`eval-domain.test.ts`).
+ *   POST /agents/:id/eval-runs · GET /agents/:id/eval-runs · GET /eval-runs/:id (phase 6, last describe)
+ * The run routes use a `ScriptedLLMProvider` as the agent's model, so the real `reviewPullRequest` runs
+ * with no network: a gate promise holds the model call while a test acts mid-run.
+ * Spec: `server/specs/eval-pipeline.md` (R-SRV-1–R-SRV-14, R-SRV-15–R-SRV-18, R-SRV-25–R-SRV-35,
+ * R-SRV-37–R-SRV-40, R-SRV-48); plan: `specs/plans/eval-pipeline.md`, phases 4–6.
+ * Not covered here: the 1,500-line cut (`eval-domain.test.ts`), the 3-in-flight cap (`eval-executor.test.ts`),
+ * the 429 on the 11th POST (`eval-rate-limit.test.ts`).
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import type { EvalCaseCreateResponse, EvalCaseList } from '@devdigest/shared';
+import type {
+  EvalCaseCreateResponse,
+  EvalCaseList,
+  EvalSuiteRun,
+  EvalSuiteRunDetail,
+  EvalSuiteRunList,
+  LLMProvider,
+  Review,
+} from '@devdigest/shared';
 import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
+import { waitForEvalRun } from './helpers/runs.js';
 import { buildApp } from '../src/app.js';
+import { EvalRepository } from '../src/modules/eval/repository.js';
 import { loadConfig } from '../src/platform/config.js';
 import { seed, DEFAULT_WORKSPACE_NAME } from '../src/db/seed.js';
-import { MockGitClient, MockGitHubClient, MockSecretsProvider } from '../src/adapters/mocks.js';
+import {
+  MockGitClient,
+  MockGitHubClient,
+  MockSecretsProvider,
+  ScriptedLLMProvider,
+} from '../src/adapters/mocks.js';
 import * as t from '../src/db/schema.js';
 
 const hasDocker = await dockerAvailable();
@@ -82,11 +102,16 @@ d('L06 eval case routes (Testcontainers pg)', () => {
     await pg?.stop();
   });
 
-  async function appWith(git: MockGitClient = new MockGitClient({ diff: '' })) {
+  async function appWith(git: MockGitClient = new MockGitClient({ diff: '' }), llm?: LLMProvider) {
     const app = await buildApp({
       config: config(),
       db: pg.handle.db,
-      overrides: { secrets: new MockSecretsProvider(), github: new MockGitHubClient(), git },
+      overrides: {
+        secrets: new MockSecretsProvider(),
+        github: new MockGitHubClient(),
+        git,
+        ...(llm ? { llm: { openai: llm } } : {}),
+      },
     });
     apps.push(app);
     return app;
@@ -664,6 +689,674 @@ d('L06 eval case routes (Testcontainers pg)', () => {
       expect(res.json().error.code).toBe('not_found');
       expect(await db.select().from(t.agents).where(eq(t.agents.id, foreign.agent.id))).toHaveLength(1);
       expect(await evalRowCounts(rows)).toEqual({ cases: 2, suiteRuns: 1, results: 1 });
+    });
+  });
+  // ==========================================================================
+  // Phase 6 — run routes
+  // ==========================================================================
+  describe('eval runs (phase 6)', () => {
+    type Scenario = Awaited<ReturnType<typeof scenario>>;
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    /** Poll until `cond` holds; throws after `ms`. */
+    async function until(cond: () => boolean | Promise<boolean>, what: string, ms = 5_000) {
+      const t0 = Date.now();
+      while (!(await cond())) {
+        if (Date.now() - t0 > ms) throw new Error(`timed out waiting for ${what}`);
+        await sleep(10);
+      }
+    }
+
+    /** The diff of a case: line 2 is the added line, so a finding on line 2 is grounded. */
+    const caseDiff = (marker: string) =>
+      [
+        `diff --git a/${FILE} b/${FILE}`,
+        `--- a/${FILE}`,
+        `+++ b/${FILE}`,
+        '@@ -1,3 +1,4 @@',
+        ' line one',
+        `+marker-${marker}`,
+        ' line three',
+        ' line four',
+      ].join('\n');
+
+    /** A model answer with one finding on line 2 of the case's file (grounded). */
+    const reviewAt = (line = 2): Review => ({
+      verdict: 'comment',
+      summary: 'One finding.',
+      score: 70,
+      findings: [
+        {
+          id: 'f-1',
+          severity: 'WARNING',
+          category: 'bug',
+          title: 'Scripted finding',
+          file: FILE,
+          start_line: line,
+          end_line: line,
+          rationale: 'r',
+          confidence: 0.9,
+          kind: 'finding',
+        },
+      ],
+    });
+
+    interface CaseSpec {
+      kind?: 'must_find' | 'must_not_flag';
+      start?: number;
+      end?: number;
+      marker?: string;
+    }
+
+    /** Eval cases inserted directly, owned by the scenario's agent. Names are `case-<i>`. */
+    async function addCases(s: Scenario, specs: CaseSpec[], ws: string = workspaceId) {
+      return pg.handle.db
+        .insert(t.evalCases)
+        .values(
+          specs.map((c, i) => ({
+            workspaceId: ws,
+            ownerKind: 'agent' as const,
+            ownerId: s.agent.id,
+            name: `case-${String(i).padStart(2, '0')}`,
+            inputDiff: caseDiff(c.marker ?? `m${i}`),
+            inputFiles: [FILE],
+            inputMeta: {
+              pr_id: s.pr.id,
+              pr_number: s.pr.number,
+              repo: 'acme/x',
+              pr_title: 'Harden config loading',
+              pr_body: 'Loads the config safely.',
+              pr_author: 'marisa.koch',
+              head_sha: HEAD,
+            },
+            expectedOutput: {
+              kind: c.kind ?? ('must_find' as const),
+              file: FILE,
+              start_line: c.start ?? 1,
+              end_line: c.end ?? 3,
+              title: `expected ${i}`,
+              severity: 'WARNING' as const,
+              category: 'bug' as const,
+            },
+          })),
+        )
+        .returning();
+    }
+
+    /** A model whose every call waits on one gate; `release()` lets them all go. */
+    function gatedLlm(answer: (req: { text: string }, i: number) => unknown = () => reviewAt()) {
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const llm = new ScriptedLLMProvider('openai', async (req, i) => {
+        await gate;
+        return answer({ text: JSON.stringify(req.messages) }, i);
+      });
+      return { llm, release };
+    }
+    const modelCalls = (llm: ScriptedLLMProvider) => llm.calls.filter((c) => c.method === 'completeStructured');
+
+    const startRun = (app: App, agentId: string) =>
+      app.inject({ method: 'POST', url: `/agents/${agentId}/eval-runs` });
+    const suiteRows = (agentId: string) =>
+      pg.handle.db.select().from(t.evalSuiteRuns).where(eq(t.evalSuiteRuns.agentId, agentId));
+    const tableCounts = async () => {
+      const db = pg.handle.db;
+      return {
+        reviews: (await db.select({ id: t.reviews.id }).from(t.reviews)).length,
+        findings: (await db.select({ id: t.findings.id }).from(t.findings)).length,
+        agentRuns: (await db.select({ id: t.agentRuns.id }).from(t.agentRuns)).length,
+      };
+    };
+
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => void unhandled.push(reason);
+    beforeAll(() => void process.on('unhandledRejection', onUnhandled));
+    afterAll(() => void process.off('unhandledRejection', onUnhandled));
+
+    it('answers 202 running with the stored snapshot for a disabled agent, and the model gets that snapshot (R-SRV-15, R-SRV-16, R-SRV-17)', async () => {
+      const db = pg.handle.db;
+      const { llm, release } = gatedLlm();
+      const app = await appWith(undefined, llm);
+      const s = await scenario();
+      await db
+        .update(t.agents)
+        .set({ enabled: false, version: 4, systemPrompt: 'Snapshot prompt', model: 'gpt-4o-mini', strategy: 'map-reduce' })
+        .where(eq(t.agents.id, s.agent.id));
+      const mk = async (name: string, version: number, enabled: boolean) =>
+        (
+          await db
+            .insert(t.skills)
+            .values({
+              workspaceId,
+              name: `${name}-${seq++}`,
+              description: 'd',
+              type: 'rubric',
+              source: 'manual',
+              body: `BODY-OF-${name}`,
+              enabled,
+              version,
+            })
+            .returning()
+        )[0]!;
+      const late = await mk('sk-late', 5, true);
+      const early = await mk('sk-early', 3, true);
+      const off = await mk('sk-off', 1, false);
+      await db.insert(t.agentSkills).values([
+        { agentId: s.agent.id, skillId: late.id, order: 1 },
+        { agentId: s.agent.id, skillId: early.id, order: 0 },
+        { agentId: s.agent.id, skillId: off.id, order: 2 },
+      ]);
+      await addCases(s, [{}]);
+
+      try {
+        const res = await startRun(app, s.agent.id);
+
+        expect(res.statusCode).toBe(202);
+        const run = res.json() as EvalSuiteRun;
+        expect(run).toMatchObject({
+          agent_id: s.agent.id,
+          agent_name: s.agent.name,
+          status: 'running',
+          cases_total: 1,
+          cases_done: 0,
+          finished_at: null,
+          error: null,
+          config: {
+            agent_version: 4,
+            system_prompt: 'Snapshot prompt',
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            strategy: 'map-reduce',
+            skills: [
+              { name: early.name, version: 3 },
+              { name: late.name, version: 5 },
+            ],
+          },
+        });
+        const stored = (await suiteRows(s.agent.id))[0]!;
+        expect(stored).toMatchObject({ agentVersion: 4, systemPrompt: 'Snapshot prompt', status: 'running' });
+
+        await until(() => modelCalls(llm).length === 1, 'the model call');
+        const req = modelCalls(llm)[0]!.req as { model: string; messages: unknown };
+        const sent = JSON.stringify(req.messages);
+        expect(req.model).toBe('gpt-4o-mini');
+        expect(sent).toContain('Snapshot prompt');
+        expect(sent).toContain(`### ${early.name} (v3)`);
+        expect(sent).toContain('BODY-OF-sk-early');
+        expect(sent).not.toContain('BODY-OF-sk-off');
+        expect(sent.indexOf('BODY-OF-sk-early')).toBeLessThan(sent.indexOf('BODY-OF-sk-late'));
+      } finally {
+        release();
+      }
+      const final = await waitForEvalRun(app, ((await suiteRows(s.agent.id))[0]!).id);
+      expect(final.status).toBe('done');
+    });
+
+    it('runs every case to done with one result each, one model call per case, and no review, finding or agent-run row (R-SRV-18, R-SRV-25, R-SRV-26, R-SRV-39)', async () => {
+      const llm = new ScriptedLLMProvider('openai', () => reviewAt());
+      const app = await appWith(undefined, llm);
+      const s = await scenario();
+      await addCases(s, [{}, {}, { kind: 'must_not_flag' }]);
+      const before = await tableCounts();
+
+      const res = await startRun(app, s.agent.id);
+      expect(res.statusCode).toBe(202);
+      const final = await waitForEvalRun(app, (res.json() as EvalSuiteRun).id);
+
+      expect(final.status).toBe('done');
+      expect(final.error).toBeNull();
+      expect(final.finished_at).not.toBeNull();
+      expect(final).toMatchObject({ cases_total: 3, cases_done: 3, cases_passed: 2, cases_errored: 0 });
+      expect(final.results).toHaveLength(3);
+      expect(final.recall).toBe(1);
+      expect(final.precision).toBeCloseTo(2 / 3, 6);
+      expect(final.citation_accuracy).toBe(1);
+      expect(final.cost_usd).toBeCloseTo(0.003, 6);
+      expect(modelCalls(llm)).toHaveLength(3);
+      expect(await tableCounts()).toEqual(before);
+    });
+
+    it('answers 409 while a run is going, and two concurrent POSTs create at most one run (R-SRV-27)', async () => {
+      const { llm, release } = gatedLlm();
+      const app = await appWith(undefined, llm);
+      const s = await scenario();
+      await addCases(s, [{}]);
+
+      try {
+        const [a, b] = await Promise.all([startRun(app, s.agent.id), startRun(app, s.agent.id)]);
+        expect([a.statusCode, b.statusCode].sort()).toEqual([202, 409]);
+        const loser = a.statusCode === 409 ? a : b;
+        expect(loser.json().error).toMatchObject({
+          code: 'eval_run_in_progress',
+          message: 'An eval run of this agent is already running',
+        });
+        expect(await suiteRows(s.agent.id)).toHaveLength(1);
+
+        const again = await startRun(app, s.agent.id);
+        expect(again.statusCode).toBe(409);
+        expect(await suiteRows(s.agent.id)).toHaveLength(1);
+      } finally {
+        release();
+      }
+      const [row] = await suiteRows(s.agent.id);
+      await waitForEvalRun(app, row!.id);
+      // Once the run has ended, the agent can run again.
+      const next = await startRun(app, s.agent.id);
+      expect(next.statusCode).toBe(202);
+      await waitForEvalRun(app, (next.json() as EvalSuiteRun).id);
+    });
+
+    it('answers 422 and writes no run for an agent with no cases (R-SRV-28)', async () => {
+      const app = await appWith(undefined, new ScriptedLLMProvider('openai', () => reviewAt()));
+      const s = await scenario();
+
+      const res = await startRun(app, s.agent.id);
+
+      expect(res.statusCode).toBe(422);
+      expect(res.json().error).toMatchObject({ code: 'validation_error', message: 'This agent has no eval cases' });
+      expect(await suiteRows(s.agent.id)).toHaveLength(0);
+    });
+
+    it('answers 422 and writes no run for an agent with 51 cases, and accepts exactly 50 (R-SRV-29)', async () => {
+      const llm = new ScriptedLLMProvider('openai', () => reviewAt());
+      const app = await appWith(undefined, llm);
+      const s = await scenario();
+      const cases = await addCases(s, Array.from({ length: 51 }, () => ({})));
+
+      const res = await startRun(app, s.agent.id);
+
+      expect(res.statusCode).toBe(422);
+      expect(res.json().error).toMatchObject({
+        code: 'validation_error',
+        message: 'An eval run takes at most 50 cases; this agent has 51',
+      });
+      expect(await suiteRows(s.agent.id)).toHaveLength(0);
+      expect(modelCalls(llm)).toHaveLength(0);
+
+      await pg.handle.db.delete(t.evalCases).where(eq(t.evalCases.id, cases[0]!.id));
+      const ok = await startRun(app, s.agent.id);
+      expect(ok.statusCode).toBe(202);
+      expect((await waitForEvalRun(app, (ok.json() as EvalSuiteRun).id, { timeoutMs: 30_000 })).cases_done).toBe(50);
+    });
+
+    it('answers 400 eval_unavailable and writes no run when the agent\'s provider has no key (R-SRV-30)', async () => {
+      const app = await appWith(); // empty secrets, no llm override
+      const s = await scenario();
+      await addCases(s, [{}]);
+
+      const res = await startRun(app, s.agent.id);
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toMatchObject({
+        code: 'eval_unavailable',
+        message: 'No API key for openai. Add it in Settings.',
+      });
+      expect(await suiteRows(s.agent.id)).toHaveLength(0);
+    });
+
+    it('leaves one errored row out of the metrics and still ends done (R-SRV-31)', async () => {
+      const llm = new ScriptedLLMProvider('openai', (req) => {
+        if (JSON.stringify(req.messages).includes('marker-boom')) throw new Error('scripted boom');
+        return reviewAt();
+      });
+      const app = await appWith(undefined, llm);
+      const s = await scenario();
+      await addCases(s, [{}, { marker: 'boom' }, {}]);
+
+      const final = await waitForEvalRun(app, ((await startRun(app, s.agent.id)).json() as EvalSuiteRun).id);
+
+      expect(final.status).toBe('done');
+      expect(final).toMatchObject({ cases_total: 3, cases_done: 3, cases_passed: 2, cases_errored: 1 });
+      expect(final.recall).toBe(1);
+      expect(final.precision).toBe(1);
+      expect(final.cost_usd).toBeCloseTo(0.002, 6);
+      const errored = final.results.filter((r) => r.outcome === 'errored');
+      expect(errored).toHaveLength(1);
+      expect(errored[0]).toMatchObject({ case_name: 'case-01', pass: null, recall: null, actual_output: null });
+      expect(errored[0]!.error).toContain('scripted boom');
+    });
+
+    it('ends failed with "All n cases failed" when every case throws (R-SRV-32)', async () => {
+      const llm = new ScriptedLLMProvider('openai', () => {
+        throw new Error('scripted boom');
+      });
+      const app = await appWith(undefined, llm);
+      const s = await scenario();
+      await addCases(s, [{}, {}, {}]);
+
+      const final = await waitForEvalRun(app, ((await startRun(app, s.agent.id)).json() as EvalSuiteRun).id);
+
+      expect(final.status).toBe('failed');
+      expect(final.error).toMatch(/^All 3 cases failed: .*scripted boom/);
+      expect(final.finished_at).not.toBeNull();
+      expect(final).toMatchObject({ cases_total: 3, cases_done: 3, cases_errored: 3, recall: null, precision: null });
+      expect(final.results.every((r) => r.outcome === 'errored')).toBe(true);
+    });
+
+    it('drops a case deleted while its review is held: the run ends done with no row for it and it counts in no metric (R-SRV-48, AC-99)', async () => {
+      const { llm, release } = gatedLlm();
+      const app = await appWith(undefined, llm);
+      const s = await scenario();
+      // case-00 matches the scripted finding (line 2); case-01 expects lines 100-110, so it fails.
+      const [passing, failing] = await addCases(s, [{}, { start: 100, end: 110 }]);
+
+      const run = (await startRun(app, s.agent.id)).json() as EvalSuiteRun;
+      try {
+        await until(() => modelCalls(llm).length === 2, 'both model calls');
+        const del = await app.inject({ method: 'DELETE', url: `/eval-cases/${passing!.id}` });
+        expect(del.statusCode).toBe(204);
+      } finally {
+        release();
+      }
+      const final = await waitForEvalRun(app, run.id);
+
+      expect(final.status).toBe('done');
+      expect(final.error).toBeNull();
+      expect(final.cases_total).toBe(2); // the snapshot taken at start
+      expect(final.cases_done).toBe(1);
+      expect(final.results.map((r) => r.case_id)).toEqual([failing!.id]);
+      // Counted, the deleted passing case would give recall 0.5 and one pass.
+      expect(final).toMatchObject({ cases_passed: 0, cases_errored: 0, recall: 0 });
+      const results = await pg.handle.db.select().from(t.evalRuns).where(eq(t.evalRuns.suiteRunId, run.id));
+      expect(results.map((r) => r.caseId)).toEqual([failing!.id]);
+      expect(unhandled).toEqual([]);
+    });
+
+    it('ends done with null metrics when every case was deleted mid-run (Q10)', async () => {
+      const { llm, release } = gatedLlm();
+      const app = await appWith(undefined, llm);
+      const s = await scenario();
+      const cases = await addCases(s, [{}, {}]);
+
+      const run = (await startRun(app, s.agent.id)).json() as EvalSuiteRun;
+      try {
+        await until(() => modelCalls(llm).length === 2, 'both model calls');
+        for (const c of cases) {
+          expect((await app.inject({ method: 'DELETE', url: `/eval-cases/${c.id}` })).statusCode).toBe(204);
+        }
+      } finally {
+        release();
+      }
+      const final = await waitForEvalRun(app, run.id);
+
+      expect(final).toMatchObject({
+        status: 'done',
+        cases_total: 2,
+        cases_done: 0,
+        cases_passed: 0,
+        cases_errored: 0,
+        recall: null,
+        precision: null,
+        citation_accuracy: null,
+        cost_usd: null,
+      });
+      expect(final.results).toEqual([]);
+    });
+
+    it('stops quietly when the run row is gone mid-run: no further case is reviewed, nothing is stored (F16, run_gone)', async () => {
+      const db = pg.handle.db;
+      const { llm, release } = gatedLlm();
+      const app = await appWith(undefined, llm);
+      const s = await scenario();
+      const cases = await addCases(s, [{}, {}, {}, {}]); // 3 in flight at once, the 4th waits
+
+      const run = (await startRun(app, s.agent.id)).json() as EvalSuiteRun;
+      try {
+        await until(() => modelCalls(llm).length === 3, 'three model calls');
+        await db.delete(t.evalSuiteRuns).where(eq(t.evalSuiteRuns.id, run.id));
+      } finally {
+        release();
+      }
+      await sleep(400); // the three held calls finish and try to store
+
+      expect(modelCalls(llm)).toHaveLength(3);
+      expect(await db.select().from(t.evalRuns).where(eq(t.evalRuns.suiteRunId, run.id))).toHaveLength(0);
+      // The cases are untouched and the agent is free to run again.
+      expect(await casesOf(s.agent.id)).toHaveLength(cases.length);
+      expect(await suiteRows(s.agent.id)).toHaveLength(0);
+      expect(unhandled).toEqual([]);
+    });
+
+    it('storeResult tells a deleted case from a deleted run by the foreign key that failed, and writes nothing then (R-SRV-39, F16)', async () => {
+      const db = pg.handle.db;
+      const repo = new EvalRepository(db);
+      const s = await scenario();
+      const [c0, c1] = await addCases(s, [{}, {}]);
+      const [suite] = await db
+        .insert(t.evalSuiteRuns)
+        .values({
+          workspaceId,
+          agentId: s.agent.id,
+          agentVersion: 1,
+          systemPrompt: 'Review.',
+          provider: 'openai',
+          model: 'gpt-4o',
+          strategy: 'single-pass',
+          skills: [],
+          status: 'running',
+          casesTotal: 2,
+        })
+        .returning();
+      const row = (caseId: string) => ({
+        caseId,
+        pass: true,
+        recall: 1,
+        precision: 1,
+        citationAccuracy: 1,
+        actualOutput: { findings: [], dropped: 0 },
+        durationMs: 3,
+        costUsd: 0.001,
+        error: null,
+      });
+      const doneCount = async () =>
+        (await db.select().from(t.evalSuiteRuns).where(eq(t.evalSuiteRuns.id, suite!.id)))[0]!.casesDone;
+      const resultCount = async () =>
+        (await db.select().from(t.evalRuns).where(eq(t.evalRuns.suiteRunId, suite!.id))).length;
+
+      // Both parents exist: the row is stored and cases_done moves with it, in one transaction.
+      expect(await repo.storeResult(suite!.id, row(c0!.id))).toBe('stored');
+      expect([await resultCount(), await doneCount()]).toEqual([1, 1]);
+
+      // The case is gone, the run is not.
+      expect(await repo.storeResult(suite!.id, row(UNKNOWN_ID))).toBe('case_gone');
+      expect([await resultCount(), await doneCount()]).toEqual([1, 1]);
+
+      // The run is gone, the case is not.
+      expect(await repo.storeResult(UNKNOWN_ID, row(c1!.id))).toBe('run_gone');
+      expect(await db.select().from(t.evalRuns).where(eq(t.evalRuns.caseId, c1!.id))).toHaveLength(0);
+      expect([await resultCount(), await doneCount()]).toEqual([1, 1]);
+    });
+
+    it('removes the run with the agent when the agent is deleted mid-run, and logs no unhandled rejection (F16)', async () => {
+      const db = pg.handle.db;
+      const { llm, release } = gatedLlm();
+      const app = await appWith(undefined, llm);
+      const s = await scenario();
+      await addCases(s, [{}, {}]);
+
+      const run = (await startRun(app, s.agent.id)).json() as EvalSuiteRun;
+      try {
+        await until(() => modelCalls(llm).length === 2, 'both model calls');
+        const del = await app.inject({ method: 'DELETE', url: `/agents/${s.agent.id}` });
+        expect(del.statusCode).toBe(200);
+      } finally {
+        release();
+      }
+      await sleep(400);
+
+      expect(await suiteRows(s.agent.id)).toHaveLength(0);
+      expect(await db.select().from(t.evalRuns).where(eq(t.evalRuns.suiteRunId, run.id))).toHaveLength(0);
+      expect((await app.inject({ method: 'GET', url: `/eval-runs/${run.id}` })).statusCode).toBe(404);
+      expect(unhandled).toEqual([]);
+    });
+
+    it('marks a run left running by a dead process failed "Interrupted by server restart" when the next app boots (R-SRV-33)', async () => {
+      const db = pg.handle.db;
+      const s = await scenario();
+      const base = {
+        workspaceId,
+        agentId: s.agent.id,
+        agentVersion: 1,
+        systemPrompt: 'Review.',
+        provider: 'openai' as const,
+        model: 'gpt-4o',
+        strategy: 'single-pass' as const,
+        skills: [],
+        casesTotal: 2,
+      };
+      const [orphan] = await db.insert(t.evalSuiteRuns).values({ ...base, status: 'running', casesDone: 1 }).returning();
+      const [finished] = await db
+        .insert(t.evalSuiteRuns)
+        .values({ ...base, status: 'done', casesDone: 2, finishedAt: new Date(), recall: 1 })
+        .returning();
+
+      const app = await appWith(); // the boot reap runs inside buildApp
+
+      const [after] = await db.select().from(t.evalSuiteRuns).where(eq(t.evalSuiteRuns.id, orphan!.id));
+      expect(after).toMatchObject({ status: 'failed', error: 'Interrupted by server restart', casesDone: 1 });
+      expect(after!.finishedAt).not.toBeNull();
+      const [untouched] = await db.select().from(t.evalSuiteRuns).where(eq(t.evalSuiteRuns.id, finished!.id));
+      expect(untouched).toEqual(finished);
+      const detail = (await app.inject({ method: 'GET', url: `/eval-runs/${orphan!.id}` })).json() as EvalSuiteRunDetail;
+      expect(detail).toMatchObject({ status: 'failed', error: 'Interrupted by server restart' });
+    });
+
+    describe('listing and detail', () => {
+      const suiteValues = (s: Scenario, o: Partial<typeof t.evalSuiteRuns.$inferInsert> = {}) => ({
+        workspaceId,
+        agentId: s.agent.id,
+        agentVersion: 1,
+        systemPrompt: 'Review.',
+        provider: 'openai' as const,
+        model: 'gpt-4o',
+        strategy: 'single-pass' as const,
+        skills: [{ name: 'sk', version: 2 }],
+        status: 'done' as const,
+        casesTotal: 2,
+        casesDone: 2,
+        finishedAt: new Date(),
+        ...o,
+      });
+
+      it('pages the agent\'s runs newest first with limit, offset and total, and never lists another agent\'s (R-SRV-38)', async () => {
+        const db = pg.handle.db;
+        const app = await appWith();
+        const s = await scenario();
+        const other = await scenario();
+        const t0 = Date.parse('2026-10-01T00:00:00Z');
+        const rows = await db
+          .insert(t.evalSuiteRuns)
+          .values(Array.from({ length: 5 }, (_, i) => suiteValues(s, { startedAt: new Date(t0 + i * 60_000) })))
+          .returning();
+        await db.insert(t.evalSuiteRuns).values(suiteValues(other));
+        const newestFirst = [...rows].sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime()).map((r) => r.id);
+
+        const page = await app.inject({ method: 'GET', url: `/agents/${s.agent.id}/eval-runs?limit=2&offset=1` });
+        const all = await app.inject({ method: 'GET', url: `/agents/${s.agent.id}/eval-runs` });
+
+        expect(page.statusCode).toBe(200);
+        const body = page.json() as EvalSuiteRunList;
+        expect(body.total).toBe(5);
+        expect(body.runs.map((r) => r.id)).toEqual(newestFirst.slice(1, 3));
+        expect(body.runs[0]).toMatchObject({ agent_id: s.agent.id, agent_name: s.agent.name, config: { skills: [{ name: 'sk', version: 2 }] } });
+        expect((all.json() as EvalSuiteRunList).runs.map((r) => r.id)).toEqual(newestFirst);
+        expect((all.json() as EvalSuiteRunList).total).toBe(5);
+      });
+
+      it('answers 422 for a limit outside 1..100 or a negative offset (R-SRV-38)', async () => {
+        const app = await appWith();
+        const s = await scenario();
+        for (const q of ['limit=0', 'limit=101', 'offset=-1']) {
+          const res = await app.inject({ method: 'GET', url: `/agents/${s.agent.id}/eval-runs?${q}` });
+          expect(res.statusCode, q).toBe(422);
+        }
+        const edge = await app.inject({ method: 'GET', url: `/agents/${s.agent.id}/eval-runs?limit=100` });
+        expect(edge.statusCode).toBe(200);
+        expect(edge.json()).toEqual({ runs: [], total: 0 });
+      });
+
+      it('returns the detail with results ordered by case name, each with kind, expectation, outcome and matches flags (R-SRV-40)', async () => {
+        const db = pg.handle.db;
+        const app = await appWith();
+        const s = await scenario();
+        // Names case-00, case-01, case-02; inserted out of order below.
+        const [c0, c1, c2] = await addCases(s, [{}, { kind: 'must_not_flag' }, {}]);
+        const [suite] = await db.insert(t.evalSuiteRuns).values(suiteValues(s, { casesTotal: 3, casesDone: 3 })).returning();
+        const found = (matches: boolean) => ({
+          findings: [{ file: FILE, start_line: 2, end_line: 2, title: 'T', severity: 'WARNING', category: 'bug', matches }],
+          dropped: 1,
+        });
+        await db.insert(t.evalRuns).values([
+          { caseId: c2!.id, suiteRunId: suite!.id, error: 'scripted boom', durationMs: 5 },
+          { caseId: c0!.id, suiteRunId: suite!.id, pass: true, recall: 1, precision: 1, citationAccuracy: 0.5, actualOutput: found(true), durationMs: 7, costUsd: 0.002 },
+          { caseId: c1!.id, suiteRunId: suite!.id, pass: false, precision: 0, actualOutput: found(true), durationMs: 9, costUsd: 0.003 },
+        ]);
+
+        const res = await app.inject({ method: 'GET', url: `/eval-runs/${suite!.id}` });
+
+        expect(res.statusCode).toBe(200);
+        const body = res.json() as EvalSuiteRunDetail;
+        expect(body.id).toBe(suite!.id);
+        expect(body.agent_name).toBe(s.agent.name);
+        expect(body.results.map((r) => r.case_name)).toEqual(['case-00', 'case-01', 'case-02']);
+        expect(body.results.map((r) => r.outcome)).toEqual(['pass', 'fail', 'errored']);
+        expect(body.results.map((r) => r.kind)).toEqual(['must_find', 'must_not_flag', 'must_find']);
+        expect(body.results[0]).toMatchObject({
+          case_id: c0!.id,
+          suite_run_id: suite!.id,
+          expectation: { kind: 'must_find', file: FILE, start_line: 1, end_line: 3 },
+          pass: true,
+          recall: 1,
+          citation_accuracy: 0.5,
+          duration_ms: 7,
+          cost_usd: 0.002,
+          error: null,
+          actual_output: { dropped: 1, findings: [{ title: 'T', matches: true }] },
+        });
+        expect(body.results[2]).toMatchObject({ pass: null, actual_output: null, error: 'scripted boom' });
+      });
+    });
+
+    it('answers 404 for another workspace\'s agent and run, and for unknown ids, and writes nothing (R-SRV-37)', async () => {
+      const db = pg.handle.db;
+      const llm = new ScriptedLLMProvider('openai', () => reviewAt());
+      const app = await appWith(undefined, llm);
+      const [otherWs] = await db.insert(t.workspaces).values({ name: `other-ws-${seq++}` }).returning();
+      const foreign = await scenario({ ws: otherWs!.id });
+      await addCases(foreign, [{}], otherWs!.id);
+      const [foreignRun] = await db
+        .insert(t.evalSuiteRuns)
+        .values({
+          workspaceId: otherWs!.id,
+          agentId: foreign.agent.id,
+          agentVersion: 1,
+          systemPrompt: 'Review.',
+          provider: 'openai',
+          model: 'gpt-4o',
+          strategy: 'single-pass',
+          skills: [],
+          status: 'done',
+          casesTotal: 1,
+          casesDone: 1,
+          finishedAt: new Date(),
+        })
+        .returning();
+
+      const responses = [
+        await startRun(app, foreign.agent.id),
+        await app.inject({ method: 'GET', url: `/agents/${foreign.agent.id}/eval-runs` }),
+        await app.inject({ method: 'GET', url: `/eval-runs/${foreignRun!.id}` }),
+        await startRun(app, UNKNOWN_ID),
+        await app.inject({ method: 'GET', url: `/agents/${UNKNOWN_ID}/eval-runs` }),
+        await app.inject({ method: 'GET', url: `/eval-runs/${UNKNOWN_ID}` }),
+      ];
+
+      for (const res of responses) {
+        expect(res.statusCode).toBe(404);
+        expect(res.json().error.code).toBe('not_found');
+      }
+      expect(await suiteRows(foreign.agent.id)).toHaveLength(1); // only the one inserted above
+      expect(modelCalls(llm)).toHaveLength(0);
     });
   });
 });

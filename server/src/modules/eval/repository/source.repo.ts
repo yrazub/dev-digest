@@ -2,7 +2,8 @@ import { and, asc, eq } from 'drizzle-orm';
 import type { FindingCategory, Severity } from '@devdigest/shared';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
-import type { EvalFindingSource } from '../ports.js';
+import type { PromptSkill } from '../../_shared/review-prompt.js';
+import type { EvalAgentSnapshot, EvalFindingSource } from '../ports.js';
 
 /**
  * Reads of rows the eval module does not own: the finding with its review, pull request and
@@ -83,4 +84,37 @@ export async function prPatches(
     .from(t.prFiles)
     .where(eq(t.prFiles.prId, prId))
     .orderBy(asc(t.prFiles.path));
+}
+
+/** The agent's configuration as an eval run snapshots it. */
+export async function agentSnapshot(
+  db: Db,
+  workspaceId: string,
+  agentId: string,
+): Promise<EvalAgentSnapshot | undefined> {
+  const [row] = await db
+    .select({
+      name: t.agents.name,
+      version: t.agents.version,
+      systemPrompt: t.agents.systemPrompt,
+      provider: t.agents.provider,
+      model: t.agents.model,
+      strategy: t.agents.strategy,
+    })
+    .from(t.agents)
+    .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.id, agentId)));
+  return row;
+}
+
+/**
+ * The agent's linked skills that are also globally enabled, in link order — what reaches a
+ * review prompt. The module's own copy of the reviews read (R2).
+ */
+export async function promptSkills(db: Db, agentId: string): Promise<PromptSkill[]> {
+  return db
+    .select({ name: t.skills.name, version: t.skills.version, body: t.skills.body })
+    .from(t.agentSkills)
+    .innerJoin(t.skills, eq(t.agentSkills.skillId, t.skills.id))
+    .where(and(eq(t.agentSkills.agentId, agentId), eq(t.skills.enabled, true)))
+    .orderBy(asc(t.agentSkills.order));
 }

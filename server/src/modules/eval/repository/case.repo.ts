@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, count, desc, eq } from 'drizzle-orm';
 import { EvalCaseMeta, EvalExpectation } from '@devdigest/shared';
 import type { EvalCaseRecord } from '@devdigest/shared';
 import type { Db } from '../../../db/client.js';
@@ -87,4 +87,22 @@ export async function deleteCase(db: Db, workspaceId: string, caseId: string): P
     .where(and(eq(t.evalCases.workspaceId, workspaceId), eq(t.evalCases.id, caseId)))
     .returning({ id: t.evalCases.id });
   return rows.length > 0;
+}
+
+export async function countCases(db: Db, agentId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(t.evalCases)
+    .where(and(eq(t.evalCases.ownerKind, 'agent'), eq(t.evalCases.ownerId, agentId)));
+  return row?.n ?? 0;
+}
+
+/** An agent's cases in a stable order, read once when a run starts. */
+export async function casesForRun(db: Db, agentId: string): Promise<EvalCaseRecord[]> {
+  const rows = await db
+    .select()
+    .from(t.evalCases)
+    .where(and(eq(t.evalCases.ownerKind, 'agent'), eq(t.evalCases.ownerId, agentId)))
+    .orderBy(asc(t.evalCases.createdAt), asc(t.evalCases.id));
+  return rows.map(toRecord);
 }
