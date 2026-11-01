@@ -1,0 +1,121 @@
+import type { CSSProperties } from "react";
+
+/* State-dependent styles are functions that return one complete object: a shorthand and its
+   longhand never meet across two style objects. */
+
+const oneLine = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+} satisfies CSSProperties;
+
+export const s = {
+  page: { padding: "20px 28px 40px", maxWidth: 980, margin: "0 auto" } satisfies CSSProperties,
+  header: { display: "flex", alignItems: "flex-end", marginBottom: 6 } satisfies CSSProperties,
+  title: { fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" } satisfies CSSProperties,
+  subtitle: { fontSize: 13, color: "var(--text-secondary)", marginTop: 3 } satisfies CSSProperties,
+  stack: { display: "flex", flexDirection: "column", gap: 8, marginTop: 8 } satisfies CSSProperties,
+  agentList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 24,
+  } satisfies CSSProperties,
+  emptyLink: { color: "var(--accent-text)", fontWeight: 600 } satisfies CSSProperties,
+
+  // Agent row
+  agentRow: (hovered: boolean): CSSProperties => ({
+    display: "flex",
+    alignItems: "center",
+    gap: 16,
+    padding: "14px 16px",
+    borderRadius: 10,
+    border: `1px solid ${hovered ? "var(--border-strong)" : "var(--border)"}`,
+    background: hovered ? "var(--bg-hover)" : "var(--bg-elevated)",
+    width: "100%",
+    textAlign: "left",
+    cursor: "pointer",
+    color: "inherit",
+    fontFamily: "inherit",
+  }),
+  iconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    display: "grid",
+    placeItems: "center",
+    flexShrink: 0,
+    background: "var(--accent-bg)",
+    color: "var(--accent)",
+  } satisfies CSSProperties,
+  agentMain: { flex: 1, minWidth: 0 } satisfies CSSProperties,
+  agentHead: { display: "flex", alignItems: "center", gap: 8, minWidth: 0 } satisfies CSSProperties,
+  agentName: { ...oneLine, fontSize: 14.5, fontWeight: 700 } satisfies CSSProperties,
+  modelChip: {
+    ...oneLine,
+    flexShrink: 0,
+    maxWidth: 200,
+    fontSize: 10.5,
+    color: "var(--text-muted)",
+    padding: "1px 6px",
+    borderRadius: 4,
+    border: "1px solid var(--border)",
+  } satisfies CSSProperties,
+  subLine: { ...oneLine, fontSize: 11.5, color: "var(--text-muted)", marginTop: 3 } satisfies CSSProperties,
+  sparkline: { flexShrink: 0, width: 60, height: 24 } satisfies CSSProperties,
+  miniMetrics: { display: "flex", gap: 4, flexShrink: 0 } satisfies CSSProperties,
+  miniMetric: { minWidth: 66, textAlign: "center" } satisfies CSSProperties,
+  miniLabel: {
+    fontSize: 9.5,
+    fontWeight: 700,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+  miniValue: (color: string): CSSProperties => ({
+    fontSize: 18,
+    fontWeight: 700,
+    marginTop: 2,
+    color,
+  }),
+  chevron: { color: "var(--text-muted)", flexShrink: 0, display: "inline-flex" } satisfies CSSProperties,
+
+  // Recent runs
+  panel: {
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    overflow: "hidden",
+    background: "var(--bg-elevated)",
+    marginTop: 8,
+  } satisfies CSSProperties,
+  runRow: (hovered: boolean, last: boolean): CSSProperties => ({
+    display: "grid",
+    gridTemplateColumns: "180px 150px 70px 1fr 1fr 1fr 80px",
+    gap: 12,
+    padding: "10px 16px",
+    alignItems: "center",
+    fontSize: 12.5,
+    width: "100%",
+    textAlign: "left",
+    cursor: "pointer",
+    color: "inherit",
+    fontFamily: "inherit",
+    borderTop: "none",
+    borderLeft: "none",
+    borderRight: "none",
+    borderBottom: last ? "none" : "1px solid var(--border)",
+    background: hovered ? "var(--bg-hover)" : "transparent",
+  }),
+  runAgent: { ...oneLine, fontWeight: 600 } satisfies CSSProperties,
+  runTime: { ...oneLine, fontSize: 11.5, color: "var(--text-secondary)" } satisfies CSSProperties,
+  runVersion: { ...oneLine, color: "var(--accent-text)" } satisfies CSSProperties,
+  runStatus: (failed: boolean): CSSProperties => ({
+    ...oneLine,
+    gridColumn: "span 3",
+    fontSize: 12,
+    color: failed ? "var(--crit)" : "var(--text-secondary)",
+  }),
+  runPass: { fontWeight: 600 } satisfies CSSProperties,
+};

@@ -31,7 +31,20 @@
     "pass": "pass",
     "fail": "fail",
     "runningProgress": "Running… {done}/{total}",
-    "showMore": "Show more"
+    "showMore": "Show more",
+    "overviewSubtitle": "Regression harness across all reviewer agents · pick an agent to see its runs",
+    "agentsHeading": "Agents",
+    "lastRun": "Last run v{version} · {time} · {passed}/{total} pass",
+    "noAgentRuns": "No eval runs yet",
+    "noAgents": "No agents yet. Create an agent to start evaluating it.",
+    "goToAgents": "Go to Agents",
+    "recentAll": "Recent eval runs · all agents",
+    "loadError": "Could not load the eval overview.",
+    "mini": {
+      "recall": "Recall",
+      "precision": "Prec",
+      "citation": "Cite"
+    }
   },
   "caseEditor": {
     "newCase": "New eval case",
