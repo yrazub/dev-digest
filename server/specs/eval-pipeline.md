@@ -5,9 +5,8 @@ Spec ID: SPEC-2026-10-31-eval-pipeline · Umbrella: [`specs/eval-pipeline.md`](.
 Covers AC-2–AC-6, AC-9, AC-11, AC-12, AC-15, AC-17, AC-18, AC-21, AC-25, AC-28–AC-50 and
 AC-92–AC-97 and AC-99 of the umbrella, and the server data behind AC-20, AC-24, AC-52–AC-56, AC-61,
 AC-64, AC-65, AC-71, AC-76–AC-78, AC-81, AC-82, AC-86 and AC-91. It owns every `@devdigest/shared` contract the feature
-adds; the client spec refers to them by name. It also owns the two repository-root files of
-AC-95–AC-97 (`package.json`, `scripts/verify-l06.sh`), which the spec agent cannot write and
-the plan builds.
+adds; the client spec refers to them by name. It also owns the one repository-root file of
+AC-95–AC-97 (`scripts/verify-l06.sh`), which the spec agent cannot write and the plan builds.
 
 The server gets a new `eval` module: case creation from a finding, case list and delete, a
 background run of an agent on its whole case set, a pure scorer, run lists and detail, and an
@@ -84,7 +83,7 @@ parent run table is added, through one generated migration. `reviewer-core` is u
 | R-SRV-41 | WHEN `GET /evals/overview` is called, the API shall answer `EvalOverview` with every agent of the workspace, enabled or not, by name, each with its latest `done` run or null, whether it has a `running` run, its case and run counts and the `recall` of its last 10 `done` runs oldest first; and `recent_runs` with the 6 newest runs of the workspace in any status, with their agent's name. | AC-56, AC-64, AC-65, AC-76, AC-77, AC-91 |
 | R-SRV-42 | `@devdigest/shared` shall define the contracts of "Contracts" below in a new `contracts/eval-pipeline.ts`, exported from the barrel; the client's copy of that file shall be byte-identical, and `test/contracts-sync.test.ts` shall check it alongside `brief.ts` and `review-api.ts`. | AC-92 |
 | R-SRV-43 | `pnpm db:seed` shall insert the eval fixture of "Seeded eval data" below, idempotently, outside the block that creates PR #482, never overwriting or duplicating a row. | AC-93, AC-94 |
-| R-SRV-44 | The repository root shall hold a scripts-only `package.json` — `private: true`, a `verify:l06` script that runs `bash scripts/verify-l06.sh`, and no `dependencies`, `devDependencies` or `workspaces` — with no `pnpm-workspace.yaml`, no root lockfile and no root `node_modules`, before or after `pnpm verify:l06`. `scripts/verify-l06.sh` sets `npm_config_verify_deps_before_run=false` for every pnpm call it makes; as a pre-approved fallback, a one-line root `.npmrc` `verify-deps-before-run=false` is added only if the root-files phase shows that `pnpm verify:l06` would otherwise write a lockfile or `node_modules` at the root, and is the only other root file the feature adds. | AC-95 |
+| R-SRV-44 | The repository root shall hold no `package.json`, `.npmrc`, `pnpm-workspace.yaml`, lockfile or `node_modules/`, before or after `./scripts/verify-l06.sh` runs; the script shall be committed executable (mode `100755`), run directly from the repository root, call pnpm and npm only inside `server/`, `client/` and `reviewer-core/`, and set `npm_config_verify_deps_before_run=false` for every pnpm call it makes. | AC-95 |
 | R-SRV-45 | `scripts/verify-l06.sh` shall run, with `set -euo pipefail` and each step inside its own package: `server` — `pnpm typecheck`, the hermetic eval tests (with every `*.it.test.ts` excluded), the eval `*.it.test.ts` tests, `pnpm arch:check`, each test lane running the files "Verification command" selects; `client` — `pnpm typecheck` and the eval component tests selected by the substrings named there; `reviewer-core` — `npm run typecheck` and `npm test`; print the name of a failing step, and exit with its non-zero code. | AC-95 |
 | R-SRV-46 | `scripts/verify-l06.sh` shall install nothing, read no secret and set no API key; every eval test it runs shall use `MockLLMProvider` and mock adapters only. | AC-96 |
 | R-SRV-47 | IF `docker info` exits non-zero, THEN `scripts/verify-l06.sh` shall print "Docker is required for the eval integration tests" and exit 1 before its first `server` step, so the self-skipping `*.it.test.ts` lane can never let the command pass. | AC-97, AC-95 |
@@ -339,16 +338,8 @@ $0.0040 → $0.0030 (−$0.0010) in the studio's 4-decimal cost format.
 
 ## Verification command (repository root)
 
-The spec agent cannot write these files; the plan builds them (R-SRV-44–R-SRV-47).
+The spec agent cannot write this file; the plan builds it (R-SRV-44–R-SRV-47).
 
-- `package.json` at the root: `{ "name": "devdigest", "private": true, "scripts": { "verify:l06": "bash scripts/verify-l06.sh" } }`.
-  It is **not a workspace** — no `workspaces` field, no `pnpm-workspace.yaml`, no dependencies, no
-  lockfile; `pnpm verify:l06` only needs pnpm to find a script. The root `CLAUDE.md`'s rule "no
-  monorepo workspace" still holds, and its Commands table gets a `verify:l06` row (`doc-writer`).
-  The script exports `npm_config_verify_deps_before_run=false` for every pnpm call, so pnpm's
-  dependency check never installs or writes a lockfile; only if the root-files phase shows
-  `pnpm verify:l06` would still write a lockfile or `node_modules` at the root does the root gain a
-  one-line `.npmrc` with `verify-deps-before-run=false` (R-SRV-44).
 - `scripts/verify-l06.sh` runs from any working directory (it resolves the repository root from its
   own path), assumes each package is installed, and selects the eval tests by name: in `server`,
   the hermetic lane runs every `test/eval-*.test.ts` plus `test/contracts-sync.test.ts` with
@@ -377,13 +368,13 @@ The spec agent cannot write these files; the plan builds them (R-SRV-44–R-SRV-
 | `test/eval-seed.it.test.ts` or the existing seed test | Postgres | two seeds → two cases and two runs once, with the values above (R-SRV-43) |
 
 The rate limit is off under `NODE_ENV=test`. Where each test belongs is decided by
-`../../TESTING.md`. R-SRV-44–R-SRV-47 are checked by running `pnpm verify:l06` at the root
-(R-SRV-47 with Docker stopped).
+`../../TESTING.md`. R-SRV-44–R-SRV-47 are checked by running `./scripts/verify-l06.sh` at the
+root (R-SRV-47 with Docker stopped).
 
 ## Documentation
 
 `README.md` — the API map gets the `eval` module and its seven routes; `docs/schema.md` — the
 three tables as changed; `docs/architecture.md` — the eval run's background lifecycle and the boot
 reap; a `src/modules/eval/README.md` (inputs, scoring rules, limits, failures); the root
-`CLAUDE.md` Commands table and `TESTING.md` — `pnpm verify:l06`. Written by `doc-writer` after the
+`CLAUDE.md` Commands table and `TESTING.md` — `./scripts/verify-l06.sh`. Written by `doc-writer` after the
 code is verified.

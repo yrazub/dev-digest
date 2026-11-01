@@ -1,11 +1,12 @@
 # Implementation Plan: Eval Pipeline (L06 homework)
 
-**Goal:** Turn accepted and dismissed findings into per-agent eval cases, replay an agent on its case set in the background with a stored configuration snapshot, score each run in code only (recall, precision, citation accuracy), and show the results in an Evals tab, an Eval Dashboard and a Compare modal. A root `pnpm verify:l06` proves the result with no key and no model call. · **Packages:** server, client, e2e, plus two repository-root files (`package.json`, `scripts/verify-l06.sh`) and the client's synced contract copy. `reviewer-core` and `mcp` do not change. ·
+**Goal:** Turn accepted and dismissed findings into per-agent eval cases, replay an agent on its case set in the background with a stored configuration snapshot, score each run in code only (recall, precision, citation accuracy), and show the results in an Evals tab, an Eval Dashboard and a Compare modal. `./scripts/verify-l06.sh`, run from the repository root, proves the result with no key and no model call. · **Packages:** server, client, e2e, plus one repository-root file (`scripts/verify-l06.sh`; there is no root `package.json`) and the client's synced contract copy. `reviewer-core` and `mcp` do not change. ·
 **Spec:** `specs/eval-pipeline.md` (SPEC-2026-10-31-eval-pipeline), `server/specs/eval-pipeline.md`, `client/specs/eval-pipeline.md`, all `Status: approved` · **Execution mode:** multi-agent ·
 **Review answers** (`.devdigest/sdd/eval-pipeline/review.md`; every recommended answer accepted):
 - Q1 → `AgentsService` moves to narrow dependencies. `AgentsRepository.deleteById` deletes the agent's `eval_cases` and the agent in one transaction. `pnpm arch:baseline` drops the `agents/service.ts` entry.
 - Q2 → the boot reap is a second awaited call in the existing `try` of `server/src/app.ts`, made through the eval module's own repository. `ReviewService` is not touched.
-- Q3, Q4, Q6, Q8, Q9 and F18 → already in the specs: the recharts trend, `formatCostUsd`, the renamed test files and selection, the `.npmrc` fallback, the slug trim, and the "hunk lines" wording.
+- Q3, Q4, Q6, Q9 and F18 → already in the specs: the recharts trend, `formatCostUsd`, the renamed test files and selection, the slug trim, and the "hunk lines" wording.
+- Q8 (the root `.npmrc` fallback) → superseded by the user's decision of 2026-11-01, after phase 14 was blocked. On pnpm 12.4.2 a root `package.json` makes `pnpm verify:l06` install the root project, writing `node_modules/` and `pnpm-lock.yaml` at the root, and the `.npmrc` fallback does not prevent it. There is no root `package.json` and no root `.npmrc`. The command is `./scripts/verify-l06.sh`, which calls pnpm and npm only inside each package. The spec change goes through `spec-creator` (R-SRV-44, AC-95–AC-97).
 - Q5 → the checkboxes are native `<input type="checkbox">` elements.
 - Q7 → `verify-l06.sh` runs the eval `.it` files with `--no-file-parallelism` and fails when vitest reports any skipped test.
 - Q10 → `cases_total` is the snapshot taken at start. A run whose cases were all deleted ends `done` with null metrics. Aggregates are computed from the stored rows.
@@ -115,6 +116,7 @@
   - `client/src/vendor/**`, except the synced `contracts/eval-pipeline.ts` copy and the one export line in `client/src/vendor/shared/index.ts` (phase 1).
   - `server/package.json` (skip-worktree).
   - `.github/workflows/**`.
+  - The repository root gets no `package.json`, `.npmrc`, `pnpm-workspace.yaml`, lockfile or `node_modules/` (user decision 2026-11-01, Q8 superseded).
   - `reviewer-core/**`, `mcp/**`, `evals/**`.
   - `server/src/vendor/shared/contracts/{knowledge,eval-ci}.ts`.
   - `server/src/modules/reviews/{diff-loader,run-executor,service}.ts` and `reviews/repository/skill.repo.ts` (R1, R2).
@@ -716,28 +718,28 @@ One tab, scaled screenshots, closed at the end.
 - AC-88 / R-WEB-53 — the modal opens from the URL only for two valid done runs.
 - All of the above are shown by `CompareModal.test.tsx`, `word-diff.test.ts` and `AgentEvalView.test.tsx`.
 
-### 14 · Root `package.json` and `scripts/verify-l06.sh` (repository root)
+### 14 · `scripts/verify-l06.sh` (repository root)
 
-This phase comes after every eval test exists, so the script selects them all.
+This phase comes after every eval test exists, so the script selects them all. The repository root gets no `package.json`, `.npmrc`, `pnpm-workspace.yaml` or lockfile. The script is run directly as `./scripts/verify-l06.sh` and calls pnpm and npm only inside `server/`, `client/` and `reviewer-core/`. Each of those has its own `package.json` and lockfile, and the two pnpm packages have their own `pnpm-workspace.yaml` (`server/pnpm-workspace.yaml`, `client/pnpm-workspace.yaml`), so pnpm never resolves a project at the root (root `INSIGHTS.md:416-431`).
 
 | File | Change | Skills | Rules to respect |
 |---|---|---|---|
-| `package.json` (new, root) | Exactly `{ "name": "devdigest", "private": true, "scripts": { "verify:l06": "bash scripts/verify-l06.sh" } }`. No `dependencies`, `devDependencies`, `workspaces` or `packageManager`. Do not create `pnpm-workspace.yaml` or a root lockfile (R-SRV-44). | — (no skill glob) | — |
-| `scripts/verify-l06.sh` (new, executable) | `#!/usr/bin/env bash` and `set -euo pipefail`. Resolve `ROOT` from `${BASH_SOURCE[0]}`. `export npm_config_verify_deps_before_run=false`.<br>**Docker check**, before any server step: `docker info >/dev/null 2>&1`, else print `Docker is required for the eval integration tests` to stderr and `exit 1` (R-SRV-47).<br>A `step <name> <cmd…>` helper prints the step name, runs the command in a subshell inside its package, and on failure prints `FAILED: <name>` and exits with that code (R-SRV-45). Steps, in order:<br>1. `server`: `pnpm typecheck`.<br>2. `server`: the hermetic lane, `pnpm exec vitest run --exclude '**/*.it.test.ts'` with the files of the bash glob `test/eval-*.test.ts` (minus `*.it.test.ts`) plus `test/contracts-sync.test.ts`.<br>3. `server`: the integration lane, `pnpm exec vitest run --no-file-parallelism --reporter=default --reporter=json --outputFile.json=<mktemp file>` with the files of `test/eval-*.it.test.ts`. A `node -e` check then fails the step with `eval integration tests were skipped` when the JSON's `numPendingTests + numTodoTests > 0` or `numPassedTests === 0` (Q7).<br>4. `server`: `pnpm arch:check`.<br>5. `client`: `pnpm typecheck`.<br>6. `client`: `pnpm exec vitest run app/evals/ EvalsTab components/eval/ FindingCard FindingsPanel InlineFinding app-shell/nav hooks/evals`.<br>7. `reviewer-core`: `npm run typecheck`.<br>8. `reviewer-core`: `npm test`.<br>The script installs nothing, reads no secret and sets no key (R-SRV-46). It ends by printing `verify:l06 passed`. | — (no skill glob) | — |
-| `.npmrc` (new, root) — **only if needed** | One line `verify-deps-before-run=false`, added only if running `pnpm verify:l06` at the root creates `pnpm-lock.yaml`, `pnpm-workspace.yaml` or `node_modules` there. Use `ls -a` at the root: `node_modules/` is git-ignored, so `git status` will not show it. If any of these appeared, delete them, add the file, re-run and confirm the root stays clean. Report which way it went (R-SRV-44, Q8). | — | — |
+| `package.json` (root) — **delete** | The blocked first run left an untracked root `package.json`. Delete it. Also delete these root files if present: `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.npmrc` and `node_modules/`, left by the earlier `pnpm verify:l06` run. `node_modules/` is git-ignored (`.gitignore:1`), so check with `ls -a`, not `git status`. Create none of them (R-SRV-44). | — (no skill glob) | — |
+| `scripts/verify-l06.sh` (new, executable: `chmod +x`, so git records mode `100755`, because it is run as `./scripts/verify-l06.sh`) | `#!/usr/bin/env bash` and `set -euo pipefail`. The header comment names the command `./scripts/verify-l06.sh`, never `pnpm verify:l06`. Resolve `ROOT` from `${BASH_SOURCE[0]}`. `export npm_config_verify_deps_before_run=false` and `export pnpm_config_verify_deps_before_run=false` (the same setting under pnpm's own prefix).<br>**Docker check**, before any server step: `docker info >/dev/null 2>&1`, else print `Docker is required for the eval integration tests` to stderr and `exit 1` (R-SRV-47).<br>A `step <name> <cmd…>` helper prints the step name, runs the command in a subshell inside its package, and on failure prints `FAILED: <name>` and exits with that code (R-SRV-45). Steps, in order:<br>1. `server`: `pnpm typecheck`.<br>2. `server`: the hermetic lane, `pnpm exec vitest run --exclude '**/*.it.test.ts'` with the files of the bash glob `test/eval-*.test.ts` (minus `*.it.test.ts`) plus `test/contracts-sync.test.ts`.<br>3. `server`: the integration lane, `pnpm exec vitest run --no-file-parallelism --reporter=default --reporter=json --outputFile.json=<mktemp file>` with the files of `test/eval-*.it.test.ts`. A `node -e` check then fails the step with `eval integration tests were skipped` when the JSON's `numPendingTests + numTodoTests > 0` or `numPassedTests === 0` (Q7).<br>4. `server`: `pnpm arch:check`.<br>5. `client`: `pnpm typecheck`.<br>6. `client`: `pnpm exec vitest run app/evals/ EvalsTab components/eval/ FindingCard FindingsPanel InlineFinding app-shell/nav hooks/evals`.<br>7. `reviewer-core`: `npm run typecheck`.<br>8. `reviewer-core`: `npm test`.<br>The script installs nothing, reads no secret and sets no key (R-SRV-46). It ends by printing `verify-l06 passed`. | — (no skill glob) | — |
 
 **Tests (test-writer):**
 - No test file. R-SRV-44–R-SRV-47 are verified by the commands of `Verify (phase)`, as the server spec says. test-writer runs them and reports each line.
 - Expected to change: none.
 
-**Verify (code):** `pnpm verify:l06` (from the repository root, alone, with no other test command in flight)
+**Verify (code):** `./scripts/verify-l06.sh` (from the repository root, alone, with no other test command in flight)
 **Verify (phase):** from the repository root, one at a time:
-1. `pnpm verify:l06`. It exits 0, prints all eight step names, and afterwards `ls -a` shows no `pnpm-lock.yaml`, `pnpm-workspace.yaml` or `node_modules` at the root.
-2. `HOME="$(mktemp -d)"` holding only a `.docker` symlink to the real `~/.docker`, with `DOCKER_HOST=unix://<real home>/.docker/run/docker.sock`, then `pnpm verify:l06`. It exits 0, proving no key is read (`server/INSIGHTS.md:157`).
-3. `DOCKER_HOST=unix:///nonexistent.sock bash scripts/verify-l06.sh; echo "exit=$?"`. It prints "Docker is required for the eval integration tests" and `exit=1`, and no `==> server` step ran.
+1. `./scripts/verify-l06.sh`. It exits 0, prints all eight step names and `verify-l06 passed`. Afterwards `ls -a` at the root shows no `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.npmrc` or `node_modules`.
+2. `HOME="$(mktemp -d)"` holding only a `.docker` symlink to the real `~/.docker`, with `DOCKER_HOST=unix://<real home>/.docker/run/docker.sock`, then `./scripts/verify-l06.sh`. It exits 0, proving no key is read (`server/INSIGHTS.md:157`).
+3. `DOCKER_HOST=unix:///nonexistent.sock ./scripts/verify-l06.sh; echo "exit=$?"`. It prints "Docker is required for the eval integration tests" and `exit=1`, and no `==> server` step ran.
+4. `test -x scripts/verify-l06.sh && echo executable` prints `executable`, and `git ls-files package.json .npmrc pnpm-lock.yaml pnpm-workspace.yaml` prints nothing.
 
 **Done when:**
-- AC-95 / R-SRV-44, R-SRV-45 — `pnpm verify:l06` runs every named step inside its package, fails on a skipped integration test, and exits 0 only when all pass. The root stays scripts-only.
+- AC-95 / R-SRV-44, R-SRV-45 — `./scripts/verify-l06.sh`, run from the repository root, runs every named step inside its package, fails on a skipped integration test, and exits 0 only when all pass. The root holds no `package.json`, `pnpm-workspace.yaml`, `.npmrc`, lockfile or `node_modules` before or after the run.
 - AC-96 / R-SRV-46 — it is green with no key reachable.
 - AC-97 / R-SRV-47 — with Docker unreachable it prints the message and exits 1 before any server step.
 
@@ -791,7 +793,7 @@ This phase is the deterministic flow for the dashboard and Compare over the phas
   - `server/src/modules/eval/README.md`;
   - `client/README.md` route map (`/evals`, `/evals/:agentId` with `?compare=`, `?tab=evals`);
   - `client/docs/data-flow.md` (eval query keys, the polling rule, the invalidations);
-  - a `pnpm verify:l06` row in the root `CLAUDE.md` Commands table and in `TESTING.md`.
+  - a `./scripts/verify-l06.sh` row in the root `CLAUDE.md` Commands table and in `TESTING.md`.
 - **The course delivery items** (demo video, screenshot, PR) are tracked by the main session.
 
 ## Risks
@@ -799,7 +801,7 @@ This phase is the deterministic flow for the dashboard and Compare over the phas
 - **FK-violation mapping depends on drizzle-kit's generated constraint names.** `storeResult` must tell `case_id` from `suite_run_id`. The repository reads the names from the generated schema, not guessed literals, and the mid-run delete test pins both paths.
 - **Interference between `.it` files.** Seeded eval rows (from phase 7) and the shared database could break count assertions in other `.it` files. The eval tests use their own agents and a fresh workspace where counts matter (Constraints). The integration lane always runs with `--no-file-parallelism`.
 - **Self-skipping integration tests.** `.it` files self-skip under Docker load and count as green. `verify-l06.sh` fails on any skipped integration test (Q7), and the Docker check runs first.
-- **pnpm writing files at the root.** pnpm's dependency check could write a lock or workspace file at the root on `pnpm verify:l06`. Phase 14 checks with `ls -a` and uses the pre-approved `.npmrc` fallback only if needed.
+- **pnpm writing files at the root.** On pnpm 12.4.2 a root `package.json` makes `pnpm verify:l06` install the root project, writing `node_modules/` and `pnpm-lock.yaml` at the root (seen in the first phase-14 run), and a root `.npmrc` does not prevent it. So there is no root `package.json`. The script is run directly and calls pnpm only inside `server/` and `client/`, which each have their own `pnpm-workspace.yaml`. Phase 14's Verify checks the root with `ls -a`.
 - **Word-diff cost.** LCS over tokens is O(n·m). Prompts of a few thousand tokens are fine with typed-array rows. If a real prompt is visibly slow, report it as an insight; the algorithm can change later without changing the spec.
 - **Hook churn in existing PR-detail tests.** Adding hooks under `FindingCard` breaks five existing test files at once. Phase 9 lists every one of them as expected to change, and the hook lives in the `EvalCaseAction` leaf so the mocks stay small.
 - **recharts in jsdom.** `ResponsiveContainer` measures 0 in jsdom, so a chart test would prove nothing. The tooltip text is tested through the pure helper, and the chart itself is checked in the phase-12 screenshot row.

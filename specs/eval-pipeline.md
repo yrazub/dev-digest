@@ -44,7 +44,7 @@ This feature is separate from the `evals/` package, which evaluates the Claude C
 - Error, empty and in-progress states for every surface (P2), and the accepted UX proposals (P3).
 - A seeded eval set and two finished runs on a seeded agent, so the dashboard and Compare can be
   shown and tested without a model call.
-- `pnpm verify:l06` at the repository root, green with no API key and no model call.
+- `./scripts/verify-l06.sh`, run from the repository root, green with no API key and no model call.
 
 **Non-goals**
 - **Export of an agent** (the "+ Export власного агента" of the task title). The homework text
@@ -91,7 +91,7 @@ This feature is separate from the `evals/` package, which evaluates the Claude C
   old prompt against new — so that I see whether my change helped or hurt.
 - US-6 — As an agent author, I want an Eval Dashboard in the sidebar that shows the latest eval runs
   across agents, so that I see the state of every agent at a glance.
-- US-7 — As the person submitting the homework, I want one command, `pnpm verify:l06`, that proves
+- US-7 — As the person submitting the homework, I want one command, `./scripts/verify-l06.sh`, that proves
   the feature's checks pass without keys or model calls, so that acceptance is reproducible.
 
 ## Acceptance criteria (EARS)
@@ -198,21 +198,22 @@ percentage minus the older one's, in points ("pt"), with its sign.
 | AC-92 | P1 | The eval contracts shall be identical in the server's contracts and in the client's copy. | US-3 | unit (server) |
 | AC-93 | P2 | WHEN the user of the seeded stack opens the Eval Dashboard view of the agent "Security Reviewer", the view shall show its two seeded runs without a model call. | US-6 | e2e |
 | AC-94 | P2 | WHEN the user of the seeded stack compares the two seeded runs, the Compare modal shall show the prompt diff and a precision delta of "+50pt". | US-5 | e2e |
-| AC-95 | P1 | WHEN `pnpm verify:l06` is run at the repository root, the command shall run the server's typecheck, eval unit and integration tests and `arch:check`, the client's typecheck and eval component tests, and `reviewer-core`'s typecheck and tests, and exit 0 only when all of them ran and passed. | US-7 | unit (server) ¹ |
-| AC-96 | P1 | The `pnpm verify:l06` command shall make no model call and need no API key. | US-7 | unit (server) ¹ |
-| AC-97 | P1 | IF Docker does not answer when `pnpm verify:l06` is run, THEN the command shall print "Docker is required for the eval integration tests" and exit with a non-zero code before running any server test. | US-7 | unit (server) ¹ |
+| AC-95 | P1 | WHEN `./scripts/verify-l06.sh` is run from the repository root, the command shall run the server's typecheck, eval unit and integration tests and `arch:check`, the client's typecheck and eval component tests, and `reviewer-core`'s typecheck and tests, and exit 0 only when all of them ran and passed. | US-7 | unit (server) ¹ |
+| AC-96 | P1 | The `./scripts/verify-l06.sh` command shall make no model call and need no API key. | US-7 | unit (server) ¹ |
+| AC-97 | P1 | IF Docker does not answer when `./scripts/verify-l06.sh` is run, THEN the command shall print "Docker is required for the eval integration tests" and exit with a non-zero code before running any server test. | US-7 | unit (server) ¹ |
 | AC-98 | P2 | WHILE a run of the agent is `running`, the Evals tab shall show the Delete button of every case row disabled. | US-2 | unit (client) |
 | AC-99 | P2 | IF a case is deleted while a run of its agent is `running`, THEN the API shall finish that run with the case counted in neither its passed cases, its errored cases nor its recall, precision and citation accuracy. | US-3, US-4 | integration (server) |
 
-¹ AC-95–AC-97 are verified by running `pnpm verify:l06` at the repository root with no key in
+¹ AC-95–AC-97 are verified by running `./scripts/verify-l06.sh` from the repository root with no key in
 `~/.devdigest/secrets.json` (AC-97 with Docker stopped); the suites named are where the command's
 checks run.
 
 The five acceptance items of the course task map to: "≥8 cases in a set" → AC-21, AC-31 and the
 manual demo with the user's own cases; "one-click creation, both kinds" → AC-1–AC-7; "a prompt
 change visibly moves recall/precision" → AC-29, AC-67, AC-70, AC-71 (the observable part, Q17) and
-the manual demo; "scoring makes no LLM call" → AC-37, AC-38; "`pnpm verify:l06` green" → AC-95,
-AC-96, AC-97. Steps 1–6 of "Можлива реалізація" are the remaining P1 criteria.
+the manual demo; "scoring makes no LLM call" → AC-37, AC-38; "`verify:l06` green" → AC-95,
+AC-96, AC-97: the repository has no root `package.json` (decision of 2026-11-01), so
+`./scripts/verify-l06.sh` exiting 0 is what meets this item. Steps 1–6 of "Можлива реалізація" are the remaining P1 criteria.
 
 ## Edge cases
 | ID | Case | Expected behaviour | Covered by |
@@ -257,7 +258,7 @@ AC-96, AC-97. Steps 1–6 of "Можлива реалізація" are the remai
 | EC-38 | Repeated run requests | `429` after 10 per minute | AC-47 |
 | EC-39 | Another workspace's id in a route | `404` | AC-50 |
 | EC-40 | The seeded stack has no API key | The seeded runs show from the database; Compare works | AC-93, AC-94 |
-| EC-41 | Docker is not running when `pnpm verify:l06` runs | The command fails with "Docker is required for the eval integration tests" instead of printing green with the self-skipped integration tests | AC-97 |
+| EC-41 | Docker is not running when `./scripts/verify-l06.sh` runs | The command fails with "Docker is required for the eval integration tests" instead of printing green with the self-skipped integration tests | AC-97 |
 
 ## Non-functional requirements
 - NFR-1 — LLM cost: scoring makes 0 model calls. Creating a case, listing cases or runs, reading a
@@ -283,8 +284,9 @@ AC-96, AC-97. Steps 1–6 of "Можлива реалізація" are the remai
 - NFR-6 — Accessibility: every run checkbox, case row toggle, Delete button and Compare control is
   reachable with Tab, operated with Enter or Space, and has an accessible name; metric values are
   text, not colour alone.
-- NFR-7 — Verification: `pnpm verify:l06` reads no secret, calls no model and installs nothing; it
-  runs the packages' own scripts inside each package.
+- NFR-7 — Verification: `./scripts/verify-l06.sh` reads no secret, calls no model and installs
+  nothing; it runs the packages' own scripts inside each package and leaves no file at the
+  repository root.
 
 ## Inputs and provenance
 **Sources of this spec**
@@ -348,18 +350,19 @@ sequenceDiagram
 ## Ownership
 | Part | Package | Module spec |
 |---|---|---|
-| Tables and the generated migration, every eval contract in `@devdigest/shared` and its client sync, the eval routes, case creation, the background executor, the pure scorer, the boot reaper extension, agent-delete cascade, the seed, and the root `package.json` with `scripts/verify-l06.sh` | `server/` (and the repository root for the two verification files) | [`server/specs/eval-pipeline.md`](../server/specs/eval-pipeline.md) |
+| Tables and the generated migration, every eval contract in `@devdigest/shared` and its client sync, the eval routes, case creation, the background executor, the pure scorer, the boot reaper extension, agent-delete cascade, the seed, and `scripts/verify-l06.sh` | `server/` (and the repository root for the one verification file) | [`server/specs/eval-pipeline.md`](../server/specs/eval-pipeline.md) |
 | The FindingCard button and its states, the Evals tab, the `/evals` and `/evals/:agentId` pages, the Compare modal, the run drawer, the sidebar item, hooks, strings and layout | `client/` | [`client/specs/eval-pipeline.md`](../client/specs/eval-pipeline.md) |
 | No change: `reviewPullRequest()`, `groundFindings()` and `wrapUntrusted()` are used as they are | `reviewer-core/` | — |
 | No change | `mcp/` | — |
 | The flows of AC-93 and AC-94, and the seed contract lines in `e2e/specs/seed-fixtures.md` | `e2e/` | written by `test-writer` in `e2e/specs/` |
 
-The root `package.json` is scripts-only and is **not a workspace**: it has no `workspaces` field,
-no dependencies and no lockfile, and there is no `pnpm-workspace.yaml`. Each package keeps its own
-`package.json`, lockfile and install, as the root `CLAUDE.md` requires ("no monorepo workspace");
-the root file only gives `pnpm verify:l06` a place to live. The command turns off pnpm's
-dependency check for its own pnpm calls; a one-line root `.npmrc` that turns it off is added only
-if that alone would still let the command write a lockfile or `node_modules` at the root.
+The repository root has **no `package.json`** — and no `.npmrc`, `pnpm-workspace.yaml`, lockfile or
+`node_modules/` — before or after the verification command runs (decision of 2026-11-01: on pnpm
+12.4.2 a root `package.json` makes pnpm install the root project first, and an `.npmrc` does not
+prevent it). Each package keeps its own `package.json`, lockfile and install, as the root
+`CLAUDE.md` requires ("no monorepo workspace"). `./scripts/verify-l06.sh` is executable, is run
+directly, calls pnpm and npm only inside `server/`, `client/` and `reviewer-core/`, and turns off
+pnpm's dependency check for its own pnpm calls.
 
 ## Untrusted inputs
 | Input | Origin | Reaches | Handling |
