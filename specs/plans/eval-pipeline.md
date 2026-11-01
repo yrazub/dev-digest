@@ -4,7 +4,7 @@
 **Spec:** `specs/eval-pipeline.md` (SPEC-2026-10-31-eval-pipeline), `server/specs/eval-pipeline.md`, `client/specs/eval-pipeline.md`, all `Status: approved` · **Execution mode:** multi-agent ·
 **Review answers** (`.devdigest/sdd/eval-pipeline/review.md`; every recommended answer accepted):
 - Q1 → `AgentsService` moves to narrow dependencies. `AgentsRepository.deleteById` deletes the agent's `eval_cases` and the agent in one transaction. `pnpm arch:baseline` drops the `agents/service.ts` entry.
-- Q2 → the boot reap is a second awaited call in the existing `try` of `server/src/app.ts`, made through the eval module's own repository. `ReviewService` is not touched.
+- Q2 → the boot reap is a second awaited call in the existing `try` of `server/src/app.ts`, made through the eval module's own repository. `ReviewService` is not touched by the reap. (Phase 7 later changed `ReviewService` and `reviews/run-executor.ts` from `AgentRow` to the `Agent` contract with the user's approval; see Constraints → Do not touch.)
 - Q3, Q4, Q6, Q9 and F18 → already in the specs: the recharts trend, `formatCostUsd`, the renamed test files and selection, the slug trim, and the "hunk lines" wording.
 - Q8 (the root `.npmrc` fallback) → superseded by the user's decision of 2026-11-01, after phase 14 was blocked. On pnpm 12.4.2 a root `package.json` makes `pnpm verify:l06` install the root project, writing `node_modules/` and `pnpm-lock.yaml` at the root, and the `.npmrc` fallback does not prevent it. There is no root `package.json` and no root `.npmrc`. The command is `./scripts/verify-l06.sh`, which calls pnpm and npm only inside each package. The spec change goes through `spec-creator` (R-SRV-44, AC-95–AC-97).
 - Q5 → the checkboxes are native `<input type="checkbox">` elements.
@@ -119,7 +119,7 @@
   - The repository root gets no `package.json`, `.npmrc`, `pnpm-workspace.yaml`, lockfile or `node_modules/` (user decision 2026-11-01, Q8 superseded).
   - `reviewer-core/**`, `mcp/**`, `evals/**`.
   - `server/src/vendor/shared/contracts/{knowledge,eval-ci}.ts`.
-  - `server/src/modules/reviews/{diff-loader,run-executor,service}.ts` and `reviews/repository/skill.repo.ts` (R1, R2).
+  - `server/src/modules/reviews/diff-loader.ts` and `reviews/repository/skill.repo.ts` (R1, R2). `server/src/modules/reviews/run-executor.ts` and `reviews/service.ts` change only where phase 7 switched them from `AgentRow` to the `Agent` contract from `@devdigest/shared` (user-approved arch fix, `.devdigest/sdd/eval-pipeline/notes.txt:47`, `:50`). Nothing else in them changes.
   - Every `CLAUDE.md`, `README.md`, `TESTING.md` and `docs/**`: doc-writer writes those after verification. Exceptions: `e2e/specs/README.md` and `e2e/specs/seed-fixtures.md` (phase 15).
 
 ## Phases
@@ -816,6 +816,46 @@ This phase closes F1, the `orderPair` part of F2, F3 and P10.T7 without changing
 - F3 / `zod-parse-at-boundary`, behind R-SRV-1 and R-SRV-2 (the stored expectation's `severity` and `category` are contract values): `source.repo.ts` holds no `as Severity` or `as FindingCategory`. An out-of-enum stored severity or category answers 422 `validation_error` and writes no case, as `eval-pipeline.it.test.ts` shows.
 - P10.T7 / AC-51 / R-WEB-16: with a disabled agent, pressing "Run eval (1)" on the Agent editor's Evals tab calls start exactly once, as `AgentEditor.test.tsx` shows.
 
+### 17 · Review fixes — Compare modal colocated with the agent view (`client`)
+
+This phase closes F2 (`struct-colocate`) without changing any behaviour. The Compare modal, its word diff, its four compare helpers and its style keys have one consumer, `AgentEvalView`. They move from `src/components/eval/` into their own component folder `src/app/evals/[agentId]/_components/CompareModal/`, which sits next to `AgentEvalView/`, and their tests move with them.
+
+`src/components/eval/` keeps only what the Evals tab and the dashboard both use: `RunsTable`, `RunDrawer`, `RunEvalButton`, `MetricBar`, `DeltaLabel`, `constants.ts`, and the remaining shared parts of `helpers.ts` and `styles.ts`.
+
+This phase replaces two earlier statements of where these files live: the phase 13 file rows for `word-diff.ts`, `CompareModal.tsx` and the four helpers, and the placement sentence in phase 16's intro.
+
+| File | Change | Skills | Rules to respect |
+|---|---|---|---|
+| `client/src/app/evals/[agentId]/_components/CompareModal/word-diff.ts` (new, `git mv` from `client/src/components/eval/word-diff.ts`) | Moved verbatim. Its content does not change. | frontend-ui-architecture, security, next-best-practices | logic-pure-domain |
+| `client/src/app/evals/[agentId]/_components/CompareModal/helpers.ts` (new) | Holds `costDelta`, `configDiffers`, `sameConfig` and `flippedCases`, moved verbatim with their doc comments from `client/src/components/eval/helpers.ts:82-120`. The private `Snapshot`, `skillKeys` and `ResultsOf` come with them. The file declares its own `const MINUS = "−"` (U+2212), imports `type { EvalCaseOutcome, EvalConfigSnapshot }` from `@devdigest/shared`, and imports `formatCostUsd` from `@/lib/format-cost`. | frontend-ui-architecture, security, next-best-practices | logic-pure-domain, split-pure |
+| `client/src/app/evals/[agentId]/_components/CompareModal/styles.ts` (new) | `export const s`, holding the "Compare modal" keys moved verbatim from `client/src/components/eval/styles.ts:242-305`: `compareBody`, `tiles`, `tile`, `tileLabel`, `tileValues`, `tileOld`, `tileArrow`, `tileNew`, `configGrid`, `configCol`, `configHead`, `configLine`, `diffLegend`, `diffLegendItem`, `diffSwatch`, `diffBox`, `diffToken`, `noChange`, `flippedList`, `flippedRow`. It imports `{ s as evalStyles }` from `@/components/eval/styles`. `configLine` and `flippedRow` spread `evalStyles.oneLine`. A new key `costDelta: evalStyles.delta("muted")` is added. | frontend-ui-architecture, security, next-best-practices | split-pure |
+| `client/src/app/evals/[agentId]/_components/CompareModal/CompareModal.tsx` (new, `git mv` from `client/src/components/eval/CompareModal.tsx`) | Behaviour and markup are unchanged. The imports on `:14-18` become: `METRIC_COLOR` from `@/components/eval/constants`; `DeltaLabel` from `@/components/eval/DeltaLabel`; `deltaPoints`, `pct` from `@/components/eval/helpers`; `configDiffers`, `costDelta`, `flippedCases`, `sameConfig` from `./helpers`; `s` from `./styles`; `wordDiff` from `./word-diff`. The cost tile's `s.delta("muted")` (`:177`) becomes `s.costDelta`. | frontend-ui-architecture, react-best-practices, security, next-best-practices | split-no-nested-definitions, split-pure, react-nested-component, sec-xss, struct-one-way |
+| `client/src/app/evals/[agentId]/_components/CompareModal/index.ts` (new) | One line: `export { CompareModal } from "./CompareModal";` (the folder convention in `client/CLAUDE.md`, "Naming"). | frontend-ui-architecture, security, next-best-practices | — |
+| `client/src/components/eval/CompareModal.tsx` — **delete** | Removed by the `git mv` above. | frontend-ui-architecture, react-best-practices, security | — |
+| `client/src/components/eval/word-diff.ts` — **delete** | Removed by the `git mv` above. | frontend-ui-architecture, security | — |
+| `client/src/components/eval/helpers.ts` | Remove `costDelta`, `Snapshot`, `skillKeys`, `configDiffers`, `sameConfig`, `ResultsOf` and `flippedCases` (`:82-120`). Line 3 becomes `import type { EvalSuiteRun } from "@devdigest/shared";`. The `formatCostUsd` import (`:4`) is removed. `MINUS` stays, because `deltaText` uses it. Nothing else changes. | frontend-ui-architecture, security | logic-pure-domain, split-pure |
+| `client/src/components/eval/styles.ts` | Remove the `// Compare modal` block (`:242-305`). Every other key is unchanged. | frontend-ui-architecture, security | split-pure |
+| `client/src/app/evals/[agentId]/_components/AgentEvalView/AgentEvalView.tsx` | Line 13 becomes `import { CompareModal } from "../CompareModal";`, the sibling-folder import used across the client (for example `client/src/app/agents/_components/AgentsView/AgentsView.tsx:16`). Nothing else changes. | frontend-ui-architecture, react-best-practices, security, next-best-practices | struct-one-way, struct-no-cross-feature |
+
+**Tests (test-writer):**
+- Move `client/src/components/eval/CompareModal.test.tsx` to `client/src/app/evals/[agentId]/_components/CompareModal/CompareModal.test.tsx` with `git mv`. Its cases do not change. Line 6 becomes `import messages from "../../../../../../messages/en/eval.json";`, the same depth as `AgentEvalView/AgentEvalView.test.tsx:6`.
+- Move `client/src/components/eval/word-diff.test.ts` to `client/src/app/evals/[agentId]/_components/CompareModal/word-diff.test.ts` with `git mv`. Its content does not change.
+- Add `client/src/app/evals/[agentId]/_components/CompareModal/helpers.test.ts`: the `describe("costDelta")`, `describe("sameConfig / configDiffers")` and `describe("flippedCases")` blocks, moved verbatim from `client/src/components/eval/helpers.test.ts:146-236` and imported from `./helpers`.
+- Expected to change:
+  - `client/src/components/eval/helpers.test.ts`: `configDiffers`, `costDelta`, `flippedCases` and `sameConfig` leave the import (`:4`, `:5`, `:8`, `:16`), and the three blocks at `:146-236` are removed (they move, see above).
+  - `client/src/components/eval/CompareModal.test.tsx` and `client/src/components/eval/word-diff.test.ts` fail after the implementer's move, because `./CompareModal` and `./word-diff` are gone. They are moved, see above.
+  - `AgentEvalView/AgentEvalView.test.tsx` is not expected to change. It renders the modal through `AgentEvalView` and does not import its path.
+
+**Verify (code):** `cd client && pnpm typecheck` (may fail only in the three test files listed as expected to change) · `cd client && pnpm test` (same)
+**Verify (phase):** `cd client && pnpm typecheck && pnpm test`
+**Done when:**
+- F2 / `struct-colocate` (groundwork, no criterion changes; R-WEB-34–R-WEB-36, R-WEB-45–R-WEB-47, R-WEB-51 and R-WEB-53 behave as before): `client/src/components/eval/` contains no `CompareModal.tsx`, `CompareModal.test.tsx`, `word-diff.ts` or `word-diff.test.ts`, and `client/src/app/evals/[agentId]/_components/CompareModal/` contains all four plus `helpers.ts`, `helpers.test.ts`, `styles.ts` and `index.ts`.
+- F2: `client/src/components/eval/helpers.ts` defines none of `costDelta`, `configDiffers`, `sameConfig` and `flippedCases`; `CompareModal/helpers.ts` defines all four.
+- F2: `client/src/components/eval/styles.ts` has no `compareBody`, `tile`, `diffBox`, `diffToken` or `flippedRow` key; `CompareModal/styles.ts` has them.
+- F2: `grep -rn "components/eval/CompareModal\|components/eval/word-diff" client/src` finds nothing.
+- AC-69–AC-71, AC-80–AC-82, AC-86 and AC-88 still hold: the moved `CompareModal.test.tsx`, `word-diff.test.ts` and `helpers.test.ts` and the unchanged `AgentEvalView.test.tsx` pass in `pnpm test`.
+- AC-95: `scripts/verify-l06.sh:81-82` needs no edit. Its client filter `app/evals/` still selects the moved test files, and that filter contains no brackets (`client/INSIGHTS.md:92-96`).
+
 ## Out of scope
 - **Every Non-goal of `specs/eval-pipeline.md`:**
   - agent export;
@@ -828,7 +868,7 @@ This phase closes F1, the `orderPair` part of F2, F3 and P10.T7 without changing
   - fixing the unwrapped PR title in the task line;
   - updating a case when its finding is re-decided.
 - **Any change to `reviewer-core/**`, `mcp/**` or `evals/**`,** or to `knowledge.ts` / `eval-ci.ts`.
-- **Refactoring `ReviewService`, `reviews/run-executor.ts`, `reviews/diff-loader.ts` or `reviews/repository/skill.repo.ts`.** The eval module keeps its own copies of the two small reads (R2), and `ReviewService` stays baselined (Q2).
+- **Refactoring `ReviewService`, `reviews/run-executor.ts`, `reviews/diff-loader.ts` or `reviews/repository/skill.repo.ts`,** beyond phase 7's user-approved type change in `reviews/service.ts` and `reviews/run-executor.ts`: `AgentRow` became the `Agent` contract, which removed their `src/db/rows` baseline entries (`.devdigest/sdd/eval-pipeline/notes.txt:47`, `:50-51`). The eval module keeps its own copies of the two small reads (R2), and `ReviewService` stays baselined for its `di-narrow-deps` entry (Q2).
 - **CI workflow changes:** `.github/workflows/**` is unchanged. The new test files fall under the existing package path filters.
 - **Documentation, written by `doc-writer` after verification** (server and client spec "Documentation"):
   - `server/README.md` API map (the `eval` module and its seven routes);
