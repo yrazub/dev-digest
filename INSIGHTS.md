@@ -262,6 +262,7 @@ be obvious to anyone reading the code, it does not belong here.
 - **2026-10-18** — The `chrome-devtools` MCP runs with `--autoConnect` (`.mcp.json:8`) and drives the user's own Chrome window, so `resize_page` does not change `innerWidth`. For a narrow-width check use `emulate` with viewport `<w>x<h>x1`, and reset it with an empty viewport before closing the tab.
 - **2026-10-18** — BSD `sed` on macOS reads the argument after `-i` as the backup suffix, so `sed -i 's/a/b/' file` fails with `unterminated substitute pattern`. Use `sed -i '' …`, `perl -pi -e`, or the Edit tool. No line in the repo shows it.
 - **2026-10-29** — the `skill-creator` viewer `eval-viewer/generate_review.py` needs Python 3.10 or newer: on macOS system Python 3.9.6 it stops at `def build_run(root: Path, run_dir: Path, budget: dict) -> dict | None:` (line 192) with `TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'`, and `from __future__ import annotations` fixes it. Copy the script out of the installed skill, add that import after the module docstring (before it is a `SyntaxError`), and run the copy; do not edit the installed skill. No repo file shows this: the script lives in the local, synced `skill-creator` skill folder.
+- **2026-11-02** — pnpm 12.4.2 installs the root project before running a script, and only the environment variable `pnpm_config_verify_deps_before_run=false` (or a `pnpm-workspace.yaml` setting) stops it; `.npmrc` and the `package.json` pnpm field do not, and the `npm_config_` spelling is ignored by pnpm. `scripts/verify-l06.sh:11-12` exports both spellings so it writes nothing at the repo root. `pnpm run <script> --help` runs the script, so never probe with `--help`.
 
 ## Decisions
 
@@ -498,6 +499,12 @@ the editor tool.
 **Evidence:** `.claude/skills/pr-self-review/scripts/lib/git.mjs:73` (`hash-object` over the untracked paths), `:110` (the `ls-files --others` list that feeds it).
 **Skill:** `pr-self-review`
 
+### A staged `git mv` ends up in another agent's commit
+**Date:** 2026-11-02
+**Cause:** the index is shared by every agent in one worktree; a concurrent agent's `git commit` takes whatever is staged. The renames of `CompareModal.tsx` and `word-diff.ts` were swept into `2643efe` (`docs(eval): client spec places the Compare modal ...`), a docs commit, with 0 changed lines.
+**Fix / rule:** with two agents in one worktree, stage and commit in the same step (`git mv … && git commit`), or give the second agent its own worktree. Check `git show --stat` of a docs-only commit if a move was pending.
+**Evidence:** `git show --stat 2643efe` lists both renames under `CompareModal/`; no file in the repo records it.
+
 ## Open Questions
 
 - **2026-10-29** — `onion-architecture` says two different things about a baselined legacy service that a task touches: `SKILL.md:132` ("Do not refactor unrelated leaks in a feature PR"; run `pnpm arch:baseline` only if the task fixes one) and `references/composition-root-di.md:57` ("Existing services are migrated only when a task already touches them. When one is, run `pnpm arch:baseline` in the same PR"). In a fixture eval (add one endpoint to a `ReviewsService` that takes the whole `Container`) the with-skill run left the service as it was and flagged a follow-up, so it took the `SKILL.md` reading. Open: does "touches" mean any edit to the file or a change to that service's behaviour? Settling it means editing the skill's text, which is the user's decision. (`.claude/skills/onion-architecture/SKILL.md:132`, `.claude/skills/onion-architecture/references/composition-root-di.md:57`)
@@ -575,3 +582,4 @@ the editor tool.
 - **2026-10-19** — applied the L05 PR Brief retro recommendations 1–5 on `chore/workflow-retro-fixes`: implementer self-check, per-area architecture check in `state.mjs` (17/17 tests), file handoff between spec and plan passes, sub-agent screenshot check, `e2e.sh` agent-browser resolver; superseded the 2026-10-16 "resume with SendMessage" entry.
 - **2026-10-29** — evals for the `engineering-insights` and `onion-architecture` skills (fixture repos, with/without-skill runs, 33 + 8 assertions): only the transaction-ownership case separated the runs; entries above. Cases and fixtures are in each skill's `evals/` folder.
 - **2026-10-31** — L06 harness evals, experiments 2–5: broke and restored a rule in two skills (`onion-architecture`, `engineering-insights`) and saw only the dependent practices fall; workflow cases now route through CLAUDE.md without naming a document; added the evals workflow (static quality job, OpenRouter jobs, failed tests re-run on a stronger model). Entries: the LiteLLM master key, the copied fixture path, the nested-worktree crash of `pr-self-review`, and the model choice per tier. The `bypassPermissions` / `allowedTools` trap, the `!isError` outcome and the `eval:repeat` aggregator are in `evals/CLAUDE.md`, not repeated here.
+- **2026-11-02** — eval pipeline run via `/execute-plan` (17 phases, two review-fix phases); entries in `server/`, `client/`, `e2e/` and here (shared-index `git mv`, pnpm verify-deps variable).

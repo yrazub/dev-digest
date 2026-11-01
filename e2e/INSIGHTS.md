@@ -152,6 +152,18 @@ screen proves the optimistic update, not the save.
 **Fix / rule:** wait for a transient toast before the `wait --url` that follows the navigation. To tell a slow host from a regression, compare `Ready in` and `Compiled / in` in the passing and failing logs — a uniform 3–10x slowdown is the host.
 **Evidence:** `specs/08-skills.flow.json:14` (toast wait, now before the URL wait).
 
+### `npm run e2e:hermetic` fails two flows at `agent-browser open http://localhost:3100/...` and passes 15/15 on the next run
+**Date:** 2026-11-02
+**Cause:** machine load, not the code under test: the first `open` of a flow times out while the web server is still compiling or the laptop is swapping. The flows are `{"cmd": ["open", "{BASE}/"]}` steps (`specs/01-app-boot.flow.json:5`); the eval-pipeline run saw 13/15, then 15/15 on an immediate rerun and in the verifier's run.
+**Fix / rule:** when the only failures are `open` steps, rerun once before debugging; a failure that moves to a different step on rerun is a real bug. Do not stack other heavy work during the run.
+**Evidence:** `run.ts:149` (exit code is `results.every(ok)`)
+
+### Piping `npm run e2e:hermetic | tail` hides the result
+**Date:** 2026-11-02
+**Cause:** the pipeline's exit status is `tail`'s, so a failed run looks like a success; the runner's verdict is the printed summary line (`N/15 flows passed`), and it exits 1 only through `process.exit` at its end.
+**Fix / rule:** read the `N/15 flows passed` line, or avoid the pipe (`set -o pipefail`, or redirect to a file and `echo $?`).
+**Evidence:** `run.ts:147-149` (`console.log(summarize(results))`, then `process.exit(...)`)
+
 ## Session Notes
 
 - **2026-09-30** — added `08-skills` (create skill → link to agent → persists) and fixed the `04`/`05` click race.
@@ -163,3 +175,4 @@ screen proves the optimistic update, not the save.
 - **2026-10-17** — added `13-project-context`; the 429s that led to `API_RATE_LIMIT_MAX`, and flow 08's toast-before-URL reorder; hermetic run 13/13.
 - **2026-10-18** — added `14-pr-brief` (the seeded brief and the Review focus jump) and moved flow 10's risk-tag check to Agent runs; hermetic run 14/14 once `AGENT_BROWSER_BIN` was set.
 - **2026-10-19** — `scripts/e2e.sh` resolves agent-browser and stops when it does not run; global agent-browser reinstalled at 0.39.0.
+- **2026-11-02** — eval pipeline flow 15 over the seeded eval runs; hermetic run 13/15 then 15/15 under load; entries on the `open` flake and on piping the runner.
