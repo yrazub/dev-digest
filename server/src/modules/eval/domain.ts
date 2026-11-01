@@ -16,6 +16,11 @@ import type {
 export const FRAGMENT_CUT_LINES = 1500;
 /** Longest slug in a case name. */
 export const CASE_SLUG_MAX = 34;
+/**
+ * Lines a finding may sit off a `must_find` expectation and still match (both sides). Lives here, not in
+ * `constants.ts`: the scorer imports only `@devdigest/shared` (R-SRV-24), like the two constants above.
+ */
+export const MUST_FIND_LINE_TOLERANCE = 2;
 
 /** `@@ -a,b +c,d @@` — captures the new-side start and (optional) length. */
 const HUNK_HEADER = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
@@ -107,12 +112,17 @@ export function caseName(kind: EvalExpectationKind, title: string): string {
   return `${kind === 'must_find' ? 'must-find' : 'no'}-${slug}`;
 }
 
-/** A grounded finding matches an expectation when it is in the same file and the line ranges overlap (R-SRV-19). */
+/**
+ * A grounded finding matches an expectation when it is in the same file and the line ranges overlap
+ * (R-SRV-19). A `must_find` expectation widens its range by `MUST_FIND_LINE_TOLERANCE` on both sides —
+ * models miscount lines in a diff that carries no line numbers; `must_not_flag` stays an exact overlap.
+ */
 export function findingMatches(
   f: { file: string; start_line: number; end_line: number },
   e: EvalExpectation,
 ): boolean {
-  return f.file === e.file && f.start_line <= e.end_line && e.start_line <= f.end_line;
+  const slack = e.kind === 'must_find' ? MUST_FIND_LINE_TOLERANCE : 0;
+  return f.file === e.file && f.start_line <= e.end_line + slack && e.start_line - slack <= f.end_line;
 }
 
 function ratio(num: number, den: number): number | null {

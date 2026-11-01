@@ -113,7 +113,7 @@
     "edit": "Edit",
     "delete": "Delete",
     "viewDashboard": "View full dashboard →",
-    "scoringNote": "Scoring is mechanical — a finding counts when file matches and line ranges overlap. No model call in the scorer.",
+    "scoringNote": "Scoring is mechanical — a finding counts when file matches and line ranges overlap; must-find cases allow a 2-line tolerance either side. No model call in the scorer.",
     "casesPassed": "Cases passed",
     "deleteTitle": "Delete eval case",
     "deleteConfirm": "Delete eval case {name}? Past runs keep their metrics.",

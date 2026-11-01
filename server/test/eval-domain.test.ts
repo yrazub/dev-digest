@@ -8,6 +8,7 @@ import type { EvalExpectation } from '@devdigest/shared';
 import {
   CASE_SLUG_MAX,
   FRAGMENT_CUT_LINES,
+  MUST_FIND_LINE_TOLERANCE,
   aggregateRun,
   caseName,
   cutFileSection,
@@ -48,9 +49,32 @@ describe('findingMatches (R-SRV-19)', () => {
     expect(findingMatches({ file: 'src/a.ts', start_line: 20, end_line: 30 }, e)).toBe(true);
   });
 
-  it('does not match one line past either end', () => {
-    expect(findingMatches({ file: 'src/a.ts', start_line: 1, end_line: 9 }, e)).toBe(false);
-    expect(findingMatches({ file: 'src/a.ts', start_line: 21, end_line: 30 }, e)).toBe(false);
+  it('uses a tolerance of 2 lines for must_find', () => {
+    expect(MUST_FIND_LINE_TOLERANCE).toBe(2);
+  });
+
+  it('must_find still matches 1 and 2 lines past either end (the tolerance)', () => {
+    expect(findingMatches({ file: 'src/a.ts', start_line: 1, end_line: 9 }, e)).toBe(true);
+    expect(findingMatches({ file: 'src/a.ts', start_line: 1, end_line: 8 }, e)).toBe(true);
+    expect(findingMatches({ file: 'src/a.ts', start_line: 21, end_line: 30 }, e)).toBe(true);
+    expect(findingMatches({ file: 'src/a.ts', start_line: 22, end_line: 30 }, e)).toBe(true);
+  });
+
+  it('must_find does not match 3 lines past either end', () => {
+    expect(findingMatches({ file: 'src/a.ts', start_line: 1, end_line: 7 }, e)).toBe(false);
+    expect(findingMatches({ file: 'src/a.ts', start_line: 23, end_line: 30 }, e)).toBe(false);
+  });
+
+  it('must_not_flag stays an exact overlap: one line past either end does not match', () => {
+    const n = mustNotFlag(10, 20);
+    expect(findingMatches({ file: 'src/a.ts', start_line: 1, end_line: 9 }, n)).toBe(false);
+    expect(findingMatches({ file: 'src/a.ts', start_line: 21, end_line: 30 }, n)).toBe(false);
+    expect(findingMatches({ file: 'src/a.ts', start_line: 5, end_line: 10 }, n)).toBe(true);
+    expect(findingMatches({ file: 'src/a.ts', start_line: 20, end_line: 30 }, n)).toBe(true);
+  });
+
+  it('the tolerance never crosses files', () => {
+    expect(findingMatches({ file: 'src/b.ts', start_line: 21, end_line: 22 }, e)).toBe(false);
   });
 
   it('matches a range fully inside and one fully containing the expectation', () => {
@@ -104,6 +128,23 @@ describe('scoreCase (per-case columns)', () => {
   it('must_not_flag with a match: fail, recall null, precision 0', () => {
     const r = scoreCase(mustNotFlag(), [kept(15, 16), kept(50, 60)], 0);
     expect(r).toMatchObject({ pass: false, recall: null, precision: 0 });
+  });
+
+  it('must_find with a finding 1 line off the range: pass, recall 1, matches true (tolerance)', () => {
+    const r = scoreCase(mustFind(), [kept(1, 9)], 0);
+    expect(r).toMatchObject({ pass: true, recall: 1, precision: 1 });
+    expect(r.actual_output.findings.map((f) => f.matches)).toEqual([true]);
+  });
+
+  it('must_find with a finding 3 lines off the range: still a miss', () => {
+    const r = scoreCase(mustFind(), [kept(1, 7)], 0);
+    expect(r).toMatchObject({ pass: false, recall: 0, precision: null });
+  });
+
+  it('must_not_flag with a finding 1 line off the range: pass, the tolerance does not count against it', () => {
+    const r = scoreCase(mustNotFlag(), [kept(1, 9), kept(21, 30)], 0);
+    expect(r).toMatchObject({ pass: true, recall: null, precision: null });
+    expect(r.actual_output.findings.map((f) => f.matches)).toEqual([false, false]);
   });
 
   it('citation is 0 when every finding was dropped', () => {
