@@ -6,7 +6,8 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Icon, Sparkline } from "@devdigest/ui";
 import type { EvalAgentOverview } from "@devdigest/shared";
-import { METRIC_COLOR, pct } from "@/components/eval";
+import { METRIC_COLOR } from "@/components/eval/constants";
+import { pct } from "@/components/eval/helpers";
 import { lastRunParams, sparklinePoints } from "./helpers";
 import { s } from "./styles";
 

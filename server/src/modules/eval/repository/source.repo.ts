@@ -1,5 +1,5 @@
 import { and, asc, eq } from 'drizzle-orm';
-import type { FindingCategory, Severity } from '@devdigest/shared';
+import { FindingCategory, Severity } from '@devdigest/shared';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { PromptSkill } from '../../_shared/review-prompt.js';
@@ -49,8 +49,8 @@ export async function findFindingSource(
     startLine: row.startLine,
     endLine: row.endLine,
     title: row.title,
-    severity: row.severity as Severity,
-    category: row.category as FindingCategory,
+    severity: Severity.parse(row.severity),
+    category: FindingCategory.parse(row.category),
     accepted: row.acceptedAt !== null,
     dismissed: row.dismissedAt !== null,
     agentId: row.agentId,

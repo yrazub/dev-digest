@@ -9,7 +9,7 @@ import { useTranslations } from "next-intl";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { TooltipProps } from "recharts";
 import { Card, SectionLabel } from "@devdigest/ui";
-import { METRIC_COLOR } from "@/components/eval";
+import { METRIC_COLOR } from "@/components/eval/constants";
 import type { EvalSuiteRun } from "@devdigest/shared";
 import { trendPoints, trendTooltipLabel, type TrendPoint } from "./helpers";
 import { s } from "./styles";

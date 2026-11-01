@@ -179,4 +179,13 @@ describe("A2 Agent Editor (smoke)", () => {
     expect(screen.queryByText("Configuration")).toBeNull();
     expect(screen.queryByText("Save agent")).toBeNull();
   });
+
+  it("starts a run once when Run eval is pressed on a disabled agent (AC-51, R-WEB-16)", async () => {
+    const user = userEvent.setup();
+    renderWithIntl(<AgentEditor agent={{ ...AGENT, enabled: false }} tab="evals" onTab={() => {}} />);
+    // delete and start share `evalMutation`, so clear it before the press
+    evalMutation.mutate.mockClear();
+    await user.click(screen.getByRole("button", { name: "Run eval (1)" }));
+    expect(evalMutation.mutate).toHaveBeenCalledTimes(1);
+  });
 });

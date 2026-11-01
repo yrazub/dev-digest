@@ -256,6 +256,25 @@ d('L06 eval case routes (Testcontainers pg)', () => {
       expect(body.case.name).toBe('no-style-nit');
     });
 
+    it.each([
+      ['severity', 'BLOCKER'],
+      ['category', 'nonsense'],
+    ] as const)(
+      'answers 422 validation_error and writes no case when the stored %s is outside its enum (R-SRV-1, R-SRV-2)',
+      async (column, bad) => {
+        const app = await appWith();
+        const s = await scenario();
+        const f = await s.finding('accepted');
+        await pg.handle.db.update(t.findings).set({ [column]: bad }).where(eq(t.findings.id, f.id));
+
+        const res = await post(app, f.id);
+
+        expect(res.statusCode).toBe(422);
+        expect((res.json() as { error: { code: string } }).error.code).toBe('validation_error');
+        expect(await caseRows(f.id)).toHaveLength(0);
+      },
+    );
+
     it('stores a null pr_body when the description is empty (R-SRV-5)', async () => {
       const app = await appWith();
       const s = await scenario({ body: '' });

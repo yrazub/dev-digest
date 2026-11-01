@@ -5,7 +5,9 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import type { EvalSuiteRun } from "@devdigest/shared";
-import { MetricBar, METRIC_COLOR, formatRunTime } from "@/components/eval";
+import { MetricBar } from "@/components/eval/MetricBar";
+import { METRIC_COLOR } from "@/components/eval/constants";
+import { formatRunTime } from "@/components/eval/helpers";
 import { s } from "./styles";
 
 export function RecentRunRow({ run, last, onOpen }: { run: EvalSuiteRun; last: boolean; onOpen: () => void }) {

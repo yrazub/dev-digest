@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatRunTime } from "@/components/eval";
+import { formatRunTime } from "@/components/eval/helpers";
 import { lastRunParams, sparklinePoints } from "./helpers";
 
 describe("sparklinePoints", () => {

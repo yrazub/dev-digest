@@ -3,7 +3,9 @@
    runs there is no delta (R-WEB-40). */
 import React from "react";
 import { useTranslations } from "next-intl";
-import { DeltaLabel, METRIC_COLOR, deltaPoints, pct } from "@/components/eval";
+import { DeltaLabel } from "@/components/eval/DeltaLabel";
+import { METRIC_COLOR } from "@/components/eval/constants";
+import { deltaPoints, pct } from "@/components/eval/helpers";
 import type { EvalSuiteRun } from "@devdigest/shared";
 import { s } from "./styles";
 

@@ -6,7 +6,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Icon } from "@devdigest/ui";
-import { KIND_PILL, NEVER_RUN_ICON, OUTCOME_ICON } from "@/components/eval";
+import { KIND_PILL, NEVER_RUN_ICON, OUTCOME_ICON } from "@/components/eval/constants";
 import type { EvalCaseOutcome, EvalCaseRecord } from "@devdigest/shared";
 import { caseLocation } from "./helpers";
 import { s } from "./styles";

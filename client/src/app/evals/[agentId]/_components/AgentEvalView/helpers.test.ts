@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { EvalSuiteRun } from "@devdigest/shared";
-import { comparablePair, metricSpark, parseCompareParam, precisionDip, toggleSelection, trendPoints, trendTooltipLabel } from "./helpers";
+import { comparablePair, metricSpark, orderPair, parseCompareParam, precisionDip, toggleSelection, trendPoints, trendTooltipLabel } from "./helpers";
 
 function run(id: string, version: number, over: Partial<EvalSuiteRun> = {}): EvalSuiteRun {
   return {
@@ -146,5 +146,20 @@ describe("comparablePair", () => {
     expect(comparablePair("ag1", older, run("r2", 2, { status: "running" }))).toBeNull();
     expect(comparablePair("ag1", older, run("r2", 2, { agent_id: "other" }))).toBeNull();
     expect(comparablePair("ag1", older, older)).toBeNull();
+  });
+});
+
+describe("orderPair", () => {
+  const older = { id: "o", started_at: new Date(2026, 9, 29, 10).toISOString() };
+  const newer = { id: "n", started_at: new Date(2026, 9, 30, 10).toISOString() };
+
+  it("returns [older, newer] whichever way the runs are given", () => {
+    expect(orderPair(newer, older)).toEqual([older, newer]);
+    expect(orderPair(older, newer)).toEqual([older, newer]);
+  });
+
+  it("keeps the given order on a tie", () => {
+    const twin = { id: "t", started_at: older.started_at };
+    expect(orderPair(older, twin)).toEqual([older, twin]);
   });
 });

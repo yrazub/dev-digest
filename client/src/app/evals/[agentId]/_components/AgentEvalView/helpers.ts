@@ -1,7 +1,7 @@
 /* Pure helpers of the agent's eval view: the Compare selection, the precision-dip banner and
    the data of the metric cards and the trend chart. `runs` come newest first, as the API returns them. */
 import type { EvalSuiteRun } from "@devdigest/shared";
-import { deltaPoints, latestDone, orderPair, previousDone, sparkValues } from "@/components/eval";
+import { deltaPoints, latestDone, previousDone, sparkValues } from "@/components/eval/helpers";
 import { formatCostUsd } from "@/lib/format-cost";
 
 export type TrendMetric = "recall" | "precision" | "citation_accuracy";
@@ -70,6 +70,11 @@ export function parseCompareParam(value: string | null | undefined): [string, st
   const [a, b] = parts;
   if (parts.length !== 2 || !a || !b) return null;
   return [a, b];
+}
+
+/** The two runs as [older, newer] by `started_at`; the given order breaks a tie. */
+export function orderPair<R extends Pick<EvalSuiteRun, "started_at">>(a: R, b: R): [R, R] {
+  return Date.parse(b.started_at) < Date.parse(a.started_at) ? [b, a] : [a, b];
 }
 
 type ComparableRun = Pick<EvalSuiteRun, "id" | "agent_id" | "status" | "started_at">;

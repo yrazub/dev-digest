@@ -4,7 +4,9 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Sparkline } from "@devdigest/ui";
-import { DeltaLabel, METRIC_COLOR, deltaPoints, latestDone, previousDone } from "@/components/eval";
+import { DeltaLabel } from "@/components/eval/DeltaLabel";
+import { METRIC_COLOR } from "@/components/eval/constants";
+import { deltaPoints, latestDone, previousDone } from "@/components/eval/helpers";
 import type { EvalSuiteRun } from "@devdigest/shared";
 import { metricSpark, type TrendMetric } from "./helpers";
 import { s } from "./styles";

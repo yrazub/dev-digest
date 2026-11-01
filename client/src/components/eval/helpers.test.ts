@@ -9,7 +9,6 @@ import {
   formatLocation,
   formatRunTime,
   latestDone,
-  orderPair,
   pct,
   previousDone,
   runCheckboxLabel,
@@ -159,21 +158,6 @@ describe("costDelta", () => {
     expect(costDelta(null, 0.003)).toBeNull();
     expect(costDelta(0.004, null)).toBeNull();
     expect(costDelta(undefined, undefined)).toBeNull();
-  });
-});
-
-describe("orderPair", () => {
-  const older = { id: "o", started_at: new Date(2026, 9, 29, 10).toISOString() };
-  const newer = { id: "n", started_at: new Date(2026, 9, 30, 10).toISOString() };
-
-  it("returns [older, newer] whichever way the runs are given", () => {
-    expect(orderPair(newer, older)).toEqual([older, newer]);
-    expect(orderPair(older, newer)).toEqual([older, newer]);
-  });
-
-  it("keeps the given order on a tie", () => {
-    const twin = { id: "t", started_at: older.started_at };
-    expect(orderPair(older, twin)).toEqual([older, twin]);
   });
 });
 

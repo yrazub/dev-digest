@@ -89,11 +89,6 @@ export function costDelta(oldUsd: number | null | undefined, newUsd: number | nu
   return `${delta > 0 ? "+" : MINUS}${magnitude}`;
 }
 
-/** The two runs as [older, newer] by `started_at`; the given order breaks a tie. */
-export function orderPair<R extends Pick<EvalSuiteRun, "started_at">>(a: R, b: R): [R, R] {
-  return Date.parse(b.started_at) < Date.parse(a.started_at) ? [b, a] : [a, b];
-}
-
 type Snapshot = Pick<EvalConfigSnapshot, "system_prompt" | "model" | "skills">;
 
 const skillKeys = (c: Snapshot) => c.skills.map((k) => `${k.name}@v${k.version}`).sort();
