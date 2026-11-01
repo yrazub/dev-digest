@@ -17,6 +17,7 @@ Naming: `L0N-<feature>.md` for course lessons, `<feature>.md` otherwise.
 | [`L04-blast-radius.md`](L04-blast-radius.md) | `/repos/:repoId/pulls/:number` | implemented |
 | [`L05-project-context.md`](L05-project-context.md) | `/repos/:repoId/context` · `/agents/:id?tab=context` · `/skills/:id?tab=context` · `/repos/:repoId/pulls/:number` (run trace) | approved |
 | [`L05-pr-brief.md`](L05-pr-brief.md) | `/repos/:repoId/pulls/:number` (Overview) · `?tab=diff&file=&line=` | implemented |
+| [`eval-pipeline.md`](eval-pipeline.md) | `/evals` · `/evals/:agentId` (`?compare=`) · `/agents/:id?tab=evals` · `/repos/:repoId/pulls/:number` (FindingCard) | approved |
 | [`architecture-refactor.md`](architecture-refactor.md) | all (C1: `src/lib/hooks`) | draft |
 
 Browser-level acceptance for a finished screen belongs in [`../e2e/specs`](../../e2e/specs).
