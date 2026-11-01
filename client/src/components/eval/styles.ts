@@ -133,6 +133,11 @@ export const s = {
   errored: { fontSize: 10.5, fontWeight: 400, color: "var(--warn)", marginTop: 2 } satisfies CSSProperties,
   cost: { ...oneLine, color: "var(--text-secondary)" } satisfies CSSProperties,
 
+  // Run button
+  runButton: { display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: 10 } satisfies CSSProperties,
+  runError: { fontSize: 12, color: "var(--crit)", margin: 0 } satisfies CSSProperties,
+  runErrorLink: { color: "var(--accent-text)", marginLeft: 6 } satisfies CSSProperties,
+
   // Run drawer
   drawer: {
     position: "fixed",

@@ -30,7 +30,8 @@
     },
     "pass": "pass",
     "fail": "fail",
-    "runningProgress": "Running… {done}/{total}"
+    "runningProgress": "Running… {done}/{total}",
+    "showMore": "Show more"
   },
   "caseEditor": {
     "newCase": "New eval case",
@@ -65,7 +66,7 @@
     "casesHeading": "Eval cases",
     "newCase": "New case",
     "loadingCases": "Loading cases…",
-    "emptyCases": "No eval cases yet. Create one to assert this agent's expected findings on a sample diff.",
+    "emptyCases": "No eval cases yet. Accept or dismiss a finding on a pull request, then press \"Turn into eval case\".",
     "neverRun": "never run",
     "passed": "passed",
     "failed": "failed",
@@ -73,7 +74,20 @@
     "run": "Run",
     "running": "Running…",
     "edit": "Edit",
-    "delete": "Delete"
+    "delete": "Delete",
+    "viewDashboard": "View full dashboard →",
+    "scoringNote": "Scoring is mechanical — a finding counts when file matches and line ranges overlap. No model call in the scorer.",
+    "casesPassed": "Cases passed",
+    "deleteTitle": "Delete eval case",
+    "deleteConfirm": "Delete eval case {name}? Past runs keep their metrics.",
+    "cancel": "Cancel",
+    "passing": "{passing} / {total} passing",
+    "casesCount": "{count, plural, one {# case} other {# cases}}",
+    "runsHeading": "Runs",
+    "noKey": "Add an API key in Settings",
+    "loadError": "Could not load eval cases.",
+    "expandCase": "Show diff of case {name}",
+    "deleteCase": "Delete case {name}"
   },
   "runs": {
     "errored": "{errored} of {total} cases errored",
