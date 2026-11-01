@@ -25,10 +25,12 @@
       "precision": "Precision",
       "citation": "Citation",
       "pass": "Pass",
-      "cost": "Cost"
+      "cost": "Cost",
+      "version": "Version"
     },
     "pass": "pass",
-    "fail": "fail"
+    "fail": "fail",
+    "runningProgress": "Running… {done}/{total}"
   },
   "caseEditor": {
     "newCase": "New eval case",
@@ -72,6 +74,34 @@
     "running": "Running…",
     "edit": "Edit",
     "delete": "Delete"
+  },
+  "runs": {
+    "errored": "{errored} of {total} cases errored",
+    "failed": "failed",
+    "status": {
+      "running": "running",
+      "done": "done",
+      "failed": "failed"
+    },
+    "outcome": {
+      "pass": "pass",
+      "fail": "fail",
+      "errored": "errored"
+    }
+  },
+  "kind": {
+    "must_find": "must find",
+    "must_not_flag": "must not flag"
+  },
+  "drawer": {
+    "title": "Run {version} · {time}",
+    "close": "Close run details",
+    "matches": "matches",
+    "dropped": "{count, plural, one {# finding dropped} other {# findings dropped}}",
+    "noFindings": "No findings",
+    "loading": "Loading run…",
+    "loadError": "Could not load this run.",
+    "label": "Run details"
   },
   "page": {
     "crumbSkillsLab": "Skills Lab",
