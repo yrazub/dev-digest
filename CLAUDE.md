@@ -46,6 +46,7 @@ Node ≥22 · TypeScript · Fastify 5 · Drizzle + Postgres/pgvector · Next.js 
 | typecheck | same, `typecheck` |
 | MCP server | `cd mcp && npm ci` once, then `node mcp/bin/devdigest-mcp.mjs` — not part of `./scripts/dev.sh` |
 | evals | `cd evals && pnpm eval:quality` (static, free) · `eval:skills` · `eval:agents` · `eval:workflow` (these call Claude) · `eval:repeat <path> -n 2 --label x` · `typecheck` |
+| eval pipeline | `./scripts/verify-l06.sh` from the repo root — no API key, needs Docker; fails if an integration test was skipped |
 
 ## Map
 

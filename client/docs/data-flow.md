@@ -42,6 +42,38 @@ A key is `[resource, id]`. The ones the PR screens depend on:
 | `["context-file", repoId, path]` | `useContextFile` | `GET /repos/:id/context/file?path=` | enabled once both are known. Every key shares the prefix `contextKeys.files` = `["context-file"]`, which a successful attachment save invalidates, so the "Used by" counts are read again |
 | `["agent-context", agentId]` · `["skill-context", skillId]` | `useAgentContext` · `useSkillContext` | `GET /agents/:id/context` · `GET /skills/:id/context` | written by the save hooks (below); never polled |
 
+The eval screens (L06) use the keys below, all defined by `evalKeys` in `src/lib/hooks/evals.ts`:
+
+| Key | Hook | Endpoint | What refreshes it |
+|---|---|---|---|
+| `["eval-cases", agentId]` | `useAgentEvalCases` | `GET /agents/:id/eval-cases` | not polled; invalidated by creating or deleting a case and when a run of the agent ends |
+| `["eval-runs", agentId, limit]` | `useAgentEvalRuns` | `GET /agents/:id/eval-runs?limit=&offset=0` | polls every 2 s while the latest data holds a `running` run; "Show more" raises `limit` and the previous page stays on screen (`keepPreviousData`); invalidated when a run starts and when a run ends |
+| `["eval-run", runId]` | `useEvalRun` | `GET /eval-runs/:id` | polls every 2 s while that run is `running`; invalidated when it ends. The Compare modal, the run drawer and the Evals tab's case outcomes read it |
+| `["eval-overview"]` | `useEvalOverview` | `GET /evals/overview` | polls every 2 s while a `recent_runs` entry is `running` or any agent has `running: true`; invalidated when a run starts and when a run ends |
+
+**The polling rule.** A run executes in the background on the server, so the state is the server's and a
+remount resumes it. `pollWhileRunning` returns 2,000 ms while the query's latest data holds a `running`
+run and `false` otherwise, so polling stops by itself. There is no event stream for an eval run.
+
+**The invalidations.**
+
+- `useStartEvalRun` (`POST /agents/:id/eval-runs`, answers `202` with the `running` row) invalidates
+  `["eval-runs", agentId]` (the prefix, so every `limit`) and `["eval-overview"]`.
+- `useCreateEvalCase` (`POST /findings/:id/eval-case`, both `201` and `200` resolve) and
+  `useDeleteEvalCase` invalidate `["eval-cases", agentId]`.
+- `useInvalidateOnCompletion` runs inside `useAgentEvalRuns`, `useEvalRun` and `useEvalOverview`. It keeps
+  the ids of runs last seen `running`; when one of them comes back `done` or `failed` it invalidates
+  `["eval-runs", agentId]`, `["eval-run", runId]`, `["eval-overview"]` and `["eval-cases", agentId]`.
+  The Evals tab's pass count and the metric cards therefore catch up when a run ends, on whichever
+  screen is open. The overview reads the runs from its `recent_runs`, so a run that has left that list
+  is not seen to complete there.
+- A `FindingCard` on the PR page reads `["eval-cases", agentId]` to know whether its finding is already
+  in the set, so a case created on the Evals tab or in another card shows there after a refetch.
+
+The Compare modal is not a query of its own: `?compare=<a>,<b>` names two runs, `AgentEvalView` reads each
+through `useEvalRun` and opens the modal only when both are distinct done runs of the agent
+(`comparablePair`).
+
 The Files changed tab joins two of these. From `["smart-diff", prId, headSha]` it takes only the
 group each path belongs to and the group order; the findings it draws come from `["reviews", prId]`
 (the newest review of each agent). It does not read the response's `finding_lines`,

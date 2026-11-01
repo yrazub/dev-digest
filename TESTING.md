@@ -68,6 +68,20 @@ finding, progress notifications). It needs `cd mcp && npm ci`; a missing install
 file with that command rather than skipping it (a skipped file counts as green and would hide
 that nothing was driven). Only a missing Docker skips it.
 
+The eval pipeline (L06) adds hermetic files for its pure scorer and fragment rules, the executor over
+fake ports, the run route's rate limit and the contracts, and `eval-pipeline.it.test.ts` plus
+`eval-seed.it.test.ts` for the routes, the background run (`MockLLMProvider`, mock git), the boot reap
+and the agent delete. `contracts-sync.test.ts` also checks `eval-pipeline.ts`.
+
+`./scripts/verify-l06.sh` runs the whole eval slice from the repository root with no API key: the
+server typecheck, the `test/eval-*.test.ts` files and `contracts-sync.test.ts` hermetically, the
+`test/eval-*.it.test.ts` files in the integration lane, `pnpm arch:check`, the client typecheck and the
+eval component tests (selected by path substrings with no brackets, because a vitest filter containing
+`[agentId]` matches nothing), and the `reviewer-core` typecheck and tests. It checks Docker first and
+fails with "Docker is required for the eval integration tests" when `docker info` fails, and it fails
+when the integration lane skipped a test, because a self-skipped `*.it.test.ts` file would otherwise
+count as green.
+
 **reviewer-core** — the pure engine: `toReview` selection, prompt construction,
 and a `run` with a stubbed model → grounded findings. No DB / GitHub / FS.
 
@@ -97,6 +111,9 @@ cd server && pnpm exec vitest run --exclude '**/*.it.test.ts'   # unit, no Docke
 cd server && pnpm exec vitest run .it.test                      # integration, needs Docker
 cd server && pnpm test                                          # both
 # the integration lane also needs `cd mcp && npm ci` (mcp-stdio.it.test.ts)
+
+# the eval pipeline slice, no API key, needs Docker (run from the repository root)
+./scripts/verify-l06.sh
 
 # browser e2e (needs the full stack + agent-browser CLI)
 ./scripts/dev.sh

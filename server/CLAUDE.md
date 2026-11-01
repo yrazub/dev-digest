@@ -19,6 +19,7 @@
 | a changed file's role, or the Smart Diff grouping (`GET /pulls/:id/smart-diff`) | `src/modules/_shared/file-role/README.md`, then `README.md` — API map |
 | project context — attachments, the clone-file walk, a run's documents or skip reasons, or `forWorkspace` (the PR brief's read path) | `src/modules/project-context/README.md` |
 | the PR brief (`GET`/`POST /pulls/:id/brief`) — its model call, input statuses, trims or validation | `src/modules/brief/README.md` |
+| eval cases, an eval run, the scorer, or `eval_suite_runs` | `src/modules/eval/README.md`, then `docs/architecture.md` — "An eval run, end to end" |
 | any test | `../TESTING.md` |
 | a failure that smells familiar | `INSIGHTS.md` — and **append** to it through the `engineering-insights` skill |
 
@@ -72,7 +73,7 @@ Split the suite: `pnpm exec vitest run --exclude '**/*.it.test.ts'` (hermetic) /
 - `loadConfig` marks every secret optional — the server boots with no keys at all.
 - `LocalSecretsProvider` (`src/adapters/secrets/local.ts`) is the single read chokepoint
   for secrets. `GITHUB_TOKEN` is canonical, `GITHUB_PAT` is accepted as a fallback.
-- The engine reaps orphaned `running` runs on boot — do not add a second reaper.
+- One boot step in `buildApp` (`src/app.ts`) reaps the orphaned `running` rows of both `agent_runs` (`ReviewService.reapStaleRuns`) and `eval_suite_runs` (`EvalRepository.reapRunning`) — do not add another reaper.
 - `test/mcp-stdio.it.test.ts` spawns `devdigest-mcp` from the root `.mcp.json` and needs
   `cd mcp && npm ci` first; no main script installs that package.
 - **Do not touch** `src/db/migrations/**` (including `meta/`). `src/vendor/shared` is the

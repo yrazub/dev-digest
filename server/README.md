@@ -60,7 +60,9 @@ flowchart LR
   with tighter per-route caps on expensive endpoints (e.g. `POST /pulls/:id/review`);
   SSE and `/health*` are exempt.
 - Modules are registered statically in `src/modules/index.ts` (one import + one
-  `app.register` each); the engine reaps orphaned `running` runs on boot.
+  `app.register` each); one boot step in `buildApp` reaps the orphaned `running` rows of both
+  `agent_runs` and `eval_suite_runs` before the server listens
+  ([`docs/architecture.md`](docs/architecture.md)).
 
 ## API map (starter)
 
@@ -85,6 +87,7 @@ flowchart TB
     skills["skills<br/>/skills · /skills/:id · /skills/:id/versions · /versions/:v/restore<br/>/skills/import/(file|url)"]
     conventions["conventions<br/>/repos/:id/conventions · /extract · /skill-draft · /skill<br/>/conventions/:id (accept · reject · edit)"]
     projectContext["project-context<br/>/repos/:id/context · /repos/:id/context/file<br/>/agents/:id/context · /skills/:id/context (GET · PUT)"]
+    evalModule["eval<br/>/findings/:id/eval-case · /agents/:id/eval-cases · /eval-cases/:id<br/>/agents/:id/eval-runs · /eval-runs/:id · /evals/overview"]
   end
   subgraph Intel["Repo intelligence"]
     repoIntel["repo-intel<br/>/repos/:id/index-state · /resync"]
@@ -185,6 +188,29 @@ attachment routes read and write only the paths and their order. The workspace s
 A review run reads the same attachments through `container.projectContext.forRun` and inserts the
 documents into the `## Project context` prompt slot; see "Review context" below. The PR brief reads the
 attachments of every enabled agent through `container.projectContext.forWorkspace`, with no run cap.
+
+**Eval routes** ([`src/modules/eval/routes.ts`](src/modules/eval/routes.ts); the module is explained in
+[`src/modules/eval/README.md`](src/modules/eval/README.md)). The module turns a decided finding into a
+stored eval case and runs an agent on its whole case set in the background, scoring each case against
+what the finding said. The workspace scopes every route: a finding, agent, case or run of another
+workspace answers `404` code `not_found`. A run makes one model call per case, through the agent's own
+provider; it writes no `reviews`, `findings` or `agent_runs` row and publishes nothing on the run bus.
+
+| Route | Behaviour |
+|---|---|
+| `POST /findings/:id/eval-case` | Answers `{ case, created }`: `201` for a new case, `200` with `created: false` when the finding already has one. An accepted finding becomes a `must_find` case, a dismissed one a `must_not_flag` case. The case stores the finding's file section of the PR diff, the PR's metadata and the finding as the expectation. `422` code `validation_error` for a finding that is neither accepted nor dismissed ("Accept or dismiss the finding first"), for a review with no agent or whose agent is gone ("No agent for this finding"), and for a file with no diff section ("No diff available for `<file>`") |
+| `GET /agents/:id/eval-cases` | Answers `{ cases }`, newest first, unpaginated. `404` for an unknown agent |
+| `DELETE /eval-cases/:id` | `204`. Deletes the case and its per-case results; the aggregates of finished runs keep their stored values |
+| `POST /agents/:id/eval-runs` | Answers `202` with the new `EvalSuiteRun` in status `running`, then reviews the cases in the background. Works for a disabled agent. Checks, in this order: `404`; `422` for no case or more than 50; `400` code `eval_unavailable` when the agent's provider has no key; `409` code `eval_run_in_progress` when the agent already has a `running` run (the partial unique index decides when two requests race). Rate limit 10/min |
+| `GET /agents/:id/eval-runs` | Answers `{ runs, total }`, newest `started_at` first. Query `limit` 1–100 (default 20) and `offset` ≥ 0 (default 0); a bad value is `422`. `404` for an unknown agent |
+| `GET /eval-runs/:id` | Answers an `EvalSuiteRunDetail`: the run plus one result per stored case result, ordered by case name, each with its `outcome` (`pass`, `fail`, `errored`), its grounded findings with a `matches` flag and its `dropped` count |
+| `GET /evals/overview` | Answers an `EvalOverview`: every agent of the workspace by name, enabled or not, with its latest `done` run (or `null`), a `running` flag, its case and run counts and the `recall` of its last 10 `done` runs oldest first; and `recent_runs`, the 6 newest runs of the workspace in any status |
+
+A run keeps a snapshot of the agent's configuration (version, prompt, provider, model, strategy and the
+enabled skills in prompt order) read once at its start, so a later edit to the agent does not change
+what a finished run says it ran. The contracts are in
+[`src/vendor/shared/contracts/eval-pipeline.ts`](src/vendor/shared/contracts/eval-pipeline.ts); the client
+keeps a byte-identical copy, checked by [`test/contracts-sync.test.ts`](test/contracts-sync.test.ts).
 
 ## Environment
 
