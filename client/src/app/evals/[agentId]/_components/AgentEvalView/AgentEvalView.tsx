@@ -6,15 +6,15 @@
 
 import React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, ErrorState, Icon, SectionLabel, Skeleton, Dropdown } from "@devdigest/ui";
 import { AppShell } from "@/components/app-shell";
-import { RunDrawer, RunEvalButton, RunsTable } from "@/components/eval";
+import { CompareModal, orderPair, RunDrawer, RunEvalButton, RunsTable } from "@/components/eval";
 import { useAgents } from "@/lib/hooks/agents";
-import { useAgentEvalCases, useAgentEvalRuns } from "@/lib/hooks/evals";
+import { useAgentEvalCases, useAgentEvalRuns, useEvalRun } from "@/lib/hooks/evals";
 import type { EvalSuiteRun } from "@devdigest/shared";
-import { precisionDip, toggleSelection } from "./helpers";
+import { comparablePair, parseCompareParam, precisionDip, toggleSelection } from "./helpers";
 import { MetricCards } from "./MetricCards";
 import { RegressionBanner } from "./RegressionBanner";
 import { s } from "./styles";
@@ -26,7 +26,8 @@ export function AgentEvalView({ agentId }: { agentId: string }) {
   const t = useTranslations("eval");
   const router = useRouter();
   const [limit, setLimit] = React.useState(PAGE);
-  const [selected, setSelected] = React.useState<string[]>([]);
+  const compareParam = parseCompareParam(useSearchParams().get("compare"));
+  const [selected, setSelected] = React.useState<string[]>(() => compareParam ?? []);
   const [opened, setOpened] = React.useState<{ runId: string; el: HTMLElement } | null>(null);
 
   const agents = useAgents().data ?? [];
@@ -39,6 +40,20 @@ export function AgentEvalView({ agentId }: { agentId: string }) {
   const caseCount = casesQuery.data?.cases.length ?? 0;
   const name = agent?.name ?? runs[0]?.agent_name ?? "";
   const dip = precisionDip(runs);
+
+  // The modal is open exactly while ?compare= names two done runs of this agent (R-WEB-53).
+  const paramRunA = useEvalRun(compareParam?.[0]).data;
+  const paramRunB = useEvalRun(compareParam?.[1]).data;
+  const comparing = comparablePair(agentId, paramRunA, paramRunB);
+
+  const picked = runs.filter((r) => selected.includes(r.id));
+  const canCompare = selected.length === 2 && picked.length === 2;
+  const compareUrl = (ids: readonly string[]) =>
+    ids.length > 0 ? `/evals/${agentId}?compare=${ids.map(encodeURIComponent).join(",")}` : `/evals/${agentId}`;
+  const openCompare = () => {
+    const [older, newer] = orderPair(picked[0]!, picked[1]!);
+    router.replace(compareUrl([older.id, newer.id]));
+  };
 
   const openRun = (run: EvalSuiteRun, el: HTMLElement) => setOpened({ runId: run.id, el });
   const crumb = [
@@ -64,7 +79,22 @@ export function AgentEvalView({ agentId }: { agentId: string }) {
         <MetricCards runs={runs} />
         <TrendCard runs={runs} />
         <div style={s.runsHeader}>
-          <SectionLabel icon="History">{t("dashboard.recentRuns")}</SectionLabel>
+          <SectionLabel
+            icon="History"
+            right={
+              <Button
+                kind={canCompare ? "primary" : "ghost"}
+                size="sm"
+                icon="GitMerge"
+                disabled={!canCompare}
+                onClick={openCompare}
+              >
+                {t("dashboard.compare.button")}
+              </Button>
+            }
+          >
+            {t("dashboard.recentRuns")}
+          </SectionLabel>
         </div>
         <div style={s.runsHint}>
           {selected.length === 0 ? t("dashboard.selectHint") : t("dashboard.selected", { count: selected.length })}
@@ -132,6 +162,9 @@ export function AgentEvalView({ agentId }: { agentId: string }) {
         </div>
         {body}
       </div>
+      {comparing && (
+        <CompareModal oldRunId={comparing[0]} newRunId={comparing[1]} onClose={() => router.replace(compareUrl([]))} />
+      )}
       {opened && <RunDrawer runId={opened.runId} returnFocusTo={opened.el} onClose={() => setOpened(null)} />}
     </AppShell>
   );

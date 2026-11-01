@@ -1,7 +1,7 @@
 /* Pure helpers of the agent's eval view: the Compare selection, the precision-dip banner and
    the data of the metric cards and the trend chart. `runs` come newest first, as the API returns them. */
 import type { EvalSuiteRun } from "@devdigest/shared";
-import { deltaPoints, latestDone, previousDone } from "@/components/eval";
+import { deltaPoints, latestDone, orderPair, previousDone, sparkValues } from "@/components/eval";
 import { formatCostUsd } from "@/lib/format-cost";
 
 export type TrendMetric = "recall" | "precision" | "citation_accuracy";
@@ -53,14 +53,37 @@ export function trendTooltipLabel(point: Pick<TrendPoint, "version" | "cost">): 
   return `v${point.version} · ${formatCostUsd(point.cost)}`;
 }
 
-/** A metric's values over the done runs, oldest first, for a sparkline: null points are dropped
-    and a single point is repeated once so the vendored `Sparkline` (which divides by
-    `length − 1`) draws a flat line. */
+/** A metric's values over the done runs, oldest first, for a sparkline (see `sparkValues`). */
 export function metricSpark(runs: readonly EvalSuiteRun[], metric: TrendMetric): number[] {
-  const values = runs
-    .filter((r) => r.status === "done")
-    .reverse()
-    .map((r) => r[metric])
-    .filter((v): v is number => v != null);
-  return values.length === 1 ? [values[0]!, values[0]!] : values;
+  return sparkValues(
+    runs
+      .filter((r) => r.status === "done")
+      .reverse()
+      .map((r) => r[metric]),
+  );
+}
+
+/** The ids of a `?compare=<a>,<b>` value; null unless it holds exactly two non-empty ids (R-WEB-53). */
+export function parseCompareParam(value: string | null | undefined): [string, string] | null {
+  if (!value) return null;
+  const parts = value.split(",");
+  const [a, b] = parts;
+  if (parts.length !== 2 || !a || !b) return null;
+  return [a, b];
+}
+
+type ComparableRun = Pick<EvalSuiteRun, "id" | "agent_id" | "status" | "started_at">;
+
+/** The two run ids as [older, newer] when both are distinct done runs of this agent, else null
+    — the only case in which the Compare modal opens from the URL (R-WEB-53). */
+export function comparablePair(
+  agentId: string,
+  a: ComparableRun | undefined,
+  b: ComparableRun | undefined,
+): [string, string] | null {
+  if (!a || !b || a.id === b.id) return null;
+  if (a.status !== "done" || b.status !== "done") return null;
+  if (a.agent_id !== agentId || b.agent_id !== agentId) return null;
+  const [older, newer] = orderPair(a, b);
+  return [older.id, newer.id];
 }

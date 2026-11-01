@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
-import type { EvalSuiteRun } from "@devdigest/shared";
+import type { EvalSuiteRun, EvalSuiteRunDetail } from "@devdigest/shared";
 import messages from "../../../../../../messages/en/eval.json";
 
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
@@ -17,8 +17,12 @@ let agentsData: Array<{ id: string; name: string; model: string }>;
 let casesData: { cases: unknown[] } | undefined;
 let runsState: { data?: { runs: EvalSuiteRun[]; total: number }; isLoading: boolean; isError: boolean };
 const useRunsSpy = vi.fn();
+// What the URL holds: `useSearchParams` reads it, `?compare=` is the only parameter the view uses.
+let search = "";
+// The run details the Compare modal and the URL check read, by run id. One stable object per id.
+let details: Record<string, { data: EvalSuiteRunDetail }>;
 
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, useSearchParams: () => new URLSearchParams(search) }));
 vi.mock("@/components/app-shell", () => ({ AppShell: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock("@/lib/hooks/agents", () => ({ useAgents: () => ({ data: agentsData }) }));
 vi.mock("@/lib/hooks/evals", async () => ({
@@ -29,6 +33,7 @@ vi.mock("@/lib/hooks/evals", async () => ({
     return { ...runsState, refetch };
   },
   useStartEvalRun: () => start,
+  useEvalRun: (runId: string | null | undefined) => (runId && details[runId]) || { data: undefined },
 }));
 
 import { AgentEvalView } from "./AgentEvalView";
@@ -76,6 +81,9 @@ const card = (label: string) => screen.getByText(label).parentElement!.parentEle
 
 beforeEach(() => {
   router.push.mockClear();
+  router.replace.mockClear();
+  search = "";
+  details = {};
   start.mutate.mockClear();
   refetch.mockClear();
   useRunsSpy.mockClear();
@@ -297,5 +305,107 @@ describe("AgentEvalView states", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Could not load this agent's eval runs.");
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(refetch).toHaveBeenCalledOnce();
+  });
+});
+
+describe("AgentEvalView Compare", () => {
+  const three = () => [
+    run("r3", 3, { started_at: at(30, 12) }),
+    run("r2", 2, { started_at: at(30, 11) }),
+    run("r1", 1, { started_at: at(30, 10) }),
+  ];
+  const withDetails = (...runs: EvalSuiteRun[]) => {
+    details = Object.fromEntries(runs.map((r) => [r.id, { data: { ...r, results: [] } as unknown as EvalSuiteRunDetail }]));
+  };
+  const compareButton = () => screen.getByRole("button", { name: "Compare" });
+  const pick = (v: number, h: number) => screen.getByRole("checkbox", { name: `2026-10-30 ${h}:00 · v${v}` });
+
+  it("is enabled only with exactly two runs selected", async () => {
+    const user = userEvent.setup();
+    setRuns(three());
+    renderView();
+    expect(compareButton()).toBeDisabled();
+    await user.click(pick(1, 10));
+    expect(compareButton()).toBeDisabled();
+    await user.click(pick(2, 11));
+    expect(compareButton()).toBeEnabled();
+    // a third pick drops the earliest one, so two stay selected
+    await user.click(pick(3, 12));
+    expect(compareButton()).toBeEnabled();
+    await user.click(pick(3, 12));
+    expect(compareButton()).toBeDisabled();
+  });
+
+  it("writes ?compare=<older>,<newer> with router.replace, whichever run was ticked first", async () => {
+    const user = userEvent.setup();
+    setRuns(three());
+    renderView();
+    await user.click(pick(3, 12));
+    await user.click(pick(1, 10));
+    await user.click(compareButton());
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    expect(router.replace).toHaveBeenCalledWith("/evals/a-sec?compare=r1,r3");
+  });
+
+  it("a valid parameter opens the modal with both runs selected", () => {
+    search = "compare=r1,r2";
+    const runs = three();
+    setRuns(runs);
+    withDetails(...runs);
+    renderView();
+    expect(screen.getByRole("dialog")).toHaveTextContent("Compare runs · v1 → v2");
+    expect(pick(1, 10)).toBeChecked();
+    expect(pick(2, 11)).toBeChecked();
+    expect(pick(3, 12)).not.toBeChecked();
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("orders the modal's runs by start time, not by the order in the parameter", () => {
+    search = "compare=r2,r1";
+    const runs = three();
+    setRuns(runs);
+    withDetails(...runs);
+    renderView();
+    expect(screen.getByRole("dialog")).toHaveTextContent("Compare runs · v1 → v2");
+  });
+
+  it.each([
+    ["an unknown run id", "compare=r1,nope", () => ({})],
+    ["a failed run", "compare=r1,r2", () => ({ r2: { status: "failed" as const } })],
+    ["a running run", "compare=r1,r2", () => ({ r2: { status: "running" as const } })],
+    ["a run of another agent", "compare=r1,r2", () => ({ r2: { agent_id: "a-perf" } })],
+    ["the same run twice", "compare=r1,r1", () => ({})],
+    ["one id only", "compare=r1", () => ({})],
+    ["three ids", "compare=r1,r2,r3", () => ({})],
+  ])("renders no modal for %s", (_name, query, over) => {
+    search = query;
+    const overrides = over() as Record<string, Partial<EvalSuiteRun>>;
+    const runs = three().map((r) => ({ ...r, ...(overrides[r.id] ?? {}) }) as EvalSuiteRun);
+    setRuns(runs);
+    withDetails(...runs);
+    renderView();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("renders no modal while the runs of the parameter have not loaded", () => {
+    search = "compare=r1,r2";
+    setRuns(three());
+    renderView();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("Close removes the parameter with router.replace", async () => {
+    const user = userEvent.setup();
+    search = "compare=r1,r2";
+    const runs = three();
+    setRuns(runs);
+    withDetails(...runs);
+    renderView();
+    const dialog = screen.getByRole("dialog");
+    const footerClose = within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!;
+    await user.click(footerClose);
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    expect(router.replace).toHaveBeenCalledWith("/evals/a-sec");
   });
 });

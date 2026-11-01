@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { EvalSuiteRun } from "@devdigest/shared";
-import { metricSpark, precisionDip, toggleSelection, trendPoints, trendTooltipLabel } from "./helpers";
+import { comparablePair, metricSpark, parseCompareParam, precisionDip, toggleSelection, trendPoints, trendTooltipLabel } from "./helpers";
 
 function run(id: string, version: number, over: Partial<EvalSuiteRun> = {}): EvalSuiteRun {
   return {
@@ -107,5 +107,44 @@ describe("metricSpark", () => {
   it("repeats a single point once, and is empty with no value", () => {
     expect(metricSpark([run("r1", 1, { precision: 0.4 })], "precision")).toEqual([0.4, 0.4]);
     expect(metricSpark([run("r1", 1, { precision: null })], "precision")).toEqual([]);
+  });
+});
+
+describe("parseCompareParam", () => {
+  it("returns the two ids of `a,b`", () => {
+    expect(parseCompareParam("run-a,run-b")).toEqual(["run-a", "run-b"]);
+  });
+
+  it("is null for a missing, empty, single or over-long value", () => {
+    expect(parseCompareParam(null)).toBeNull();
+    expect(parseCompareParam(undefined)).toBeNull();
+    expect(parseCompareParam("")).toBeNull();
+    expect(parseCompareParam("a")).toBeNull();
+    expect(parseCompareParam("a,b,c")).toBeNull();
+  });
+
+  it("is null when either id is empty", () => {
+    expect(parseCompareParam(",b")).toBeNull();
+    expect(parseCompareParam("a,")).toBeNull();
+    expect(parseCompareParam(",")).toBeNull();
+  });
+});
+
+describe("comparablePair", () => {
+  const older = run("r1", 1, { started_at: new Date(2026, 9, 29, 10).toISOString() });
+  const newer = run("r2", 2, { started_at: new Date(2026, 9, 30, 10).toISOString() });
+
+  it("returns [older, newer] ids for two distinct done runs of the agent, in either order", () => {
+    expect(comparablePair("ag1", newer, older)).toEqual(["r1", "r2"]);
+    expect(comparablePair("ag1", older, newer)).toEqual(["r1", "r2"]);
+  });
+
+  it("is null while a run is not loaded, is not done, is another agent's, or both ids are the same run", () => {
+    expect(comparablePair("ag1", undefined, newer)).toBeNull();
+    expect(comparablePair("ag1", older, undefined)).toBeNull();
+    expect(comparablePair("ag1", older, run("r2", 2, { status: "failed" }))).toBeNull();
+    expect(comparablePair("ag1", older, run("r2", 2, { status: "running" }))).toBeNull();
+    expect(comparablePair("ag1", older, run("r2", 2, { agent_id: "other" }))).toBeNull();
+    expect(comparablePair("ag1", older, older)).toBeNull();
   });
 });
