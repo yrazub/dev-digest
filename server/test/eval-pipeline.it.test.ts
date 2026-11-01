@@ -3,10 +3,11 @@
  *   POST   /findings/:id/eval-case
  *   GET    /agents/:id/eval-cases
  *   DELETE /eval-cases/:id
+ *   DELETE /agents/:id (removes the agent's cases, runs and results)
  * The outside world is replaced through `overrides` (an empty `MockSecretsProvider`, so
  * `~/.devdigest/secrets.json` is never read, `MockGitHubClient` and `MockGitClient`): no key, no network.
  * Each test inserts its own agent, repo, PR, review and findings, so counts never depend on the seed.
- * Spec: `server/specs/eval-pipeline.md` (R-SRV-1–R-SRV-14, R-SRV-37); plan: `specs/plans/eval-pipeline.md`, phase 4.
+ * Spec: `server/specs/eval-pipeline.md` (R-SRV-1–R-SRV-14, R-SRV-35, R-SRV-37); plan: `specs/plans/eval-pipeline.md`, phases 4–5.
  * Not covered here: the run routes (phase 6), the 1,500-line cut (`eval-domain.test.ts`).
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
@@ -551,6 +552,118 @@ d('L06 eval case routes (Testcontainers pg)', () => {
 
       expect(create.statusCode).toBe(404);
       expect(listing.statusCode).toBe(404);
+    });
+  });
+
+  describe('DELETE /agents/:id (R-SRV-35)', () => {
+    /** An eval case inserted directly, owned by `agentId`, plus one suite run with one result row on it. */
+    async function seedEvalRows(s: Awaited<ReturnType<typeof scenario>>, ws: string = workspaceId, caseCount = 2) {
+      const db = pg.handle.db;
+      const cases = await db
+        .insert(t.evalCases)
+        .values(
+          Array.from({ length: caseCount }, (_, i) => ({
+            workspaceId: ws,
+            ownerKind: 'agent' as const,
+            ownerId: s.agent.id,
+            name: `must-find-case-${i}`,
+            inputDiff: 'diff',
+            inputFiles: [FILE],
+            inputMeta: {
+              pr_id: s.pr.id,
+              pr_number: s.pr.number,
+              repo: 'acme/x',
+              pr_title: 't',
+              pr_body: null,
+              pr_author: 'a',
+              head_sha: HEAD,
+            },
+            expectedOutput: {
+              kind: 'must_find' as const,
+              file: FILE,
+              start_line: 2,
+              end_line: 2,
+              title: `t${i}`,
+              severity: 'WARNING' as const,
+              category: 'bug' as const,
+            },
+          })),
+        )
+        .returning();
+      const [suite] = await db
+        .insert(t.evalSuiteRuns)
+        .values({
+          workspaceId: ws,
+          agentId: s.agent.id,
+          agentVersion: 1,
+          systemPrompt: 'Review.',
+          provider: 'openai',
+          model: 'gpt-4o',
+          strategy: 'single-pass',
+          skills: [],
+          status: 'done',
+          recall: 1,
+          precision: 1,
+          citationAccuracy: 1,
+          casesTotal: caseCount,
+          casesDone: caseCount,
+          casesPassed: caseCount,
+          casesErrored: 0,
+          finishedAt: new Date(),
+        })
+        .returning();
+      const results = await db
+        .insert(t.evalRuns)
+        .values({ caseId: cases[0]!.id, suiteRunId: suite!.id, pass: true, recall: 1 })
+        .returning();
+      return { cases, suite: suite!, results };
+    }
+
+    const evalRowCounts = async (rows: Awaited<ReturnType<typeof seedEvalRows>>) => {
+      const db = pg.handle.db;
+      return {
+        cases: (await db.select().from(t.evalCases).where(eq(t.evalCases.id, rows.cases[0]!.id))).length +
+          (await db.select().from(t.evalCases).where(eq(t.evalCases.id, rows.cases[1]!.id))).length,
+        suiteRuns: (await db.select().from(t.evalSuiteRuns).where(eq(t.evalSuiteRuns.id, rows.suite.id))).length,
+        results: (await db.select().from(t.evalRuns).where(eq(t.evalRuns.id, rows.results[0]!.id))).length,
+      };
+    };
+
+    it('answers 200 and removes the agent\'s cases, suite runs and results, and leaves another agent\'s untouched', async () => {
+      const db = pg.handle.db;
+      const app = await appWith();
+      const doomed = await scenario();
+      const other = await scenario();
+      const doomedRows = await seedEvalRows(doomed);
+      const otherRows = await seedEvalRows(other);
+      expect(await evalRowCounts(doomedRows)).toEqual({ cases: 2, suiteRuns: 1, results: 1 });
+
+      const res = await app.inject({ method: 'DELETE', url: `/agents/${doomed.agent.id}` });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ ok: true });
+      expect(await db.select().from(t.agents).where(eq(t.agents.id, doomed.agent.id))).toHaveLength(0);
+      expect(await casesOf(doomed.agent.id)).toHaveLength(0);
+      expect(await db.select().from(t.evalSuiteRuns).where(eq(t.evalSuiteRuns.agentId, doomed.agent.id))).toHaveLength(0);
+      expect(await evalRowCounts(doomedRows)).toEqual({ cases: 0, suiteRuns: 0, results: 0 });
+      // The other agent keeps every row.
+      expect(await db.select().from(t.agents).where(eq(t.agents.id, other.agent.id))).toHaveLength(1);
+      expect(await evalRowCounts(otherRows)).toEqual({ cases: 2, suiteRuns: 1, results: 1 });
+    });
+
+    it('answers 404 for another workspace\'s agent and deletes neither the agent nor its cases', async () => {
+      const db = pg.handle.db;
+      const app = await appWith();
+      const [otherWs] = await db.insert(t.workspaces).values({ name: `other-ws-${seq++}` }).returning();
+      const foreign = await scenario({ ws: otherWs!.id });
+      const rows = await seedEvalRows(foreign, otherWs!.id);
+
+      const res = await app.inject({ method: 'DELETE', url: `/agents/${foreign.agent.id}` });
+
+      expect(res.statusCode).toBe(404);
+      expect(res.json().error.code).toBe('not_found');
+      expect(await db.select().from(t.agents).where(eq(t.agents.id, foreign.agent.id))).toHaveLength(1);
+      expect(await evalRowCounts(rows)).toEqual({ cases: 2, suiteRuns: 1, results: 1 });
     });
   });
 });

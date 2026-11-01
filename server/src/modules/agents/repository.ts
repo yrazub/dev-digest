@@ -70,15 +70,33 @@ export class AgentsRepository {
     return row;
   }
 
-  /** Delete an agent (scoped to workspace). Versions/skill-links cascade;
-   *  agent_runs keep their history with agent_id set null. Returns false if
-   *  no such agent existed in the workspace. */
+  /** Delete an agent (scoped to workspace) and its eval cases in one transaction.
+   *  `eval_cases.owner_id` has no FK, so the cases go here (R-SRV-35); suite runs and
+   *  their results go by FK cascade, versions/skill-links likewise. agent_runs keep
+   *  their history with agent_id set null. Returns false if no such agent existed in
+   *  the workspace (and then nothing is deleted). */
   async deleteById(workspaceId: string, id: string): Promise<boolean> {
-    const rows = await this.db
-      .delete(t.agents)
-      .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.id, id)))
-      .returning({ id: t.agents.id });
-    return rows.length > 0;
+    return this.db.transaction(async (tx) => {
+      const [agent] = await tx
+        .select({ id: t.agents.id })
+        .from(t.agents)
+        .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.id, id)));
+      if (!agent) return false;
+      await tx
+        .delete(t.evalCases)
+        .where(
+          and(
+            eq(t.evalCases.workspaceId, workspaceId),
+            eq(t.evalCases.ownerKind, 'agent'),
+            eq(t.evalCases.ownerId, id),
+          ),
+        );
+      const rows = await tx
+        .delete(t.agents)
+        .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.id, id)))
+        .returning({ id: t.agents.id });
+      return rows.length > 0;
+    });
   }
 
   /** Insert an agent AND record version 1 in agent_versions (immutable snapshot). */
