@@ -2,6 +2,7 @@ import type {
   EvalCaseCreateResponse,
   EvalCaseRecord,
   EvalExpectation,
+  EvalOverview,
   EvalSuiteRun,
   EvalSuiteRunDetail,
   LLMProvider,
@@ -162,6 +163,10 @@ export class EvalService {
     const run = await this.deps.store.runDetail(workspaceId, runId);
     if (!run) throw new NotFoundError('Eval run not found');
     return run;
+  }
+
+  async overview(workspaceId: string): Promise<EvalOverview> {
+    return this.deps.store.overview(workspaceId);
   }
 
   /** The PR diff as review runs load it: the clone's `git diff`, else the stored `pr_files` patches. */

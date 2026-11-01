@@ -4,6 +4,7 @@ import type {
   EvalConfigSnapshot,
   EvalExpectation,
   EvalExpectationKind,
+  EvalOverview,
   EvalSuiteRun,
   EvalSuiteRunDetail,
   FindingCategory,
@@ -155,6 +156,8 @@ export interface EvalStore {
   runDetail(workspaceId: string, runId: string): Promise<EvalSuiteRunDetail | undefined>;
   /** Boot reap: every `running` run becomes `failed`. Returns the count. */
   reapRunning(): Promise<number>;
+  /** Every agent of the workspace with its eval figures, and the newest runs (R-SRV-41). */
+  overview(workspaceId: string): Promise<EvalOverview>;
 }
 
 /** What the run executor needs from the store. */

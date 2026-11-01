@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type {
   EvalCaseCreateResponse,
   EvalCaseList,
+  EvalOverview,
   EvalSuiteRun,
   EvalSuiteRunDetail,
   EvalSuiteRunList,
@@ -34,6 +35,7 @@ const RunListQuery = z.object({
  *                                    409 `eval_run_in_progress`, 422 no cases / more than 50)
  *   GET    /agents/:id/eval-runs   → { runs, total } — newest first, `limit` / `offset`
  *   GET    /eval-runs/:id          → EvalSuiteRunDetail — the run with its case results
+ *   GET    /evals/overview         → EvalOverview — every agent's latest done run, trend, counts
  */
 export default async function evalRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
@@ -95,5 +97,10 @@ export default async function evalRoutes(appBase: FastifyInstance) {
   app.get('/eval-runs/:id', { schema: { params: IdParams } }, async (req): Promise<EvalSuiteRunDetail> => {
     const { workspaceId } = await getContext(container, req);
     return service.getRun(workspaceId, req.params.id);
+  });
+
+  app.get('/evals/overview', async (req): Promise<EvalOverview> => {
+    const { workspaceId } = await getContext(container, req);
+    return service.overview(workspaceId);
   });
 }

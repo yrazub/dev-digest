@@ -41,7 +41,7 @@ function pgError(err: unknown): { code?: string; constraint?: string } {
   };
 }
 
-const runColumns = {
+export const runColumns = {
   id: t.evalSuiteRuns.id,
   agentId: t.evalSuiteRuns.agentId,
   agentName: t.agents.name,
@@ -65,7 +65,7 @@ const runColumns = {
   error: t.evalSuiteRuns.error,
 };
 
-interface RunRow {
+export interface RunRow {
   id: string;
   agentId: string;
   agentName: string;
@@ -89,7 +89,7 @@ interface RunRow {
   error: string | null;
 }
 
-function toRun(row: RunRow): EvalSuiteRun {
+export function toRun(row: RunRow): EvalSuiteRun {
   return {
     id: row.id,
     agent_id: row.agentId,

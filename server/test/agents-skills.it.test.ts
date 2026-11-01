@@ -97,6 +97,71 @@ d('agent ↔ skills', () => {
     expect(listed.find((x: { id: string }) => x.id === agent.id).skill_count).toBe(2);
   });
 
+  it('counts agent_count across all agents, and keeps order through unlink and relink', async () => {
+    const x = await skill('relink-x');
+    const y = await skill('relink-y');
+    const z = await skill('relink-z');
+    const [first, second] = (await app.inject({ method: 'GET', url: '/agents' })).json() as { id: string }[];
+    const get = async (agentId: string) =>
+      (await app.inject({ method: 'GET', url: `/agents/${agentId}/skills` })).json() as {
+        id: string;
+        linked: boolean;
+        order: number | null;
+        agent_count: number;
+      }[];
+    const mine = (list: Awaited<ReturnType<typeof get>>) => list.filter((s) => [x, y, z].includes(s.id));
+    const post = (agentId: string, payload: object) =>
+      app.inject({ method: 'POST', url: `/agents/${agentId}/skills`, payload });
+
+    await post(first!.id, { skill_ids: [x, y, z] });
+    await post(second!.id, { skill_ids: [y] });
+
+    // agent_count is the total link count over every agent, whoever asks.
+    for (const agentId of [first!.id, second!.id]) {
+      const counts = Object.fromEntries(mine(await get(agentId)).map((s) => [s.id, s.agent_count]));
+      expect(counts).toEqual({ [x]: 1, [y]: 2, [z]: 1 });
+    }
+
+    // Unlink y: z moves up, y drops to the unlinked tail, and its count falls.
+    await post(first!.id, { skill_ids: [x, z] });
+    expect(mine(await get(first!.id)).map((s) => [s.id, s.linked, s.order, s.agent_count])).toEqual([
+      [x, true, 0, 1],
+      [z, true, 1, 1],
+      [y, false, null, 1],
+    ]);
+
+    // Relink y with no order: it is appended after the existing links.
+    const relinked = await post(first!.id, { skill_id: y });
+    expect(relinked.statusCode).toBe(200);
+    expect(mine(relinked.json()).map((s: { id: string; linked: boolean; order: number | null; agent_count: number }) => [s.id, s.linked, s.order, s.agent_count])).toEqual([
+      [x, true, 0, 1],
+      [z, true, 1, 1],
+      [y, true, 2, 2],
+    ]);
+    expect(relinked.json()).toEqual(await get(first!.id));
+  });
+
+  it('skill_count is 0 for a new agent and counts the links on create, update and list', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/agents',
+      payload: { name: 'Counted', provider: 'openai', model: 'gpt-4o-mini', system_prompt: 'x' },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json().id as string;
+    expect(created.json().skill_count).toBe(0);
+
+    const s1 = await skill('count-one');
+    const s2 = await skill('count-two');
+    await app.inject({ method: 'POST', url: `/agents/${id}/skills`, payload: { skill_ids: [s1, s2] } });
+
+    // PUT returns the agent with its link count, not a reset 0.
+    const updated = await app.inject({ method: 'PUT', url: `/agents/${id}`, payload: { model: 'gpt-4o' } });
+    expect(updated.json().skill_count).toBe(2);
+    const listed = (await app.inject({ method: 'GET', url: '/agents' })).json();
+    expect(listed.find((x: { id: string }) => x.id === id).skill_count).toBe(2);
+  });
+
   it('rejects unknown, foreign and duplicate skill ids with 422', async () => {
     const agent = (await app.inject({ method: 'GET', url: '/agents' })).json()[1];
     const own = await skill('own-skill');

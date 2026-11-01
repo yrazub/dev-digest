@@ -10,8 +10,6 @@ import type {
   ReviewStrategy,
 } from '@devdigest/shared';
 import type { AgentsRepository } from './repository.js';
-import { toAgentDto, toAgentVersionDto } from './helpers.js';
-import { skillRowToDto } from '../_shared/skill-dto.js';
 import { ValidationError } from '../../platform/errors.js';
 
 /**
@@ -21,9 +19,6 @@ import { ValidationError } from '../../platform/errors.js';
  * An Agent = provider + model + system_prompt + linked skills + output_schema +
  * enabled. Config changes are versioned via `agent_versions` (repository).
  */
-
-// Re-exported for backwards compatibility; implementation lives in ./helpers.
-export { toAgentDto } from './helpers.js';
 
 export interface CreateAgentInput {
   name: string;
@@ -64,20 +59,11 @@ export class AgentsService {
   }
 
   async list(workspaceId: string): Promise<Agent[]> {
-    const [rows, counts] = await Promise.all([
-      this.repo.list(workspaceId),
-      this.repo.skillCounts(workspaceId),
-    ]);
-    return rows.map((r) => toAgentDto(r, counts.get(r.id) ?? 0));
+    return this.repo.list(workspaceId);
   }
 
   async get(workspaceId: string, id: string): Promise<Agent | undefined> {
-    const row = await this.repo.getById(workspaceId, id);
-    return row ? toAgentDto(row, await this.skillCount(id)) : undefined;
-  }
-
-  private async skillCount(agentId: string): Promise<number> {
-    return (await this.repo.linkedSkills(agentId)).length;
+    return this.repo.getById(workspaceId, id);
   }
 
   /** Delete an agent (and its versions/skill-links, via cascade). */
@@ -86,7 +72,7 @@ export class AgentsService {
   }
 
   async create(workspaceId: string, input: CreateAgentInput, userId?: string): Promise<Agent> {
-    const row = await this.repo.insert({
+    return this.repo.insert({
       workspaceId,
       name: input.name,
       description: input.description,
@@ -100,7 +86,6 @@ export class AgentsService {
       enabled: input.enabled,
       createdBy: userId ?? null,
     });
-    return toAgentDto(row);
   }
 
   async update(
@@ -108,7 +93,7 @@ export class AgentsService {
     id: string,
     patch: UpdateAgentInput,
   ): Promise<Agent | undefined> {
-    const row = await this.repo.update(workspaceId, id, {
+    return this.repo.update(workspaceId, id, {
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.description !== undefined ? { description: patch.description } : {}),
       ...(patch.provider !== undefined ? { provider: patch.provider } : {}),
@@ -120,7 +105,6 @@ export class AgentsService {
       ...(patch.repo_intel !== undefined ? { repoIntel: patch.repo_intel } : {}),
       ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
     });
-    return row ? toAgentDto(row, await this.skillCount(id)) : undefined;
   }
 
   /**
@@ -131,8 +115,7 @@ export class AgentsService {
   async listVersions(workspaceId: string, agentId: string): Promise<AgentVersion[] | undefined> {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
-    const rows = await this.repo.listVersions(agentId);
-    return rows.map(toAgentVersionDto);
+    return this.repo.listVersions(agentId);
   }
 
   /**
@@ -146,14 +129,12 @@ export class AgentsService {
   ): Promise<AgentVersion | undefined> {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
-    const row = await this.repo.getVersion(agentId, version);
-    return row ? toAgentVersionDto(row) : undefined;
+    return this.repo.getVersion(agentId, version);
   }
 
   /** Linked skills for an agent as AgentSkillLink[] (ordered). */
   async skillLinks(agentId: string): Promise<AgentSkillLink[]> {
-    const links = await this.repo.linkedSkills(agentId);
-    return links.map((l) => ({ agent_id: agentId, skill_id: l.skill.id, order: l.order }));
+    return this.repo.linkedSkills(agentId);
   }
 
   /**
@@ -168,14 +149,10 @@ export class AgentsService {
       this.repo.workspaceSkills(workspaceId),
       this.repo.linkedSkills(agentId),
     ]);
-    const orderById = new Map(links.map((l, i) => [l.skill.id, i]));
-    const rows: AgentSkill[] = all.map((r) => {
-      const order = orderById.get(r.skill.id);
-      return {
-        ...skillRowToDto(r.skill, r.agentCount),
-        linked: order !== undefined,
-        order: order ?? null,
-      };
+    const orderById = new Map(links.map((l, i) => [l.skill_id, i]));
+    const rows: AgentSkill[] = all.map((skill) => {
+      const order = orderById.get(skill.id);
+      return { ...skill, linked: order !== undefined, order: order ?? null };
     });
     const linked = rows.filter((s) => s.linked).sort((a, b) => a.order! - b.order!);
     return [...linked, ...rows.filter((s) => !s.linked)];

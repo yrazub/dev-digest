@@ -20,6 +20,7 @@ import { and, eq } from 'drizzle-orm';
 import type {
   EvalCaseCreateResponse,
   EvalCaseList,
+  EvalOverview,
   EvalSuiteRun,
   EvalSuiteRunDetail,
   EvalSuiteRunList,
@@ -33,6 +34,7 @@ import { EvalRepository } from '../src/modules/eval/repository.js';
 import { loadConfig } from '../src/platform/config.js';
 import { seed, DEFAULT_WORKSPACE_NAME } from '../src/db/seed.js';
 import {
+  MockAuthProvider,
   MockGitClient,
   MockGitHubClient,
   MockSecretsProvider,
@@ -1357,6 +1359,204 @@ d('L06 eval case routes (Testcontainers pg)', () => {
       }
       expect(await suiteRows(foreign.agent.id)).toHaveLength(1); // only the one inserted above
       expect(modelCalls(llm)).toHaveLength(0);
+    });
+
+    describe('GET /evals/overview (phase 7, R-SRV-41)', () => {
+      /** A workspace of its own, so the seeded agents and eval rows of the default workspace do not mix in. */
+      async function freshWorkspace() {
+        const [ws] = await pg.handle.db.insert(t.workspaces).values({ name: `overview-ws-${seq++}` }).returning();
+        return ws!;
+      }
+      /** The app resolves this workspace as the current one, so the route reads it with no seed rows. */
+      async function appFor(ws: { id: string; name: string }, llm?: LLMProvider) {
+        const app = await buildApp({
+          config: config(),
+          db: pg.handle.db,
+          overrides: {
+            secrets: new MockSecretsProvider(),
+            github: new MockGitHubClient(),
+            git: new MockGitClient({ diff: '' }),
+            auth: new MockAuthProvider(undefined, ws),
+            ...(llm ? { llm: { openai: llm } } : {}),
+          },
+        });
+        apps.push(app);
+        return app;
+      }
+      async function agentIn(ws: string, name: string, enabled = true) {
+        const [row] = await pg.handle.db
+          .insert(t.agents)
+          .values({ workspaceId: ws, name, provider: 'openai', model: 'gpt-4o', systemPrompt: 'Review.', enabled })
+          .returning();
+        return row!;
+      }
+      const T0 = Date.parse('2026-10-01T00:00:00Z');
+      const minutes = (n: number) => new Date(T0 + n * 60_000);
+      function suiteRun(
+        ws: string,
+        agentId: string,
+        o: Partial<typeof t.evalSuiteRuns.$inferInsert> = {},
+      ): typeof t.evalSuiteRuns.$inferInsert {
+        return {
+          workspaceId: ws,
+          agentId,
+          agentVersion: 1,
+          systemPrompt: 'Review.',
+          provider: 'openai',
+          model: 'gpt-4o',
+          strategy: 'single-pass',
+          skills: [],
+          status: 'done',
+          casesTotal: 2,
+          casesDone: 2,
+          finishedAt: new Date(),
+          ...o,
+        };
+      }
+      const overview = async (app: App) => {
+        const res = await app.inject({ method: 'GET', url: '/evals/overview' });
+        expect(res.statusCode).toBe(200);
+        return res.json() as EvalOverview;
+      };
+
+      it('lists every agent of the workspace by name, enabled or not, with its counts; an agent with no run has latest null and an empty trend', async () => {
+        const db = pg.handle.db;
+        const ws = await freshWorkspace();
+        const other = await freshWorkspace();
+        const zed = await agentIn(ws.id, 'zed-agent');
+        const off = await agentIn(ws.id, 'beta-disabled', false);
+        const idle = await agentIn(ws.id, 'alpha-idle');
+        await agentIn(other.id, 'foreign-agent');
+        await db.insert(t.evalSuiteRuns).values(suiteRun(ws.id, zed.id, { startedAt: minutes(1), recall: 0.5 }));
+        await db.insert(t.evalSuiteRuns).values(suiteRun(ws.id, off.id, { startedAt: minutes(2), recall: 1 }));
+        await addCases({ agent: zed, pr: { id: UNKNOWN_ID, number: 1 } } as unknown as Scenario, [{}, {}, {}], ws.id);
+        const app = await appFor(ws);
+
+        const body = await overview(app);
+
+        expect(body.agents.map((a) => a.agent_name)).toEqual(['alpha-idle', 'beta-disabled', 'zed-agent']);
+        const [idleOv, offOv, zedOv] = body.agents;
+        expect(idleOv).toMatchObject({
+          agent_id: idle.id,
+          provider: 'openai',
+          model: 'gpt-4o',
+          enabled: true,
+          cases_total: 0,
+          runs_total: 0,
+          running: false,
+          latest: null,
+          recall_trend: [],
+        });
+        expect(offOv).toMatchObject({ agent_id: off.id, enabled: false, cases_total: 0, runs_total: 1, recall_trend: [1] });
+        expect(zedOv).toMatchObject({ agent_id: zed.id, enabled: true, cases_total: 3, runs_total: 1, recall_trend: [0.5] });
+        expect(zedOv!.latest).toMatchObject({
+          agent_id: zed.id,
+          agent_name: 'zed-agent',
+          status: 'done',
+          recall: 0.5,
+          started_at: minutes(1).toISOString(),
+          config: { agent_version: 1, system_prompt: 'Review.', provider: 'openai', model: 'gpt-4o', strategy: 'single-pass', skills: [] },
+        });
+      });
+
+      it('takes latest from the newest done run even when a newer failed run exists, and keeps the failed run out of the trend', async () => {
+        const db = pg.handle.db;
+        const ws = await freshWorkspace();
+        const agent = await agentIn(ws.id, 'flaky');
+        const [older, newerDone] = await db
+          .insert(t.evalSuiteRuns)
+          .values([
+            suiteRun(ws.id, agent.id, { startedAt: minutes(1), recall: 0.25 }),
+            suiteRun(ws.id, agent.id, { startedAt: minutes(2), recall: 0.75 }),
+          ])
+          .returning();
+        await db
+          .insert(t.evalSuiteRuns)
+          .values(suiteRun(ws.id, agent.id, { startedAt: minutes(3), status: 'failed', error: 'All 2 cases failed: boom', recall: null }));
+        const app = await appFor(ws);
+
+        const [ov] = (await overview(app)).agents;
+
+        expect(older!.id).not.toBe(newerDone!.id);
+        expect(ov!.latest!.id).toBe(newerDone!.id);
+        expect(ov).toMatchObject({ runs_total: 3, running: false, recall_trend: [0.25, 0.75] });
+      });
+
+      it('shows running: true while a run of the agent is held, and false again once it ends', async () => {
+        const ws = await freshWorkspace();
+        const { llm, release } = gatedLlm();
+        const app = await appFor(ws, llm);
+        const s = await scenario({ ws: ws.id });
+        await addCases(s, [{}], ws.id);
+
+        const run = (await startRun(app, s.agent.id)).json() as EvalSuiteRun;
+        let during: EvalOverview;
+        try {
+          await until(() => modelCalls(llm).length === 1, 'the model call');
+          during = await overview(app);
+        } finally {
+          release();
+        }
+        await waitForEvalRun(app, run.id);
+        const after = await overview(app);
+
+        expect(during.agents.find((a) => a.agent_id === s.agent.id)).toMatchObject({ running: true, latest: null, runs_total: 1 });
+        expect(during.recent_runs[0]).toMatchObject({ id: run.id, status: 'running' });
+        expect(after.agents.find((a) => a.agent_id === s.agent.id)).toMatchObject({ running: false, runs_total: 1 });
+        expect(after.agents.find((a) => a.agent_id === s.agent.id)!.latest!.id).toBe(run.id);
+      });
+
+      it('caps recall_trend at the last 10 done runs, oldest first, whatever the insert order', async () => {
+        const db = pg.handle.db;
+        const ws = await freshWorkspace();
+        const agent = await agentIn(ws.id, 'trender');
+        // Twelve done runs recall 0.01 .. 0.12; inserted newest first so the order cannot come from the insert.
+        const recalls = Array.from({ length: 12 }, (_, i) => (i + 1) / 100);
+        await db
+          .insert(t.evalSuiteRuns)
+          .values(recalls.map((r, i) => suiteRun(ws.id, agent.id, { startedAt: minutes(i), recall: r })).reverse());
+        const app = await appFor(ws);
+
+        const [ov] = (await overview(app)).agents;
+
+        expect(ov!.runs_total).toBe(12);
+        expect(ov!.recall_trend).toEqual(recalls.slice(2)); // the 10 newest, oldest first
+        expect(ov!.latest!.recall).toBe(0.12);
+      });
+
+      it('returns the 6 newest runs of the workspace across agents, any status, newest first, each with its agent name, and none of another workspace', async () => {
+        const db = pg.handle.db;
+        const ws = await freshWorkspace();
+        const other = await freshWorkspace();
+        const a = await agentIn(ws.id, 'agent-a');
+        const b = await agentIn(ws.id, 'agent-b');
+        const foreign = await agentIn(other.id, 'agent-foreign');
+        // The app first: building it reaps every `running` row, which would turn the seeded one `failed`.
+        const app = await appFor(ws);
+        const statuses = ['done', 'failed', 'running', 'done', 'failed', 'done', 'done', 'done'] as const;
+        const inserted = await db
+          .insert(t.evalSuiteRuns)
+          .values(
+            statuses.map((status, i) =>
+              suiteRun(ws.id, i % 2 === 0 ? a.id : b.id, {
+                startedAt: minutes(i),
+                status,
+                finishedAt: status === 'running' ? null : new Date(),
+                recall: null,
+              }),
+            ),
+          )
+          .returning();
+        // A newer run in another workspace must not appear.
+        await db.insert(t.evalSuiteRuns).values(suiteRun(other.id, foreign.id, { startedAt: minutes(50) }));
+
+        const { recent_runs } = await overview(app);
+
+        const byTime = [...inserted].sort((x, y) => y.startedAt.getTime() - x.startedAt.getTime());
+        expect(recent_runs.map((r) => r.id)).toEqual(byTime.slice(0, 6).map((r) => r.id));
+        expect(recent_runs.map((r) => r.status)).toEqual(['done', 'done', 'done', 'failed', 'done', 'running']);
+        expect(recent_runs.map((r) => r.agent_name)).toEqual(['agent-b', 'agent-a', 'agent-b', 'agent-a', 'agent-b', 'agent-a']);
+      });
     });
   });
 });

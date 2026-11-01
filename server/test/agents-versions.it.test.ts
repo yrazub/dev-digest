@@ -108,6 +108,53 @@ d('GET /agents/:id/versions', () => {
     await app.close();
   });
 
+  it('system_prompt, ci_fail_on and repo_intel edits each bump the version and snapshot it', async () => {
+    const app = await makeApp();
+    const agentId = (
+      await app.inject({ method: 'POST', url: '/agents', payload: createBody })
+    ).json().id as string;
+
+    // Schema defaults are ci_fail_on 'critical' and repo_intel on, so each edit moves away from them.
+    const put = (payload: object) =>
+      app.inject({ method: 'PUT', url: `/agents/${agentId}`, payload });
+
+    expect((await put({ system_prompt: 'Review harder.' })).json().version).toBe(2);
+    expect((await put({ ci_fail_on: 'warning' })).json().version).toBe(3);
+    expect((await put({ repo_intel: false })).json().version).toBe(4);
+
+    const versions = (
+      await app.inject({ method: 'GET', url: `/agents/${agentId}/versions` })
+    ).json();
+    expect(versions.map((v: { version: number }) => v.version)).toEqual([4, 3, 2, 1]);
+    expect(versions[0].config).toMatchObject({
+      system_prompt: 'Review harder.',
+      ci_fail_on: 'warning',
+      repo_intel: false,
+    });
+    expect(versions[3].config).toMatchObject({ system_prompt: 'Review the diff.' });
+    await app.close();
+  });
+
+  it('a PUT that repeats the stored values creates no version', async () => {
+    const app = await makeApp();
+    const agentId = (
+      await app.inject({ method: 'POST', url: '/agents', payload: createBody })
+    ).json().id as string;
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/agents/${agentId}`,
+      payload: { model: createBody.model, system_prompt: createBody.system_prompt },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().version).toBe(1);
+    const versions = (
+      await app.inject({ method: 'GET', url: `/agents/${agentId}/versions` })
+    ).json();
+    expect(versions).toHaveLength(1);
+    await app.close();
+  });
+
   it('GET /agents/:id/versions/:version returns one snapshot', async () => {
     const app = await makeApp();
     const agentId = (

@@ -1,4 +1,4 @@
-import type { EvalCaseRecord, EvalSuiteRun, EvalSuiteRunDetail } from '@devdigest/shared';
+import type { EvalCaseRecord, EvalOverview, EvalSuiteRun, EvalSuiteRunDetail } from '@devdigest/shared';
 import type { Db } from '../../db/client.js';
 import type { PromptSkill } from '../_shared/review-prompt.js';
 import type {
@@ -12,6 +12,7 @@ import type {
   NewEvalRun,
 } from './ports.js';
 import * as caseRepo from './repository/case.repo.js';
+import * as overviewRepo from './repository/overview.repo.js';
 import * as runRepo from './repository/run.repo.js';
 import * as sourceRepo from './repository/source.repo.js';
 
@@ -87,6 +88,12 @@ export class EvalRepository implements EvalStore {
 
   reapRunning(): Promise<number> {
     return runRepo.reapRunning(this.db);
+  }
+
+  // ---- dashboard ---------------------------------------------------------------
+
+  overview(workspaceId: string): Promise<EvalOverview> {
+    return overviewRepo.overview(this.db, workspaceId);
   }
 
   // ---- rows the module does not own -------------------------------------------
