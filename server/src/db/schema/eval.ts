@@ -87,24 +87,31 @@ export const evalSuiteRuns = pgTable(
   }),
 );
 
-export const evalRuns = pgTable('eval_runs', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  caseId: uuid('case_id')
-    .notNull()
-    .references(() => evalCases.id, { onDelete: 'cascade' }),
-  suiteRunId: uuid('suite_run_id')
-    .notNull()
-    .references(() => evalSuiteRuns.id, { onDelete: 'cascade' }),
-  ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
-  actualOutput: jsonb('actual_output'),
-  pass: boolean('pass'),
-  recall: doublePrecision('recall'),
-  precision: doublePrecision('precision'),
-  citationAccuracy: doublePrecision('citation_accuracy'),
-  durationMs: integer('duration_ms'),
-  costUsd: doublePrecision('cost_usd'),
-  error: text('error'),
-});
+export const evalRuns = pgTable(
+  'eval_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => evalCases.id, { onDelete: 'cascade' }),
+    suiteRunId: uuid('suite_run_id')
+      .notNull()
+      .references(() => evalSuiteRuns.id, { onDelete: 'cascade' }),
+    ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
+    actualOutput: jsonb('actual_output'),
+    pass: boolean('pass'),
+    recall: doublePrecision('recall'),
+    precision: doublePrecision('precision'),
+    citationAccuracy: doublePrecision('citation_accuracy'),
+    durationMs: integer('duration_ms'),
+    costUsd: doublePrecision('cost_usd'),
+    error: text('error'),
+  },
+  (t) => ({
+    // Every cascade delete and per-suite read goes through this FK.
+    suiteRunIdx: index('eval_runs_suite_run_idx').on(t.suiteRunId),
+  }),
+);
 
 export const conformanceChecks = pgTable('conformance_checks', {
   id: uuid('id').primaryKey().defaultRandom(),
