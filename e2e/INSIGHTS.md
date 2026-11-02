@@ -32,6 +32,7 @@ Traps we have already hit in the browser suite. Append-only. See the root
   pass was not tried; the test-writer chose `--fn` because the binary's text check reads
   `innerText`, which carries the transformed casing. Every other flow uses `--text` on text that
   no CSS transforms.
+  **2026-11-02:** tried outside a flow, recording the L06 demo: `wait --text "Recent runs"` on the `SectionLabel` of `/evals/:agentId` (`../client/messages/en/eval.json:10`, authored casing) did not match and cost the full 25 s, so `--fn` is the right choice. In a video script a guarded `wait --text … || true` hides this as a long dead gap; compare the caption gaps of a dry run.
 - **2026-10-11** — `agent-browser find` does not wait: when nothing matches it exits non-zero in
   about 50 ms (`✗ No element found by label '…'`, or `✗ N elements have role "link", but none match
   name "…"`), and when several elements match it takes the first without an error
@@ -44,6 +45,8 @@ Traps we have already hit in the browser suite. Append-only. See the root
   API answered `GET /repos` with `[]` until it was restarted. Rerun on a fresh stack
   (`../scripts/e2e.sh` starts an ephemeral Postgres each time).
 - **2026-10-18** — A negative `wait --fn "!…includes(…)"` passes at once on a page that has not rendered yet, so on its own it proves nothing. Put it after a positive `wait --text` from the same component: flow 10 waits for the seeded in-scope item, then asserts the risk tag is absent (`specs/10-pr-intent.flow.json:11-12`).
+- **2026-11-02** — `agent-browser` 0.39 `record` can abort with `✗ Recording encoder fell more than 500 ms behind capture`, and the segment's `.mp4` is then left unfinalized (ffmpeg reports no duration), though the machine had 37 % memory free. It hit a 46 s segment ending in the Eval Compare modal; a 59 s segment had recorded fine, so length alone does not explain it, and the cause was not established. Retaking the same steps split into two segments at the point the modal opens worked first time. Keep every finished segment, end segments at transitions so a cut does not show, and make the steps after the last model wait re-runnable from saved data so a failed segment costs no second model call. External-tool behaviour; the suite's browser config is `agent-browser.json:3` (`"headed": false`).
+- **2026-11-02** — a demo dry run that starts real eval runs leaves them in the agent's history for good: `server/src/modules/eval/routes.ts` has `DELETE /eval-cases/:id` but no delete route for a run (`routes.ts:71`, `:78`, `:89`, `:97`). So the take's first Evals tab shows the dry run's metrics, and its baseline tile shows a delta against that run. Budget for it in the captions, or dry-run the prompt effect on another agent.
 
 
 ## Recurring Errors & Fixes
@@ -152,6 +155,18 @@ screen proves the optimistic update, not the save.
 **Fix / rule:** wait for a transient toast before the `wait --url` that follows the navigation. To tell a slow host from a regression, compare `Ready in` and `Compiled / in` in the passing and failing logs — a uniform 3–10x slowdown is the host.
 **Evidence:** `specs/08-skills.flow.json:14` (toast wait, now before the URL wait).
 
+### `npm run e2e:hermetic` fails two flows at `agent-browser open http://localhost:3100/...` and passes 15/15 on the next run
+**Date:** 2026-11-02
+**Cause:** machine load, not the code under test: the first `open` of a flow times out while the web server is still compiling or the laptop is swapping. The flows are `{"cmd": ["open", "{BASE}/"]}` steps (`specs/01-app-boot.flow.json:5`); the eval-pipeline run saw 13/15, then 15/15 on an immediate rerun and in the verifier's run.
+**Fix / rule:** when the only failures are `open` steps, rerun once before debugging; a failure that moves to a different step on rerun is a real bug. Do not stack other heavy work during the run.
+**Evidence:** `run.ts:149` (exit code is `results.every(ok)`)
+
+### Piping `npm run e2e:hermetic | tail` hides the result
+**Date:** 2026-11-02
+**Cause:** the pipeline's exit status is `tail`'s, so a failed run looks like a success; the runner's verdict is the printed summary line (`N/15 flows passed`), and it exits 1 only through `process.exit` at its end.
+**Fix / rule:** read the `N/15 flows passed` line, or avoid the pipe (`set -o pipefail`, or redirect to a file and `echo $?`).
+**Evidence:** `run.ts:147-149` (`console.log(summarize(results))`, then `process.exit(...)`)
+
 ## Session Notes
 
 - **2026-09-30** — added `08-skills` (create skill → link to agent → persists) and fixed the `04`/`05` click race.
@@ -163,3 +178,5 @@ screen proves the optimistic update, not the save.
 - **2026-10-17** — added `13-project-context`; the 429s that led to `API_RATE_LIMIT_MAX`, and flow 08's toast-before-URL reorder; hermetic run 13/13.
 - **2026-10-18** — added `14-pr-brief` (the seeded brief and the Review focus jump) and moved flow 10's risk-tag check to Agent runs; hermetic run 14/14 once `AGENT_BROWSER_BIN` was set.
 - **2026-10-19** — `scripts/e2e.sh` resolves agent-browser and stops when it does not run; global agent-browser reinstalled at 0.39.0.
+- **2026-11-02** — eval pipeline flow 15 over the seeded eval runs; hermetic run 13/15 then 15/15 under load; entries on the `open` flake and on piping the runner.
+- **2026-11-02** — recorded the L06 demo video; entries on the recorder's encoder abort, `wait --text` on a `SectionLabel`, and eval runs that a dry run cannot remove.

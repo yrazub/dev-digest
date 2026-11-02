@@ -3,7 +3,7 @@ import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { FindingRecord } from "@devdigest/shared";
+import type { EvalCaseRecord, FindingRecord } from "@devdigest/shared";
 import prReview from "../../../../../../../../../../messages/en/prReview.json";
 import { InlineFinding } from "./InlineFinding";
 
@@ -34,13 +34,13 @@ function mockFetch() {
   return fn;
 }
 
-function renderCard() {
+function renderCard(agentId: string | null = null) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const invalidate = vi.spyOn(qc, "invalidateQueries");
   render(
     <QueryClientProvider client={qc}>
       <NextIntlClientProvider locale="en" messages={{ prReview }}>
-        <InlineFinding finding={FINDING} prId="pr1" repoFullName="acme/api" headSha="abc123" />
+        <InlineFinding finding={FINDING} prId="pr1" repoFullName="acme/api" headSha="abc123" agentId={agentId} />
       </NextIntlClientProvider>
     </QueryClientProvider>,
   );
@@ -48,6 +48,26 @@ function renderCard() {
 }
 
 describe("InlineFinding", () => {
+  it("hands its agent id to the card: an accepted finding already in that agent's eval set says so", async () => {
+    const accepted: FindingRecord = { ...FINDING, accepted_at: "2026-10-04T00:00:00Z" };
+    const fn = vi.fn(async (url: string) =>
+      url.endsWith("/agents/a1/eval-cases")
+        ? new Response(JSON.stringify({ cases: [{ source_finding_id: "f1" } as EvalCaseRecord] }), { status: 200 })
+        : new Response("{}", { status: 404 }),
+    );
+    vi.stubGlobal("fetch", fn);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <NextIntlClientProvider locale="en" messages={{ prReview }}>
+          <InlineFinding finding={accepted} prId="pr1" agentId="a1" />
+        </NextIntlClientProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("In eval set")).toBeInTheDocument();
+  });
+
   it("starts open, with title, rationale and the two actions", () => {
     mockFetch();
     renderCard();

@@ -21,7 +21,7 @@ Drizzle over Postgres with pgvector. One file per domain in
 | `skills.ts` | `skills` | L02 |
 | `knowledge.ts` | `conventions` | L02 — conventions extractor |
 | `context.ts` | `agent_context_docs` `skill_context_docs` · `onboarding` | L05 — project context: the `project-context` module fills the two attachment tables; `onboarding` is still empty |
-| `eval.ts` | `eval_cases` `eval_runs` `conformance_checks` `composed_reviews` | L06 · L07 |
+| `eval.ts` | `eval_cases` `eval_suite_runs` `eval_runs` · `conformance_checks` `composed_reviews` | L06 — the `eval` module fills the first three; the other two are still empty · L07 |
 | `ci.ts` | `ci_installations` `ci_runs` | L06 — export to CI |
 | `ops.ts` | `installed_plugins` `digests` | L08 |
 
@@ -95,6 +95,83 @@ Neither table stores document text, a repository id or a version: the path is re
 repository's clone whenever it is needed, and the same path applies to every repository that has
 such a file. The text of a document a run inserted is kept in that run's `run_traces` document
 (`prompt_assembly.specs_loaded`), not here.
+
+### `eval_cases`, `eval_suite_runs` and `eval_runs` (L06)
+
+The eval pipeline's three tables ([`../src/db/schema/eval.ts`](../src/db/schema/eval.ts)). An
+`eval_cases` row is one stored case: the diff fragment, the PR's metadata and the expectation, taken
+from a decided finding. An `eval_suite_runs` row is one run of an agent over its cases, with a
+snapshot of the agent's configuration and the run's aggregates. An `eval_runs` row is the result of one
+case in one run. The `eval` module writes all three
+([`../src/modules/eval/README.md`](../src/modules/eval/README.md)); the `agents` module also deletes
+`eval_cases` rows when it deletes an agent.
+
+```mermaid
+erDiagram
+  workspaces ||--o{ eval_cases : "scopes"
+  workspaces ||--o{ eval_suite_runs : "scopes"
+  agents ||--o{ eval_suite_runs : "is run as"
+  findings |o--o| eval_cases : "source_finding_id"
+  eval_cases ||--o{ eval_runs : "has results"
+  eval_suite_runs ||--o{ eval_runs : "has results"
+  eval_cases {
+    uuid id PK
+    uuid workspace_id FK "on delete cascade"
+    text owner_kind "skill or agent"
+    uuid owner_id "no FK"
+    text name
+    text input_diff
+    jsonb input_meta "EvalCaseMeta"
+    jsonb expected_output "EvalExpectation"
+    timestamptz created_at
+    uuid source_finding_id FK "on delete set null, unique where not null"
+  }
+  eval_suite_runs {
+    uuid id PK
+    uuid workspace_id FK "on delete cascade"
+    uuid agent_id FK "on delete cascade"
+    text status "running, done or failed"
+    jsonb skills "name and version, prompt order"
+    double recall "null when undefined"
+    integer cases_total
+    integer cases_done
+  }
+  eval_runs {
+    uuid id PK
+    uuid case_id FK "on delete cascade"
+    uuid suite_run_id FK "on delete cascade"
+    boolean pass "null when errored"
+    jsonb actual_output
+    text error
+  }
+```
+
+The diagram shows the columns that carry a relationship or a rule; the rest are in `eval.ts`.
+
+- **`eval_cases.owner_id` has no foreign key**, because the owner is a skill or an agent. Deleting an
+  agent therefore removes its cases by an explicit delete in the same transaction
+  (`AgentsRepository.deleteById`, [`../src/modules/agents/repository.ts`](../src/modules/agents/repository.ts));
+  its `eval_suite_runs` go by the `agent_id` cascade and their `eval_runs` by the `suite_run_id`
+  cascade. Only agent-owned cases exist today.
+- **One case per finding.** `source_finding_id` is unique where it is not null, so two concurrent
+  requests for one finding end in one case. It becomes null when the finding is deleted, and is null
+  for the seeded cases.
+- **One running run per agent.** A partial unique index on `eval_suite_runs(agent_id)` where
+  `status = 'running'` makes the database refuse a second concurrent run; the service reads that as a
+  `409`. The index `(agent_id, started_at desc)` serves the run list.
+- **A run is a snapshot.** `agent_version`, `system_prompt`, `provider`, `model`, `strategy` and
+  `skills` (an array of name and version) are copied from the agent when the run starts, and never
+  change. `recall`, `precision` and `citation_accuracy` are null when their denominator is 0, and
+  `cost_usd` is null when any completed case has no cost.
+- **Deleting a case deletes its results** (`eval_runs.case_id` cascades) and leaves the aggregates of
+  the runs it was part of untouched.
+- `expected_output`, `input_meta`, `actual_output` and `skills` hold contract shapes the database does
+  not enforce, so the repositories parse them on every read.
+- The two older tables were empty in every database when the migration added `eval_runs.suite_run_id`
+  `NOT NULL` with no default. `pnpm db:seed` adds two
+  cases and two finished runs for the seeded Security Reviewer
+  ([`../src/db/seed-eval.ts`](../src/db/seed-eval.ts)), inserted only when that agent has none of that
+  name and no run.
 
 Shared column helpers (timestamps and the like) live in `_shared.ts` — use them instead
 of redeclaring `created_at` by hand.

@@ -163,6 +163,7 @@ export function ReviewRunAccordion({
             prId={prId}
             repoFullName={repoFullName}
             headSha={headSha}
+            agentId={review.agent_id}
           />
         </div>
       )}

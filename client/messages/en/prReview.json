@@ -10,7 +10,20 @@
     "replyToAuthor": "Reply to author",
     "replyPlaceholder": "Reply to the author about this finding…",
     "sendReply": "Send reply",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "toEval": "Turn into eval case",
+    "toEvalHint": {
+      "accepted": "Create a 'must find' eval case from this finding",
+      "dismissed": "Create a 'must NOT comment' eval case from this dismissal"
+    },
+    "toEvalOpen": "Accept or dismiss the finding first",
+    "toEvalNoAgent": "No agent for this finding",
+    "evalSaved": {
+      "must_find": "Saved as must find",
+      "must_not_flag": "Saved as must not flag"
+    },
+    "viewInEvals": "View in Evals",
+    "inEvalSet": "In eval set"
   },
   "trifecta": {
     "lethal": "LETHAL TRIFECTA — ALL 3 PRESENT",

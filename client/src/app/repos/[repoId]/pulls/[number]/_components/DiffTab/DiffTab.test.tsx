@@ -3,6 +3,7 @@ import { render, screen, cleanup, within, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type {
+  EvalCaseRecord,
   FindingRecord,
   PrDetail,
   PrFile,
@@ -29,11 +30,14 @@ const hookData: {
   reviews: ReviewRecord[] | undefined;
   smartDiff: SmartDiffQuery;
   search: URLSearchParams;
+  /** Eval cases by agent id; the mocked hook answers like the real one, per agent. */
+  evalCases: Record<string, Pick<EvalCaseRecord, "source_finding_id">[]>;
 } = {
   comments: [],
   reviews: [],
   smartDiff: { data: undefined, isError: false },
   search: new URLSearchParams(),
+  evalCases: {},
 };
 
 const createComment = { mutateAsync: vi.fn(), isPending: false };
@@ -46,6 +50,16 @@ vi.mock("@/lib/hooks/reviews", () => ({
   usePrReviews: () => ({ data: hookData.reviews }),
   useCreatePrComment: () => createComment,
   useFindingAction: () => findingAction,
+}));
+
+const createEvalCase = { mutate: vi.fn(), isPending: false, isSuccess: false, isError: false };
+
+vi.mock("@/lib/hooks/evals", async () => ({
+  ...(await vi.importActual<typeof import("@/lib/hooks/evals")>("@/lib/hooks/evals")),
+  useAgentEvalCases: (agentId: string | null) => ({
+    data: agentId && hookData.evalCases[agentId] ? { cases: hookData.evalCases[agentId] } : undefined,
+  }),
+  useCreateEvalCase: () => createEvalCase,
 }));
 
 vi.mock("@/lib/hooks/smart-diff", () => ({
@@ -78,6 +92,7 @@ beforeEach(() => {
   // starts open: a finding under their lines is visible without a click.
   hookData.smartDiff = { data: smartResponse([["core", [CONFIG, USERS]]]), isError: false };
   hookData.search = new URLSearchParams();
+  hookData.evalCases = {};
   router.replace.mockClear();
 });
 
@@ -204,6 +219,42 @@ describe("DiffTab — findings under their lines", () => {
     renderTab();
     expect(screen.queryByText("Elsewhere")).not.toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "File has findings" })).not.toBeInTheDocument();
+  });
+});
+
+describe("DiffTab — the agent id of an inline card", () => {
+  it("gives each inline card the agent of the review that produced its finding", () => {
+    hookData.evalCases = { a1: [{ source_finding_id: "fa" }], a2: [{ source_finding_id: "fb" }] };
+    hookData.reviews = [
+      review("r1", "a1", "2026-10-03T10:00:00Z", [
+        finding({ id: "fa", title: "From agent one", review_id: "r1", accepted_at: "2026-10-04T00:00:00Z" }),
+      ]),
+      review("r2", "a2", "2026-10-03T11:00:00Z", [
+        finding({
+          id: "fb",
+          title: "From agent two",
+          start_line: 3,
+          end_line: 3,
+          review_id: "r2",
+          accepted_at: "2026-10-04T00:00:00Z",
+        }),
+      ]),
+      // no agent behind this review: its card cannot become a case
+      review("r3", null, "2026-10-03T12:00:00Z", [
+        finding({ id: "fc", title: "From no agent", start_line: 1, end_line: 1, review_id: "r3" }),
+      ]),
+    ];
+    renderTab();
+
+    // each card is found in the cases of its own agent only
+    for (const title of ["From agent one", "From agent two"]) {
+      const card = screen.getByText(title).closest("[data-finding-id]") as HTMLElement;
+      expect(within(card).getByText("In eval set")).toBeInTheDocument();
+    }
+    const orphan = screen.getByText("From no agent").closest("[data-finding-id]") as HTMLElement;
+    expect(within(orphan).getByRole("button", { name: "Turn into eval case" })).toHaveAccessibleDescription(
+      "No agent for this finding",
+    );
   });
 });
 

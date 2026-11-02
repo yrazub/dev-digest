@@ -11,4 +11,10 @@ describe("APP_NAV", () => {
       href: "/repos/:repoId/context",
     });
   });
+
+  it("SKILLS LAB holds Skills, Agents, Conventions, then the Eval Dashboard with the Gauge icon (R-WEB-28)", () => {
+    const lab = APP_NAV.find((g) => g.sectionKey === "skillsLab");
+    expect(lab?.items.map((i) => i.key)).toEqual(["skills", "agents", "conventions", "eval"]);
+    expect(lab?.items[3]).toMatchObject({ key: "eval", icon: "Gauge", href: "/evals" });
+  });
 });

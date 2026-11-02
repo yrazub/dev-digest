@@ -27,7 +27,8 @@ flowchart TD
   ONB["/onboarding<br/>add repo"] -->|"POST /repos"| API[("Fastify API")]
   PULLS --> PR["/pulls/:number<br/>review detail<br/>(overview · diff · findings)"]
 
-  AGENTS["/agents"] --> AGENT["/agents/:id<br/>editor (config · skills · context)"]
+  AGENTS["/agents"] --> AGENT["/agents/:id<br/>editor (config · skills · context · evals)"]
+  EVALS["/evals<br/>Eval Dashboard overview"] --> EVALAGENT["/evals/:agentId<br/>runs · trend · Compare (?compare=)"]
   SKILLS["/skills"] --> SKILL["/skills/:id<br/>config · context · preview · versions"]
   CONV["/repos/:repoId/conventions<br/>scan · candidates · create skill"]
   CTX["/repos/:repoId/context<br/>Project Context (view only)"]
@@ -36,6 +37,10 @@ flowchart TD
   PULLS -->|"GET /repos/:id/pulls · /repos/:id/index-state"| API
   PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments · /pulls/:id/intent · /pulls/:id/brief · /pulls/:id/smart-diff · /pulls/:id/blast<br/>POST /pulls/:id/review · /pulls/:id/intent · /pulls/:id/brief · /repos/:id/resync · /findings/:id/(accept|dismiss)"| API
   AGENTS -->|"/agents · /agents/:id · /agents/:id/skills · /agents/:id/context"| API
+  AGENT -->|"?tab=evals: GET /agents/:id/eval-cases · /agents/:id/eval-runs · /eval-runs/:id<br/>POST /agents/:id/eval-runs · DELETE /eval-cases/:id"| API
+  EVALS -->|"GET /evals/overview"| API
+  EVALAGENT -->|"GET /agents/:id/eval-cases · /agents/:id/eval-runs · /eval-runs/:id<br/>POST /agents/:id/eval-runs"| API
+  PR -->|"POST /findings/:id/eval-case · GET /agents/:id/eval-cases"| API
   SKILLS -->|"/skills · /skills/:id/versions · /skills/:id/context · /skills/import/(file|url)"| API
   CTX -->|"GET /repos/:id/context · /repos/:id/context/file?path=<br/>POST /repos/:id/resync"| API
   CONV -->|"/repos/:id/conventions · /extract · /skill-draft · /skill<br/>PATCH /conventions/:id"| API
@@ -174,6 +179,37 @@ finds them in the repository's clone; the UI has three places for them
 Document text is untrusted, so previews use `SafeMarkdown` (`src/components/safe-markdown`) rather
 than the vendored `Markdown`: raw HTML is shown as text and only `http:` and `https:` links are
 clickable, opening in a new tab with `rel="noopener noreferrer"`.
+
+**Evals (L06)** measure an agent against findings a person accepted or dismissed. The server side
+(cases, runs, scoring) is in [`../server/src/modules/eval/README.md`](../server/src/modules/eval/README.md);
+the UI has four places for it. Every case, run, prompt and finding text is a React text node.
+
+- **Turn into eval case** (`EvalCaseAction`, in `FindingCard`). A ghost button that sends
+  `POST /findings/:id/eval-case`. It is disabled, with the reason as its tooltip, when the review has no
+  producing agent ("no agent" is checked first, because it never clears for that review) and when the
+  finding is neither accepted nor dismissed. Once the case exists, or the finding is already in the
+  agent's case list, the button is replaced by a line and a link to `/agents/:id?tab=evals`. A failed
+  request shows its message under the action row.
+- **The Evals tab** of an agent (`?tab=evals`, `EvalsTab`). A metric strip for the latest done run
+  against the one before it, the agent's cases with their outcome in the latest done run, the **Run
+  eval (N)** button, and the runs table (the newest 20, **Show more** raises the limit). A case's Delete
+  asks for confirmation and is disabled while a run of the agent is `running`. A row of the runs table
+  opens the run drawer.
+- **The Eval Dashboard** (`/evals`, the **Eval** item of the sidebar's Skills Lab section,
+  `EvalOverview`). One row per agent of the workspace, enabled or not, with its latest done run's
+  metrics, then the six newest runs of all agents. A row opens `/evals/:agentId`.
+- **One agent's eval view** (`/evals/:agentId`, `AgentEvalView`). The header has the agent switcher and
+  **Run eval (N)**. Below it sit a regression banner (shown when the latest done run's precision fell
+  against the previous one), three metric cards, the metric trend over the loaded runs and the runs
+  table with a checkbox per done run. Ticking two runs enables **Compare**, which sets
+  `?compare=<older>,<newer>`. The Compare modal is open exactly while that parameter names two distinct
+  done runs of this agent; closing it clears the parameter. It shows the metric tiles with signed
+  deltas, the two configurations when the model or skills differ, a word-level diff of the system
+  prompt and the cases whose result flipped.
+- **The run drawer** (`RunDrawer`, shared by the tab and the view) lists one run's per-case results:
+  outcome, expectation, the grounded findings with the matching ones marked, the dropped count and the
+  error. **Run eval (N)** reads *Running… k/N* and stays disabled while a run is going; a missing
+  provider key shows the server's message and a link to the API-keys settings.
 
 Cross-cutting chrome lives in `src/components/app-shell` (nav, breadcrumbs,
 `g`-then-key shortcuts). Pages are thin; feature logic sits in colocated

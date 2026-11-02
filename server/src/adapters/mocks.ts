@@ -120,6 +120,39 @@ export class MockLLMProvider implements LLMProvider {
   }
 }
 
+/**
+ * A mock LLM whose structured answer comes from a test-supplied script, so a test can hold a call
+ * on a gate promise, signal that it started, or make it throw. `script` gets the request and the
+ * zero-based index of this `completeStructured` call; a rejection propagates to the caller.
+ */
+export class ScriptedLLMProvider extends MockLLMProvider {
+  constructor(
+    id: 'openai' | 'anthropic' | 'openrouter',
+    private readonly script: (req: StructuredRequest<unknown>, callIndex: number) => Promise<unknown> | unknown,
+  ) {
+    super(id);
+  }
+
+  override async completeStructured<T>(req: StructuredRequest<T>): Promise<StructuredResult<T>> {
+    const callIndex = this.calls.filter((c) => c.method === 'completeStructured').length;
+    this.calls.push({ method: 'completeStructured', req });
+    const fixture = await this.script(req as StructuredRequest<unknown>, callIndex);
+    const parsed = (req.schema as z.ZodType<T>).safeParse(fixture);
+    if (!parsed.success) {
+      throw new Error(`ScriptedLLMProvider fixture failed schema: ${parsed.error.message}`);
+    }
+    return {
+      data: parsed.data,
+      model: req.model,
+      tokensIn: 100,
+      tokensOut: 50,
+      costUsd: 0.001,
+      raw: JSON.stringify(fixture),
+      attempts: 1,
+    };
+  }
+}
+
 // ---------- Mock Embedder ----------
 export class MockEmbedder implements Embedder {
   readonly dims = 1536;

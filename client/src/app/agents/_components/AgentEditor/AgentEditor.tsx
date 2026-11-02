@@ -1,4 +1,4 @@
-/* AgentEditor — the agent's Config, Skills and Context tabs (#35). Tab state lives in
+/* AgentEditor — the agent's Config, Skills, Context and Evals tabs (#35). Tab state lives in
    ?tab= (owned by the page). */
 "use client";
 
@@ -8,6 +8,7 @@ import { Tabs } from "@devdigest/ui";
 import type { Agent } from "@devdigest/shared";
 import { ConfigTab } from "./_components/ConfigTab";
 import { ContextTab } from "./_components/ContextTab";
+import { EvalsTab } from "./_components/EvalsTab";
 import { SkillsTab } from "./_components/SkillsTab";
 import { TABS } from "./constants";
 import { s } from "./styles";
@@ -23,7 +24,8 @@ export function AgentEditor({ agent, tab, onTab }: { agent: Agent; tab: string; 
       <div style={s.body}>
         {tab === "skills" && <SkillsTab agentId={agent.id} />}
         {tab === "context" && <ContextTab agentId={agent.id} />}
-        {tab !== "skills" && tab !== "context" && <ConfigTab agent={agent} />}
+        {tab === "evals" && <EvalsTab agentId={agent.id} />}
+        {tab !== "skills" && tab !== "context" && tab !== "evals" && <ConfigTab agent={agent} />}
       </div>
     </div>
   );

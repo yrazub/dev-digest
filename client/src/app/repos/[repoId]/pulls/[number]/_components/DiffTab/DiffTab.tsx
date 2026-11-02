@@ -13,7 +13,7 @@ import { InlineFinding } from "./_components/InlineFinding";
 import { OrderSwitch, type FilesOrder } from "./_components/OrderSwitch";
 import { RoleGroup } from "./_components/RoleGroup";
 import { SKELETON_ROW_KEYS } from "./constants";
-import { countedInDiff, diffBodyMode, findingsOfLatestReviews, joinGroups, jumpTarget } from "./helpers";
+import { agentIdByReview, countedInDiff, diffBodyMode, findingsOfLatestReviews, joinGroups, jumpTarget } from "./helpers";
 import { s } from "./styles";
 
 interface DiffTabProps {
@@ -78,12 +78,19 @@ export function DiffTab({ prId, pr, repoFullName, canComment }: DiffTabProps) {
   const switchCount = (comments?.length ?? 0) + countedInDiff(shownFindings, pr.files);
 
   const headSha = pr.head_sha;
+  const agentIds = React.useMemo(() => agentIdByReview(reviews ?? []), [reviews]);
   const renderFinding = React.useCallback(
     (finding: FindingRecord) =>
       prId ? (
-        <InlineFinding finding={finding} prId={prId} repoFullName={repoFullName} headSha={headSha} />
+        <InlineFinding
+          finding={finding}
+          prId={prId}
+          repoFullName={repoFullName}
+          headSha={headSha}
+          agentId={agentIds.get(finding.review_id) ?? null}
+        />
       ) : null,
-    [prId, repoFullName, headSha],
+    [prId, repoFullName, headSha, agentIds],
   );
 
   const commenting: DiffCommentApi = {

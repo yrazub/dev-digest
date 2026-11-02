@@ -12,11 +12,13 @@ export function InlineFinding({
   prId,
   repoFullName,
   headSha,
+  agentId,
 }: {
   finding: FindingRecord;
   prId: string;
   repoFullName?: string | null;
   headSha?: string | null;
+  agentId: string | null;
 }) {
   const action = useFindingAction();
 
@@ -27,6 +29,7 @@ export function InlineFinding({
       pending={action.isPending}
       repoFullName={repoFullName}
       headSha={headSha}
+      agentId={agentId}
       onAction={(act) => action.mutate({ findingId: finding.id, action: act, prId })}
     />
   );

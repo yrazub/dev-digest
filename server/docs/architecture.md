@@ -155,6 +155,91 @@ a document across the packages is drawn in [`../../docs/project-context.md`](../
   `specs_tokens` and `specs_calls`. A trace therefore holds a copy of the inserted document text.
   A run that fails writes the trace from the log buffer, with an empty `specs_read`.
 
+## An eval run, end to end
+
+An eval run is a second kind of background run, separate from a review run. It runs one agent over
+that agent's stored eval cases and scores each case against its expectation; what the module does is
+explained in [`../src/modules/eval/README.md`](../src/modules/eval/README.md). It shares nothing with
+the review run's machinery: no `agent_runs` row, no `run_traces` document, no `RunBus` event and no
+cancel route. Its state is the `eval_suite_runs` row, which the client polls.
+
+`routes.ts` of the `eval` module builds its `EvalService` from `container.db`, `container.git` and
+`container.llm`, and hands it an `EvalRunExecutor` that takes `reviewPullRequest` from `reviewer-core`
+as a port.
+
+```mermaid
+sequenceDiagram
+  participant R as routes (POST)
+  participant S as EvalService
+  participant ST as EvalRepository
+  participant LLM as container.llm
+  participant EX as EvalRunExecutor
+  participant RE as reviewPullRequest
+
+  R->>S: startRun(workspaceId, agentId, req.log)
+  S->>ST: agentSnapshot, countCases
+  Note over S: 404 for an unknown agent, 422 for no case or more than 50
+  S->>LLM: resolve the agent's provider
+  Note over S: no key ends here with 400 eval_unavailable
+  S->>ST: hasRunningRun
+  S->>ST: promptSkills, casesForRun
+  S->>ST: insertRun, status running
+  Note over S,ST: a running run, or the unique index, ends with 409
+  S-->>R: 202 with the running row
+  S->>EX: run(job), not awaited
+  loop each case, at most 3 in flight
+    EX->>RE: one call with the snapshot's prompt, model, strategy and skills
+    RE-->>EX: grounded findings, dropped list, cost
+    EX->>ST: storeResult, one transaction with cases_done + 1
+  end
+  EX->>ST: resultsOf, then finishRun
+```
+
+1. **Checks before any write.** The service reads the agent, counts its cases (1 to 50), resolves the
+   agent's provider (a missing key is `400` `eval_unavailable`) and looks for a `running` run (`409`
+   `eval_run_in_progress`). A disabled agent can be run. The checks run in that order.
+2. **Snapshot and detach.** The agent's version, prompt, provider, model, strategy and enabled skills in
+   prompt order, the skill bodies and the cases are read once. The service inserts the run as `running`
+   with `cases_total`, answers `202`, and starts the executor without awaiting it. The partial unique
+   index on `eval_suite_runs(agent_id)` where `status = 'running'` is what stops two concurrent requests
+   from both inserting; the loser also gets the `409`. `EvalRunExecutor.run` never rejects, so the
+   unawaited promise cannot become an unhandled rejection.
+3. **Cases, three at a time.** Three workers take cases from one list. Each case is one
+   `reviewPullRequest` call with the snapshot's prompt, model, strategy and skill blocks, the stored
+   diff fragment and a task line built from the stored PR number, title and author. It passes no
+   callers, repo map, project documents, memory, intent or scope filter, so the result depends on the
+   agent's configuration and the case alone. The scorer is the pure `scoreCase` in `domain.ts`.
+4. **A case that throws** is stored as an errored row (`error` set, `pass` and the metrics null) and
+   the run goes on. A failure of the store itself stops the workers and fails the run.
+5. **Ending.** The executor aggregates from the stored rows, not from memory. It sets `done` with the
+   run's `recall`, `precision`, `citation_accuracy`, `cases_passed`, `cases_errored` and `cost_usd`
+   (errored cases excluded from the metrics), or `failed` with `All <n> cases failed: <first error>`
+   when every stored case errored. Any throw outside a case ends the run `failed` with the error's
+   message, so a run does not stay `running` while the process lives.
+
+```mermaid
+stateDiagram-v2
+  [*] --> running : POST /agents/:id/eval-runs answers 202
+  running --> done : every case handled, not every stored case errored
+  running --> failed : every stored case errored
+  running --> failed : a throw outside a case
+  running --> failed : boot reap, Interrupted by server restart
+  running --> [*] : the agent is deleted, the row goes by cascade
+  done --> [*]
+  failed --> [*]
+```
+
+- **A case deleted mid-run.** The cases are read once at the start, so the executor may still review a
+  deleted case. Its result is dropped: `storeResult` reads the foreign-key violation, by the constraint
+  name drizzle generated, as `case_gone`, writes nothing, and the case counts in no figure. The run
+  ends `done`; `cases_done` counts only stored results, so it can end below `cases_total`.
+- **An agent deleted mid-run.** The run row is gone, `storeResult` answers `run_gone`, the workers stop
+  and nothing is written. The executor only logs the end.
+- **Logging.** One `info` line at the start (run id, agent id, case count) and one at the end (run id,
+  status, counts, metrics, cost, duration). Ids and numbers only: no prompt, diff or model text.
+- **Rate limit.** `POST /agents/:id/eval-runs` allows 10 per minute per client, because each call
+  starts up to 50 model calls.
+
 ## Live events: the run bus
 
 `RunBus` (`src/platform/sse.ts`) is **in memory, in one process**:
@@ -162,8 +247,13 @@ a document across the packages is drawn in [`../../docs/project-context.md`](../
 - Each run has an event buffer. `GET /runs/:id/events` (SSE) replays the buffer, then streams new
   events; a run that has already completed replays and ends the stream at once.
 - Nothing is persisted until the run finishes and its log is written to `run_traces`. A restart
-  loses the buffers. Runs the dead process left `running` are marked `failed` by the reaper in
-  `buildApp`, before the server accepts requests.
+  loses the buffers. Rows the dead process left `running` are marked `failed` by the boot step in
+  `buildApp`, before the server accepts requests. That one step reaps both kinds of run:
+  `ReviewService.reapStaleRuns` for `agent_runs`, then `EvalRepository.reapRunning` for
+  `eval_suite_runs`, which get the error `Interrupted by server restart`. The two calls share one
+  `try`, so a failure of the first is logged and skips the second. No other reaper exists, and one
+  must not be added: the step is awaited before the server listens, so every `running` row it sees
+  belongs to a dead process.
 - It assumes a single API instance per database; replicas would need per-instance scoping.
 
 **Cancellation** (`POST /runs/:id/cancel`) flags the run on the bus, sets the row to `cancelled`
@@ -184,7 +274,7 @@ engine above make that the only safe shape:
 |---|---|
 | A run executes inside the API process, started fire-and-forget by `POST /pulls/:id/review` | A run executed in another process would bypass the API's container, its run bus and its trace log |
 | `RunBus` is in memory and per process | Events, the cancel flag and completion exist only where the run executes; a second process would stream and cancel an empty bus |
-| The boot reaper marks every `running` row `failed`, assuming no other process owns one | A run owned by another process would be reaped as orphaned the next time the API restarts |
+| The boot step marks every `running` row of `agent_runs` and `eval_suite_runs` `failed`, assuming no other process owns one | A run owned by another process would be reaped as orphaned the next time the API restarts |
 
 So the MCP process follows a run through existing routes only — `POST /pulls/:id/review` to queue
 it, `GET /runs/:id/events` (SSE) to watch it, `GET /pulls/:id/runs` and `GET /pulls/:id/reviews`
@@ -198,7 +288,7 @@ Consequences worth knowing when changing the engine:
 - The tool waits on the SSE stream for at most `DEVDIGEST_MCP_WAIT_SECONDS` (default 120 s), then
   reads the run's status from `GET /pulls/:id/runs`; it never infers the status from the end of the
   stream. A stream that breaks (for example when the API restarts) ends the wait, and the second
-  read reports whatever the row says — `failed` once the boot reaper has marked it.
+  read reports whatever the row says — `failed` once the boot reap has marked it.
 - The MCP process holds no run state between calls. If it is killed, or its client gives up on a
   call, the run keeps going in the API; it is not cancelled.
 - A second call for the same agent and PR while a run is `running` joins that run instead of
@@ -220,7 +310,8 @@ Consequences worth knowing when changing the engine:
 | `polling` | `pull_requests` · `repos` |
 | `repos` | `repos` |
 | `repo-intel` | `symbols` · `references` · `file_edges` · `file_facts` · `file_rank` · `repo_map_cache` · `repo_index_state` |
-| `agents` | `agents` · `agent_versions` · `agent_skills` |
+| `agents` | `agents` · `agent_versions` · `agent_skills` · `eval_cases` (delete only: `deleteById` removes the agent's cases and the agent in one transaction, because `eval_cases.owner_id` has no FK) |
+| `eval` | `eval_cases` · `eval_suite_runs` · `eval_runs` (reads `findings` · `reviews` · `pull_requests` · `repos` · `pr_files` · `agents` · `skills` · `agent_skills`, and the PR diff through `container.git`; its runs call the agent's provider through `container.llm`; it writes no `reviews`, `findings` or `agent_runs` row) |
 | `settings` | `settings` |
 
 These read models sit on top:

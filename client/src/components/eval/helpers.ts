@@ -1,0 +1,79 @@
+/* Pure helpers of the eval surfaces: percentages, deltas in points, run times and the
+   picks of "latest / previous done run" that the metric cards and strips share. */
+import type { EvalSuiteRun } from "@devdigest/shared";
+
+const MINUS = "−"; // U+2212, the design's sign for a drop
+
+/** A 0..1 metric as "NN%"; an em-dash when unknown (R-WEB-39, R-WEB-49). */
+export function pct(v: number | null | undefined): string {
+  if (v == null) return "—";
+  return `${Math.round(v * 100)}%`;
+}
+
+/** `round(new × 100) − round(old × 100)`; null when either side is unknown (R-WEB-32, R-WEB-39). */
+export function deltaPoints(newV: number | null | undefined, oldV: number | null | undefined): number | null {
+  if (newV == null || oldV == null) return null;
+  return Math.round(newV * 100) - Math.round(oldV * 100);
+}
+
+/** "▲ +12pt" / "▼ −8pt" / "±0pt". */
+export function deltaText(n: number): string {
+  if (n > 0) return `▲ +${n}pt`;
+  if (n < 0) return `▼ ${MINUS}${Math.abs(n)}pt`;
+  return "±0pt";
+}
+
+const two = (n: number) => String(n).padStart(2, "0");
+
+/** An ISO instant as local `YYYY-MM-DD HH:mm` (Q11). */
+export function formatRunTime(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`;
+}
+
+/** `file:start-end`, the form a finding's or an expectation's location is shown in. */
+export function formatLocation(file: string, startLine: number, endLine: number): string {
+  return `${file}:${startLine}-${endLine}`;
+}
+
+/** A path cut from the left so its file name stays visible: `…/format/duration.ts`. Keeps as many
+    trailing segments as fit in `maxChars`; a path that already fits, or has no folder, is returned
+    unchanged. */
+export function shortenPath(path: string, maxChars = 30): string {
+  if (path.length <= maxChars) return path;
+  const segments = path.split("/");
+  const fileName = segments.pop();
+  if (!fileName || segments.length === 0) return path;
+  let kept = fileName;
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const next = `${segments[i]}/${kept}`;
+    if (`…/${next}`.length > maxChars) break;
+    kept = next;
+  }
+  return `…/${kept}`;
+}
+
+/** The accessible name of a run's checkbox (R-WEB-48): `YYYY-MM-DD HH:mm · v<n>`. */
+export function runCheckboxLabel(run: Pick<EvalSuiteRun, "started_at" | "config">): string {
+  return `${formatRunTime(run.started_at)} · v${run.config.agent_version}`;
+}
+
+/** Values as sparkline points: null points are dropped; a single point is repeated once so the
+    vendored `Sparkline` (which divides by `length − 1`) draws a flat line. */
+export function sparkValues(values: readonly (number | null | undefined)[]): number[] {
+  const points = values.filter((v): v is number => v != null);
+  return points.length === 1 ? [points[0]!, points[0]!] : points;
+}
+
+/** `runs` come newest first, as the API returns them. */
+export function latestDone<R extends Pick<EvalSuiteRun, "status">>(runs: readonly R[]): R | null {
+  return runs.find((r) => r.status === "done") ?? null;
+}
+
+export function previousDone<R extends Pick<EvalSuiteRun, "status">>(runs: readonly R[]): R | null {
+  return runs.filter((r) => r.status === "done")[1] ?? null;
+}
+
+export function runningRun<R extends Pick<EvalSuiteRun, "status">>(runs: readonly R[]): R | null {
+  return runs.find((r) => r.status === "running") ?? null;
+}

@@ -18,6 +18,7 @@ import { Container, type ContainerOverrides } from './platform/container.js';
 import { AppError } from './platform/errors.js';
 import { modules } from './modules/index.js';
 import { ReviewService } from './modules/reviews/service.js';
+import { EvalRepository } from './modules/eval/repository.js';
 
 // Attach the DI container to every request/instance.
 declare module 'fastify' {
@@ -81,6 +82,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   try {
     const reaped = await new ReviewService(container).reapStaleRuns();
     if (reaped > 0) app.log.info({ reaped }, 'reaped stale running agent_runs on boot');
+    const evalReaped = await new EvalRepository(container.db).reapRunning();
+    if (evalReaped > 0) app.log.info({ reaped: evalReaped }, 'reaped stale running eval_suite_runs on boot');
   } catch (err) {
     app.log.warn({ err: (err as Error).message }, 'stale-run reaping failed (non-fatal)');
   }

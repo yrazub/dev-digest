@@ -120,6 +120,20 @@
       "when": 1792216459670,
       "tag": "0016_slim_meggan",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793534324673,
+      "tag": "0017_noisy_magneto",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793601184905,
+      "tag": "0018_burly_paladin",
+      "breakpoints": true
     }
   ]
 }

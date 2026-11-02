@@ -64,6 +64,8 @@ Traps we have already hit in the web app. Append-only. See the root
 - **2026-10-18** — `setTab` in `usePrDetailNav` (`src/app/repos/[repoId]/pulls/[number]/_lib/use-pr-detail-nav.ts:31`) replaced `setParam('tab', …)`, so every tab change — including the automatic switch to findings when a run starts — clears `file` and `line` (R-WEB-41). A deep link that must survive a tab change pushes `focusSearch` instead.
 - **2026-10-18** — The vendored primitives fix their own type and spacing: `SectionLabel` is `fontSize: 12` (`src/vendor/ui/primitives/SectionLabel.tsx:19`) and `Card` pads with `var(--card-pad)` (`Card.tsx:26`), not the 11/12 px the L05 client spec Layout gives. An exact match needs a local wrapper; otherwise the spec should accept the vendored values.
 - **2026-10-18** — `OverviewTab` now renders `PrBriefSection`, which needs `NextIntlClientProvider`, a query client and a `matchMedia` stub; `OverviewTab.test.tsx` mocks `../PrBriefSection` (`:7`), and any other test that renders `OverviewTab` unmocked needs all three.
+- **2026-11-02** — A new Agent editor tab needs `AgentTab` and `AGENT_TABS` in `AgentsView/constants.ts`, the `TABS` list in `AgentEditor` and a render branch. Missing the first fails silently: `toAgentTab` coerces an unknown `?tab=` to `"config"` (`src/app/agents/_components/AgentsView/constants.ts:12`), and `AgentEditor` tests pass `tab` as a prop, so they cannot catch it.
+- **2026-11-02** — Once a view reads `useSearchParams` (`AgentEvalView.tsx:32`, `?compare=`), every test file whose `next/navigation` mock returns only `useRouter` breaks. A plan that moves state into the URL should list those files under "Expected to change"; the fix is `useSearchParams: () => new URLSearchParams(search)` with a module-level `search` reset in `beforeEach` (`AgentEvalView.test.tsx:20`).
 
 ## What Works
 
@@ -192,3 +194,4 @@ function identity a component depends on; the original code is in commit `54e2b1
 - **2026-10-11** — L04 Blast radius block on the PR Overview tab: tree and graph views, the degraded note with Resync (`useResyncWait`), `useBlastRadius`; entries above.
 - **2026-10-17** — L05 Project Context client: the Project Context page, `SafeMarkdown`, the shared `context-attach-list` with its coalescing save queue, the agent/skill Context tabs and the run-trace block; entries above.
 - **2026-10-18** — L05 PR Brief client: the PR Brief section on Overview (Risk areas, Review focus), `usePrBrief`/`useGenerateBrief`, the Review focus jump into Files changed with the sticky-offset fix and the state-held jump key. Entries above.
+- **2026-11-02** — eval pipeline client (phases 8–13, 17): entries on the silent tab coercion and `useSearchParams` mocks. **See also:** `server/INSIGHTS.md`.

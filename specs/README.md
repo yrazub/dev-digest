@@ -40,6 +40,8 @@ it keep their earlier shape.
 | [`plans/L05-project-context.md`](plans/L05-project-context.md) | approved |
 | [`L05-pr-brief.md`](L05-pr-brief.md) | implemented |
 | [`plans/L05-pr-brief.md`](plans/L05-pr-brief.md) | done |
+| [`eval-pipeline.md`](eval-pipeline.md) | approved |
+| [`plans/eval-pipeline.md`](plans/eval-pipeline.md) | approved |
 
 The lesson roadmap (L01–L08) is in the root [`README.md`](../README.md).
 When you add a spec, add a row above.

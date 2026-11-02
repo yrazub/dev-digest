@@ -224,6 +224,32 @@ The Files changed tab groups a PR's files by role (L03 Smart Diff), and flows `0
   (`pr_files` has no unique index), never deletes a row and never overwrites a patch that
   is not null. A second run changes nothing.
 
+## The Security Reviewer has a seeded eval fixture
+
+Flow `15-eval-dashboard` opens `/evals`, follows the seeded agent "Security Reviewer" to its eval view
+and compares its two finished runs, with no model call and no API key. `seed.ts` calls
+`seedEvalFixture` (`server/src/db/seed-eval.ts`) outside the `if (!pr)` block: a case is inserted only
+when the agent has none of that name, and the runs only when the agent has no suite run at all, so a
+second `pnpm db:seed` changes nothing and a stored run is never overwritten. The seeded data:
+
+- **Agent:** `Security Reviewer` (the name is also what `03-agents` waits for).
+- **Cases (names):** `must-find-stripe-key` (must find `src/config.ts:12`) and `no-n-plus-one-user-list`
+  (must not flag `src/api/users.ts:45-52`), both from PR #482.
+- **Runs** (both `status: done`, each one minute long, `cases_total` 2):
+  1. started `2026-10-30T10:00:00.000Z`: recall 1, precision 0.5, citation accuracy 0.6667, 1 of 2 cases
+     passed, cost `0.004`. Its stored system prompt is the agent's seeded prompt plus the sentence
+     `Flag every database query inside a loop as a performance problem.`
+  2. started `2026-10-31T10:00:00.000Z`: recall 1, precision 1, citation accuracy 1, 2 of 2 passed,
+     cost `0.003`, with the agent's seeded prompt unchanged.
+
+**Contract:** flow `15` waits for `Security Reviewer` on the overview, then on the agent's view for the
+dates `2026-10-30` and `2026-10-31` (the run checkboxes are named `YYYY-MM-DD HH:mm · v<n>` in local time,
+and both instants stay on those dates for any local zone from UTC-10 to UTC+13), ticks both and presses
+Compare. It then waits for `+50pt` (precision 0.5 to 1) and for the removed sentence
+`Flag every database query inside a loop`, and for `compare=` in the URL. Changing a run's start date,
+either precision, or the older run's prompt suffix changes what the flow waits for, so the flow is
+updated in the same change. The flow never presses **Run eval**.
+
 ## None of this data is real GitHub data
 
 All of it — the repo, the PR, its diff, its review, its findings, the

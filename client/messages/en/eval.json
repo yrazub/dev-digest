@@ -25,10 +25,50 @@
       "precision": "Precision",
       "citation": "Citation",
       "pass": "Pass",
-      "cost": "Cost"
+      "cost": "Cost",
+      "version": "Version"
     },
     "pass": "pass",
-    "fail": "fail"
+    "fail": "fail",
+    "runningProgress": "Running… {done}/{total}",
+    "showMore": "Show more",
+    "allAgents": "All agents",
+    "agentSubtitle": "Regression harness · {runs, plural, one {# run} other {# runs}} on {cases, plural, one {# case} other {# cases}}",
+    "switchAgent": "Switch agent",
+    "regression": "Precision dipped {n} pts on v{version}",
+    "selectHint": "Select two runs to compare",
+    "selected": "{count} selected",
+    "compare": {
+      "button": "Compare",
+      "title": "Compare runs · {old} → {new}",
+      "subtitle": "Old prompt vs new — metric deltas and prompt diff on {count, plural, one {# case} other {# cases}}",
+      "promptDiff": "System prompt diff",
+      "old": "{version} (old)",
+      "new": "{version} (new)",
+      "noChange": "No config change between these runs",
+      "configuration": "Configuration",
+      "model": "Model",
+      "skills": "Skills",
+      "noSkills": "none",
+      "flipped": "Cases that changed result",
+      "flippedRow": "{name}: {old} → {new}",
+      "noFlips": "No case changed result",
+      "close": "Close"
+    },
+    "agentLoadError": "Could not load this agent's eval runs.",
+    "overviewSubtitle": "Regression harness across all reviewer agents · pick an agent to see its runs",
+    "agentsHeading": "Agents",
+    "lastRun": "Last run v{version} · {time} · {passed}/{total} pass",
+    "noAgentRuns": "No eval runs yet",
+    "noAgents": "No agents yet. Create an agent to start evaluating it.",
+    "goToAgents": "Go to Agents",
+    "recentAll": "Recent eval runs · all agents",
+    "loadError": "Could not load the eval overview.",
+    "mini": {
+      "recall": "Recall",
+      "precision": "Prec",
+      "citation": "Cite"
+    }
   },
   "caseEditor": {
     "newCase": "New eval case",
@@ -63,7 +103,7 @@
     "casesHeading": "Eval cases",
     "newCase": "New case",
     "loadingCases": "Loading cases…",
-    "emptyCases": "No eval cases yet. Create one to assert this agent's expected findings on a sample diff.",
+    "emptyCases": "No eval cases yet. Accept or dismiss a finding on a pull request, then press \"Turn into eval case\".",
     "neverRun": "never run",
     "passed": "passed",
     "failed": "failed",
@@ -71,7 +111,52 @@
     "run": "Run",
     "running": "Running…",
     "edit": "Edit",
-    "delete": "Delete"
+    "delete": "Delete",
+    "viewDashboard": "View full dashboard →",
+    "scoringNote": "Scoring is mechanical — a finding counts when file matches and line ranges overlap; must-find cases allow a 2-line tolerance either side. No model call in the scorer.",
+    "casesPassed": "Cases passed",
+    "deleteTitle": "Delete eval case",
+    "deleteConfirm": "Delete eval case {name}? Past runs keep their metrics.",
+    "cancel": "Cancel",
+    "passing": "{passing} / {total} passing",
+    "casesCount": "{count, plural, one {# case} other {# cases}}",
+    "runsHeading": "Runs",
+    "noKey": "Add an API key in Settings",
+    "loadError": "Could not load eval cases.",
+    "expandCase": "Show diff of case {name}",
+    "deleteCase": "Delete case {name}"
+  },
+  "runs": {
+    "errored": "{errored} of {total} cases errored",
+    "failed": "failed",
+    "status": {
+      "running": "running",
+      "done": "done",
+      "failed": "failed"
+    },
+    "outcome": {
+      "pass": "pass",
+      "fail": "fail",
+      "errored": "errored"
+    }
+  },
+  "kind": {
+    "must_find": "must find",
+    "must_not_flag": "must not flag"
+  },
+  "drawer": {
+    "title": "Run {version} · {time}",
+    "close": "Close run details",
+    "matches": "matches",
+    "dropped": "{count, plural, one {# finding dropped} other {# findings dropped}}",
+    "noFindings": "No findings",
+    "expectation": {
+      "must_find": "Expected {location}",
+      "must_not_flag": "Must not flag {location}"
+    },
+    "loading": "Loading run…",
+    "loadError": "Could not load this run.",
+    "label": "Run details"
   },
   "page": {
     "crumbSkillsLab": "Skills Lab",

@@ -123,6 +123,9 @@ Traps we have already hit in the server. Append-only. See the root
 - **2026-10-18** — `pull_requests.additions`, `deletions` and `files_count` default to 0 (`src/db/schema/pulls.ts:22`, `:24`) until stats are filled in, so a test-inserted PR has zero totals; `diffTotals` sums the stored files when all three are 0 (`src/modules/brief/domain.ts:351`).
 - **2026-10-18** — The default workspace holds the seeded enabled agents, so an `.it` assertion of the form "the workspace has exactly these agents" needs a freshly inserted workspace (`newWorkspace()`, `test/project-context.it.test.ts:478`).
 - **2026-10-18** — The seeded PR #482 brief is a fixture contract for e2e flow 14 (`../e2e/specs/seed-fixtures.md`). `} satisfies Omit<PrBriefRecord, 'stale'>` makes `pnpm typecheck` catch contract drift, and `onConflictDoNothing()` on the `pr_id` primary key (`src/db/seed.ts:465-466`) lets a test edit the row and re-seed to prove no overwrite — undo the edit in `finally`, since the `.it` files share one database (`test/brief-seed.it.test.ts`).
+- **2026-11-02** — `eval_cases.owner_id` has no foreign key (`ownerId: uuid('owner_id').notNull()`, `src/db/schema/eval.ts:31`), so deleting an owner never cascades to its cases. `AgentsRepository.deleteById` deletes the `evalCases` rows (`ownerKind 'agent'`) in the same transaction (`src/modules/agents/repository.ts:98`); any new owner-delete path (skills later) must do the same. A cascade test must insert the cases directly with `ownerKind: 'agent'`; the cascade to `eval_runs` rows is provable only through the route.
+- **2026-11-02** — A write that can lose either of two parents tells them apart by constraint name, not by message: postgres-js errors (drizzle 0.38.4 does not wrap them) carry `code` and `constraint_name`; compare to `getTableConfig(table).foreignKeys[].getName()`, never a literal (`storeResult` in `src/modules/eval/repository/run.repo.ts:198`, helper at `:25`). A one-running-per-agent race is SQLSTATE `23505` on the partial unique index `eval_suite_runs_one_running_uq`, mapped to 409. HTTP cannot tell `run_gone` from an unmapped FK error, so pin the mapping by calling the repository directly with unknown case and run ids.
+- **2026-11-02** — `buildApp` reaps every `running` row of `eval_suite_runs` in the shared database on boot (`src/app.ts:86`), next to `agent_runs`. An `.it` test that seeds a `running` run must build the app first, and a test that holds a run open with a gate must release it in `finally` and wait for the run, or a parallel file's `buildApp` fails it.
 
 ## Tool & Library Notes
 
@@ -316,7 +319,17 @@ session the serial lane gave `Test Files 19 passed (19)` right after a full run 
 **Fix / rule:** a structured call whose output grows with the input states its limits to the model, in the system message and in the schema's `.describe()` texts (as text, not `.max()`: a hard bound turns an over-long answer into a schema failure instead of a cap), keeps the server-side cap, and sizes `maxTokens` with headroom over the largest answer observed (now `OUTPUT_MAX_TOKENS = 4000`). Read `tokens_out` of a stored record to see how close a run came.
 **Evidence:** `src/modules/brief/constants.ts` (`OUTPUT_MAX_TOKENS`), `src/modules/brief/prompt.ts` (the "Limits" bullet of `SYSTEM_PROMPT`), `../reviewer-core/src/llm/openrouter.ts:153` (`finish_reason === 'length'` → `OutputTruncatedError`). **See also:** `../reviewer-core/INSIGHTS.md` (the review call's `maxTokens`).
 
+### Fastify route for `DELETE` hangs, no response, when the async handler ends with `reply.status(204)`
+**Date:** 2026-11-02
+**Cause:** an async handler that sets the status but returns `undefined` never sends; Fastify waits for `reply.send`. Note the module answers differently per route: `DELETE /eval-cases/:id` is 204, `DELETE /agents/:id` is `200 {ok:true}`.
+**Fix / rule:** `return reply.status(204).send();` — and assert the status per route in tests, not from the word "delete".
+**Evidence:** `src/modules/eval/routes.ts:74`
 
+### `pnpm db:migrate` of 0017 fails on a local database that already has `eval_runs` rows: `column "suite_run_id" contains null values`
+**Date:** 2026-11-02
+**Cause:** the generated migration adds `eval_runs.suite_run_id` as `NOT NULL` with no default and no backfill; legacy rows have no suite run.
+**Fix / rule:** a database holding old `eval_runs` rows has to be emptied of them (or the column backfilled by hand) before 0017 applies; never edit the migration. Every insert, seed included, must supply `suite_run_id`.
+**Evidence:** `src/db/migrations/0017_noisy_magneto.sql:27`
 
 ## Open Questions
 
@@ -377,3 +390,4 @@ session the serial lane gave `Test Files 19 passed (19)` right after a full run 
 - **2026-10-18** — L05 PR Brief planned, no code (`specs/plans/L05-pr-brief.md`): the `wrapUntrusted` label callers and the review-before-run-done order recorded above. **See also:** `../INSIGHTS.md`.
 - **2026-10-18** — L05 PR Brief built (11 phases; 10–11 were review fixes): the `brief` module and `GET`/`POST /pulls/:id/brief`, `container.blast`, `forWorkspace`, the seeded brief; `container.repoIntelLimits` removed afterwards. Entries above.
 - **2026-10-19** — L05 PR Brief phase 12 after a live `output_truncated` on PR #20: output cap 4,000, the output limits stated to the model, 3 file refs per risk; spec amended in place (reopened as draft, re-approved).
+- **2026-11-02** — eval pipeline (17 phases) built with `/execute-plan`; entries on the owner-less `eval_cases`, FK-name mapping, boot reap of `eval_suite_runs`, the 204 hang and migration 0017. **See also:** `client/INSIGHTS.md`, `e2e/INSIGHTS.md`.

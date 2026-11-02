@@ -13,6 +13,7 @@ import {
   TEST_QUALITY_REVIEWER_PROMPT,
   API_CONTRACT_REVIEWER_PROMPT,
 } from './seed-prompts.js';
+import { seedEvalFixture } from './seed-eval.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
@@ -675,6 +676,10 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       ),
     ]);
   }
+
+  // ---- L06 eval fixture: the Security Reviewer's two cases and two finished runs ----
+  // Outside `if (!pr)`; it reuses the Smart Diff patches above and never overwrites a row.
+  await seedEvalFixture(db, { workspaceId, prId: pr!.id, patches: SMART_DIFF_PATCHES });
 
   return { workspaceId, userId };
 }

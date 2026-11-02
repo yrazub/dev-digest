@@ -6,14 +6,15 @@ import { fileURLToPath } from 'node:url';
 /**
  * `@devdigest/shared` is authored in `server/src/vendor/shared`; the client keeps a copy.
  * R-SRV-22: the two brief contract files stay byte-identical, so the client types against
- * the same shapes the server validates with. Only these two files are synced.
+ * the same shapes the server validates with. R-SRV-42 adds the eval pipeline contracts.
+ * Only these three files are synced.
  */
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_SHARED = path.resolve(HERE, '../src/vendor/shared/contracts');
 const CLIENT_SHARED = path.resolve(HERE, '../../client/src/vendor/shared/contracts');
 
-describe('client copy of the brief contracts', () => {
-  it.each(['brief.ts', 'review-api.ts'])('%s is byte-identical to the server file', async (file) => {
+describe('client copy of the synced contracts', () => {
+  it.each(['brief.ts', 'review-api.ts', 'eval-pipeline.ts'])('%s is byte-identical to the server file', async (file) => {
     const [server, client] = await Promise.all([
       readFile(path.join(SERVER_SHARED, file)),
       readFile(path.join(CLIENT_SHARED, file)),

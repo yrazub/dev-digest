@@ -1,0 +1,21 @@
+{
+  "name": "Eval dashboard shows the seeded runs of Security Reviewer and compares them",
+  "description": "From the eval overview, open the seeded Security Reviewer's view and confirm the two seeded finished runs are listed (AC-93, the fixture in e2e/specs/seed-fixtures.md 'The Security Reviewer has a seeded eval fixture'), then tick both runs and press Compare: the modal shows the precision delta '+50pt' (0.5 → 1) and the prompt sentence the newer config dropped, 'Flag every database query inside a loop' (AC-94), and the URL carries ?compare=. Read-only: Compare only changes the URL (router.replace), and the flow never presses 'Run eval', so there is no model call, no API key and nothing the other flows read changes. The run checkboxes are named 'YYYY-MM-DD HH:mm · v<n>' in local time, so the flow matches the date part only; 2026-10-30T10:00Z and 2026-10-31T10:00Z fall on those dates in any local zone from UTC-10 to UTC+13. The 'Recent runs' label is a SectionLabel (uppercased by CSS) and agent-browser's `wait --text` reads document.body.innerText, so that step lowercases the page text (as flows 11, 12 and 14 do). Assumes a freshly-seeded DB — run locally via the hermetic stack (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/evals"], "label": "load the eval overview" },
+    { "cmd": ["wait", "--text", "Security Reviewer"], "label": "the seeded agent is listed on the overview" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Security Reviewer"], "label": "open the Security Reviewer's eval view" },
+    { "cmd": ["wait", "--url", "/evals/"], "label": "the agent's eval route is reached" },
+    { "cmd": ["wait", "--fn", "document.body.innerText.toLowerCase().includes('recent runs')"], "label": "the Recent runs section renders" },
+    { "cmd": ["wait", "--text", "2026-10-30"], "label": "the older seeded run is listed" },
+    { "cmd": ["wait", "--text", "2026-10-31"], "label": "the newer seeded run is listed" },
+    { "cmd": ["find", "role", "checkbox", "click", "--name", "2026-10-30"], "label": "tick the older run" },
+    { "cmd": ["find", "role", "checkbox", "click", "--name", "2026-10-31"], "label": "tick the newer run" },
+    { "cmd": ["wait", "--text", "Compare"], "label": "the Compare button is drawn" },
+    { "cmd": ["wait", "--fn", "[...document.querySelectorAll('button')].some((b) => /^\\s*Compare\\s*$/i.test(b.innerText) && !b.disabled)"], "label": "the Compare button is enabled once two runs are ticked" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Compare"], "label": "press Compare" },
+    { "cmd": ["wait", "--text", "+50pt"], "label": "the modal shows the precision delta, +50pt" },
+    { "cmd": ["wait", "--text", "Flag every database query inside a loop"], "label": "the prompt diff shows the sentence the newer config dropped" },
+    { "cmd": ["wait", "--url", "compare="], "label": "the compared pair is in the URL" }
+  ]
+}
